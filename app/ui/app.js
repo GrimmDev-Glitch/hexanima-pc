@@ -280,30 +280,6 @@ async function loadModel() {
   }
 }
 
-// ---------- LoRAs ----------
-async function scanLoras() {
-  try { state.loras = await api("/sdapi/v1/loras"); } catch { state.loras = []; }
-  const lib = $("loraLib");
-  lib.innerHTML = state.loras.length ? "" : '<div class="lbl">No hay LoRAs en la carpeta loras.</div>';
-  for (const l of state.loras) {
-    const d = document.createElement("div");
-    d.className = "lora";
-    d.innerHTML = `<div class="row"><span class="name"></span><button class="link">Usar</button></div>`;
-    d.querySelector(".name").textContent = l.name;
-    d.querySelector("button").onclick = () => { addLora(l); document.querySelector('.nav[data-page="gen"]').click(); };
-    lib.appendChild(d);
-  }
-  filterLoraLibrary();
-  state.active = state.active.filter((a) => state.loras.some((l) => l.path === a.path));
-  renderActive();
-}
-
-function filterLoraLibrary() {
-  const q = ($("loraSearch")?.value || "").trim().toLocaleLowerCase();
-  for (const item of $("loraLib").children) {
-    item.hidden = !!q && !item.textContent.toLocaleLowerCase().includes(q);
-  }
-}
 
 // Nombres legibles (el valor que se envía al motor no cambia).
 const SAMPLER_NAMES = {
@@ -346,42 +322,6 @@ async function refreshEngineMenus() {
   }
 }
 
-function addLora(l) {
-  if (!state.active.some((a) => a.path === l.path)) state.active.push({ name: l.name, path: l.path, mult: 0.8 });
-  renderActive();
-}
-
-function renderActive() {
-  const list = $("loraList");
-  list.innerHTML = "";
-  for (const a of state.active) {
-    const d = document.createElement("div");
-    d.className = "lora";
-    d.innerHTML = `<div class="row"><span class="name"></span><span><span class="lbl v"></span><button class="x" aria-label="Quitar">×</button></span></div>
-      <input type="range" min="0" max="2" step="0.05">`;
-    d.querySelector(".name").textContent = a.name;
-    const r = d.querySelector("input"); r.value = a.mult; r.setAttribute("aria-label", "Fuerza de " + a.name);
-    const v = d.querySelector(".v"); v.textContent = a.mult.toFixed(2);
-    r.oninput = () => { a.mult = +r.value; v.textContent = a.mult.toFixed(2); store.set("active", state.active); };
-    d.querySelector(".x").onclick = () => { state.active = state.active.filter((x) => x !== a); renderActive(); };
-    list.appendChild(d);
-  }
-  store.set("active", state.active);
-}
-
-$("addLora").onclick = () => {
-  const pick = $("loraPick");
-  const avail = state.loras.filter((l) => !state.active.some((a) => a.path === l.path));
-  pick.innerHTML = "";
-  pick.add(new Option(avail.length ? "Elige un LoRA…" : "No hay más LoRAs", ""));
-  for (const l of avail) pick.add(new Option(l.name, l.path));
-  pick.classList.toggle("hidden");
-  pick.onchange = () => {
-    const l = state.loras.find((x) => x.path === pick.value);
-    if (l) addLora(l);
-    pick.classList.add("hidden");
-  };
-};
 
 // ---------- generar ----------
 const STAGE = {
@@ -412,18 +352,23 @@ async function runOne(opt, seed) {
   const editing = state.mode === "edit" && state.editImage;
   // Al editar, el tamaño es el de la foto (ya ajustado a múltiplos de 64 al elegirla).
   const [w, h] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
-  const steps = +$("steps").value;
+  const steps = clampNum($("steps"), 20);
+  const cfg = clampNum($("cfg"), 5);
+  // Las etiquetas <lora:nombre:fuerza> del prompt se convierten en la lista que pide el motor
+  // (el servidor no lee etiquetas dentro del texto) y se quitan del prompt enviado.
+  const loraSpec = Loras.fromPrompt(expandWildcards($("prompt").value.trim()));
+  if (loraSpec.missing.length) setStatus(`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
   const body = {
-    ...(editing ? { init_image: state.editImage.src, strength: +$("editStrength").value } : {}),
-    prompt: expandWildcards($("prompt").value.trim()),
+    ...(editing ? { init_image: state.editImage.src, strength: clampNum($("editStrength"), 45) / 100 } : {}),
+    prompt: loraSpec.prompt,
     negative_prompt: $("neg").value.trim(),
     clip_skip: +$("clipskip").value,
     width: w, height: h, seed, batch_count: 1,
     sample_params: {
       scheduler: $("scheduler").value, sample_method: $("sampler").value, sample_steps: steps,
-      guidance: { txt_cfg: +$("cfg").value },
+      guidance: { txt_cfg: cfg },
     },
-    lora: state.active.map((a) => ({ path: a.path, multiplier: a.mult, is_high_noise: false })),
+    lora: loraSpec.lora,
     // Vulkan y el perfil bajo: VAE por mosaicos (sin ellos el primer intento puede fallar por memoria)
     vae_tiling_params: { enabled: state.hw.engine !== "cuda" || state.hw.profile === "bajo" },
     preview: "proj", preview_interval: 1,
@@ -538,7 +483,6 @@ $("editFile").onchange = async () => {
 $("useLast").onclick = () => { if (state.currentImage) setEditImage(state.currentImage); };
 $("modeGen").onclick = () => setMode("gen");
 $("modeEdit").onclick = () => setMode("edit");
-$("editStrength").oninput = () => { $("editStrengthTxt").textContent = (+$("editStrength").value).toFixed(2).replace(".", ","); };
 $("upscaleBtn").onclick = upscaleCurrent;
 
 async function scanHistory() {
@@ -653,19 +597,36 @@ $("stopBtn").onclick = async () => {
 };
 
 // ---------- controles ----------
-function syncLabels() {
-  $("stepsTxt").textContent = $("steps").value;
-  $("cfgTxt").textContent = (+$("cfg").value).toFixed(1).replace(".", ",");
+// Campos numéricos escritos a mano: acepta coma decimal y, al salir del campo,
+// ajusta el valor a su mínimo, máximo y paso.
+function readNum(el) { return parseFloat(String(el.value).replace(",", ".")); }
+function clampNum(el, fallback) {
+  const min = +el.min, max = +el.max, step = +el.step || 1;
+  let v = readNum(el);
+  if (!Number.isFinite(v)) v = fallback ?? min;
+  v = Math.min(max, Math.max(min, Math.round(v / step) * step));
+  el.value = String(+v.toFixed(2));
+  return v;
 }
-$("steps").oninput = () => { syncLabels(); showEstimate(); };
-$("cfg").oninput = syncLabels;
+function syncLabels() { /* los campos muestran su propio valor */ }
+$("steps").oninput = showEstimate;
+$("steps").onchange = () => { clampNum($("steps"), 20); showEstimate(); };
+$("cfg").onchange = () => clampNum($("cfg"), 5);
+$("editStrength").onchange = () => clampNum($("editStrength"), 45);
+for (const id of ["steps", "cfg", "editStrength", "count", "customW", "customH"]) {
+  $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
+}
 $("prompt").addEventListener("input", updatePromptMeta);
 $("weightDown").onclick = () => adjustPromptWeight(-0.1);
 $("weightUp").onclick = () => adjustPromptWeight(0.1);
-$("saveTemplate").onclick = () => {
+$("saveTemplate").onclick = async () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) { $("prompt").focus(); return; }
-  const name = window.prompt("Nombre de la plantilla:", prompt.slice(0, 32));
+  const r = await ask({
+    title: "Guardar plantilla", input: { value: prompt.slice(0, 32), placeholder: "Nombre de la plantilla" },
+    buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }],
+  });
+  const name = r?.input;
   if (!name?.trim()) return;
   const items = savedList("templates");
   items.push({ name: name.trim(), prompt, negative: $("neg").value, steps: +$("steps").value, cfg: +$("cfg").value, sampler: $("sampler").value, scheduler: $("scheduler").value });
@@ -699,7 +660,6 @@ $("recentPick").onchange = () => {
   if (!item) return;
   $("prompt").value = item.prompt; $("neg").value = item.negative || ""; updatePromptMeta();
 };
-$("loraSearch").oninput = filterLoraLibrary;
 $("randomSeed").onclick = () => { $("seed").value = "-1"; $("seed").focus(); };
 for (const b of document.querySelectorAll("#aspect button")) {
   b.onclick = () => {
@@ -720,7 +680,6 @@ $("genBtn").onclick = generate;
 $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.ctrlKey) generate(); });
 $("openOut").onclick = () => invoke("open_folder", { which: "outputs" });
 for (const b of document.querySelectorAll("[data-open]")) b.onclick = () => invoke("open_folder", { which: b.dataset.open });
-$("refreshLoras").onclick = async () => { await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {}); scanLoras(); };
 
 for (const n of document.querySelectorAll(".nav")) {
   n.onclick = () => {
@@ -745,14 +704,13 @@ $("restartBtn").onclick = async () => {
   store.set("offload", $("optOffload").checked);
   store.set("extra", $("optExtra").value.trim());
   state.loaded = null; $("genBtn").disabled = true;
-  if (await startEngine()) { await refreshEngineMenus(); await scanModels(); await scanLoras(); await loadModel(); }
+  if (await startEngine()) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); await loadModel(); }
 };
 
 // ---------- arranque: abrir el exe y que cargue todo solo ----------
 (async function boot() {
   $("prompt").value = store.get("prompt", "");
   fillPromptLists(); updatePromptMeta();
-  state.active = store.get("active", []);
   state.aspect = store.get("aspect", "p");
   const cs = store.get("customSize", null);
   if (Array.isArray(cs) && cs.length === 2) { $("customW").value = align64(cs[0]); $("customH").value = align64(cs[1]); }
@@ -772,7 +730,7 @@ $("restartBtn").onclick = async () => {
     if (!(await startEngine())) return;
     await refreshEngineMenus();
     await scanModels();
-    await scanLoras();
+    await Loras.refresh();
     const opt = currentOption();
     if (opt) { applyPreset(opt); await loadModel(); }
   } catch (e) {

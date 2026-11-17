@@ -82,9 +82,9 @@
           </div>
           <label class="ghost sm file-btn">Elegir foto<input id="editFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
           <button id="useLast" class="ghost sm" disabled>Usar la última</button>
-          <div class="edit-strength">
-            <div class="row lbl"><label for="editStrength">Cuánto cambia</label><span id="editStrengthTxt">0,45</span></div>
-            <input id="editStrength" type="range" min="0.05" max="1" step="0.05" value="0.45">
+          <div class="edit-strength" title="Cuánto cambia la foto: poco conserva casi todo, mucho la rehace">
+            <label class="lbl" for="editStrength">Cambio</label>
+            <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
           </div>
         </div>
 
@@ -126,13 +126,11 @@
           </div>
           <div id="sizeTxt" class="lbl"></div>
         </div>
-        <div class="group">
-          <div class="row lbl"><label for="steps">Pasos</label><span id="stepsTxt"></span></div>
-          <input id="steps" type="range" min="1" max="50" value="8">
-        </div>
-        <div class="group">
-          <div class="row lbl"><label for="cfg">CFG</label><span id="cfgTxt"></span></div>
-          <input id="cfg" type="range" min="1" max="12" step="0.5" value="1">
+        <div class="two">
+          <div class="group"><label class="lbl" for="steps">Pasos</label>
+            <input id="steps" class="field" type="number" min="1" max="150" step="1" value="8" inputmode="numeric"></div>
+          <div class="group"><label class="lbl" for="cfg">CFG</label>
+            <input id="cfg" class="field" type="number" min="1" max="30" step="0.5" value="1" inputmode="decimal"></div>
         </div>
         <div class="two">
           <div class="group"><label class="lbl" for="sampler">Sampler</label>
@@ -154,20 +152,12 @@
         </div>
 
         <div class="group divider">
-          <div class="row"><div class="lbl">LoRAs activas</div><button id="addLora" class="link">+ Añadir</button></div>
-          <select id="loraPick" class="field hidden" aria-label="Elegir LoRA"></select>
+          <button id="loraOpen" class="ghost lora-open">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+            LoRAs <span id="loraCount" class="lbl"></span></button>
           <div id="loraList" class="group"></div>
         </div>
       </div>
-    </section>
-
-    <!-- LoRAs -->
-    <section id="page-loras" class="page">
-      <h1>LoRAs</h1>
-      <p>LoRAs locales (.safetensors). Filtra la biblioteca y activa varios adaptadores con una fuerza independiente.</p>
-      <div class="btnrow" style="margin:14px 0"><button class="ghost" data-open="loras">Abrir carpeta loras</button><button id="refreshLoras" class="ghost">Actualizar</button></div>
-      <input id="loraSearch" class="field" style="max-width:640px" placeholder="Filtrar LoRAs por nombre…" aria-label="Filtrar LoRAs">
-      <div id="loraLib" class="group" style="max-width:640px"></div>
     </section>
 
     <!-- Historial -->
@@ -189,6 +179,8 @@
         <div id="setInfo" class="lbl"></div>
         <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload): recomendado con 8 GB de VRAM o menos</label>
         <label id="optConsoleRow" class="lbl hidden" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optHideConsole" type="checkbox" checked> Ocultar la consola de desarrollo</label>
+        <label class="lbl" for="optCivitaiKey">Clave API de Civitai (opcional: para +18 y archivos que piden iniciar sesión; solo se envía a civitai.com)</label>
+        <div class="seed-controls"><input id="optCivitaiKey" class="field" type="password" autocomplete="off" placeholder="Pega aquí tu clave"><button id="openCivitaiAccount" class="ghost sm">Abrir civitai.com/user/account</button></div>
         <label class="lbl" for="optExtra">Opciones extra del motor</label>
         <input id="optExtra" class="field" placeholder="--max-vram 3">
         <div class="btnrow"><button id="restartBtn" class="ghost">Reiniciar motor</button><button class="ghost" data-open="models">Abrir models</button><button class="ghost" data-open="logs">Abrir logs</button></div>
@@ -198,6 +190,81 @@
     </section>
   </main>
 </div>
+
+<!-- Biblioteca de LoRAs (como el diálogo del teléfono) -->
+<div id="loraDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="loraDlgTitle">
+  <div class="dlg dlg-lib">
+    <div class="dlg-head"><h2 id="loraDlgTitle">LoRAs</h2><span id="loraActive" class="lbl"></span>
+      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <input id="loraFilter" class="field" placeholder="Filtrar: nombre o palabra…" aria-label="Filtrar LoRAs">
+    <div id="loraCats" class="chips"></div>
+    <div id="loraRows" class="lora-rows"></div>
+    <div class="dlg-foot">
+      <span id="loraHint" class="lbl"></span>
+      <button id="loraCivitai" class="ghost">Civitai</button>
+      <button id="loraImport" class="ghost">Importar</button>
+      <button class="primary sm" data-close>Hecho</button>
+    </div>
+  </div>
+</div>
+
+<!-- Civitai -->
+<div id="civDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="civTitle">
+  <div class="dlg dlg-civ">
+    <div class="dlg-head"><h2 id="civTitle">Civitai</h2><span id="civInfo" class="lbl"></span>
+      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="civ-search">
+      <input id="civQuery" class="field" placeholder="Nombre o enlace de civitai.com / civitai.red" aria-label="Buscar en Civitai">
+      <button id="civGo" class="ghost">Buscar</button>
+      <label class="lbl civ-nsfw"><input id="civNsfw" type="checkbox"> Mostrar +18</label>
+    </div>
+    <div class="civ-filters">
+      <div class="chips"><span class="chip-lbl">FAMILIA</span><span id="civFamily" class="chips"></span></div>
+      <div class="chips"><span class="chip-lbl">CATEGORÍA</span><span id="civCat" class="chips"></span></div>
+      <div class="chips"><span class="chip-lbl">TIPO</span><span id="civType" class="chips"></span><span class="chip-lbl">ORDENAR</span><span id="civSort" class="chips"></span></div>
+    </div>
+    <div id="civGrid" class="civ-grid"></div>
+    <div class="dlg-foot"><button id="civMore" class="ghost hidden">Más</button></div>
+  </div>
+</div>
+
+<!-- Ficha de un modelo de Civitai -->
+<div id="sheetDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+  <div class="dlg dlg-sheet">
+    <div class="dlg-head"><h2 id="sheetTitle"></h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="sheet-body">
+      <img id="sheetImg" class="sheet-img" alt="">
+      <div class="group" style="flex:1;min-width:0">
+        <select id="sheetVersion" class="field" aria-label="Versión"></select>
+        <div id="sheetInfo" class="lbl"></div>
+        <div id="sheetWords" class="sheet-words"></div>
+        <div id="sheetProgress" class="hidden"><div class="row lbl"><span id="sheetProgTxt"></span></div><div class="bar"><i id="sheetBar"></i></div></div>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button id="sheetWeb" class="ghost">Abrir en el sitio web</button>
+      <button id="sheetCancel" class="ghost hidden">Cancelar descarga</button>
+      <button id="sheetDl" class="primary sm">Descargar</button>
+      <button class="ghost" data-close>Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Diálogo genérico (texto / elegir / confirmar) -->
+<div id="askDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+  <div class="dlg dlg-ask">
+    <div class="dlg-head"><h2 id="askTitle"></h2></div>
+    <div id="askMsg" class="lbl"></div>
+    <input id="askInput" class="field hidden">
+    <div id="askList" class="ask-list hidden"></div>
+    <div id="askBtns" class="dlg-foot"></div>
+  </div>
+</div>
+
+<div id="ctxMenu" class="ctx hidden" role="menu"></div>
+<div id="toast" class="toast hidden" role="status"></div>
+
 <script src="app.js"></script>
+<script src="loras.js"></script>
 </body>
 </html>

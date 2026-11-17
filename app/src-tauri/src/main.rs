@@ -1,7 +1,9 @@
 // HexAnima PC: ventana Tauri + motor stable-diffusion.cpp local (sd-server.exe).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod civitai;
 mod hw;
+mod lora;
 mod server;
 
 use base64::Engine as _;
@@ -171,6 +173,90 @@ fn set_console_visible(visible: bool) -> Result<(), String> {
     Ok(())
 }
 
+// ---------- LoRAs ----------
+
+#[tauri::command]
+fn lora_list(state: State<AppState>) -> serde_json::Value {
+    lora::list(&state.root)
+}
+
+#[tauri::command]
+fn lora_set_meta(state: State<AppState>, file: String, patch: lora::MetaPatch) -> Result<(), String> {
+    lora::set_meta(&state.root, &file, patch)
+}
+
+#[tauri::command]
+fn lora_trash(state: State<AppState>, file: String) -> Result<(), String> {
+    lora::trash(&state.root, &file)
+}
+
+/// Selector de archivos de Windows para importar LoRAs (async: el diálogo no bloquea la ventana).
+#[tauri::command]
+async fn lora_import(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Importar LoRAs")
+        .add_filter("LoRA", &["safetensors", "gguf"])
+        .blocking_pick_files();
+    let Some(files) = picked else { return Ok(serde_json::json!({ "imported": [], "failed": [] })) };
+    let paths: Vec<PathBuf> = files.into_iter().filter_map(|f| f.into_path().ok()).collect();
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || lora::import(&root, &paths))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn downloaded_index(state: State<AppState>) -> serde_json::Value {
+    lora::downloaded_index(&state.root)
+}
+
+// ---------- Civitai (red en hilos aparte para no congelar la ventana) ----------
+
+#[tauri::command]
+async fn civitai_search(params: civitai::SearchParams, key: Option<String>) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || civitai::search(&params, key.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn civitai_model(id: u64, key: Option<String>) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || civitai::model(id, key.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn civitai_download(app: tauri::AppHandle, req: civitai::DownloadReq, key: Option<String>) -> Result<String, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || civitai::download(&app, &root, req, key))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn civitai_cancel(id: String) {
+    civitai::cancel(&id);
+}
+
+/// Abre un enlace de Civitai en el navegador del sistema (solo civitai.com / civitai.red).
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    let allowed_host = ["https://civitai.com/", "https://civitai.red/"].iter().any(|p| url.starts_with(p));
+    let safe_chars = url.chars().all(|c| c.is_ascii_alphanumeric() || "/:._-?=&%".contains(c));
+    if !allowed_host || !safe_chars || url.len() > 300 {
+        return Err("Enlace no permitido".into());
+    }
+    std::process::Command::new("rundll32")
+        .args(["url.dll,FileProtocolHandler", &url])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Abre una carpeta de la app en el Explorador (outputs, models, loras, logs).
 #[tauri::command]
 fn open_folder(state: State<AppState>, which: String) -> Result<(), String> {
@@ -186,8 +272,19 @@ fn open_folder(state: State<AppState>, which: String) -> Result<(), String> {
 
 fn main() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState { root: find_root(), hw: Mutex::new(None), server: Mutex::new(None) })
         .invoke_handler(tauri::generate_handler![
+            lora_list,
+            lora_set_meta,
+            lora_trash,
+            lora_import,
+            downloaded_index,
+            civitai_search,
+            civitai_model,
+            civitai_download,
+            civitai_cancel,
+            open_url,
             app_info,
             memory,
             start_server,
