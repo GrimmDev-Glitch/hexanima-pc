@@ -103,6 +103,7 @@ const FAMILY = {
   },
 };
 const ASPECT = { p: [832, 1216], s: [1024, 1024], l: [1216, 832] };
+const ASPECT_ANIMA = { p: [512, 768], s: [640, 640], l: [768, 512] };
 
 function maxSide(family) {
   const p = state.hw?.profile || "medio";
@@ -118,7 +119,7 @@ function currentSize() {
   if (state.aspect === "c") return [align64($("customW").value), align64($("customH").value)];
   const opt = currentOption();
   const fam = opt?.family || "sdxl";
-  let [w, h] = ASPECT[state.aspect];
+  let [w, h] = (fam === "anima" ? ASPECT_ANIMA : ASPECT)[state.aspect];
   const ms = maxSide(fam);
   if (Math.max(w, h) > ms) { const k = ms / Math.max(w, h); w *= k; h *= k; }
   return [Math.max(256, Math.floor(w / 64) * 64), Math.max(256, Math.floor(h / 64) * 64)];
@@ -179,11 +180,21 @@ async function refreshMemory() {
 }
 
 // ---------- motor ----------
-async function startEngine() {
+/** Motor para una familia: Anima va mejor con CUDA en NVIDIA (su VAE tarda ~16 s en vez de
+ *  ~67 s con Vulkan por mosaicos, medido en GTX 1650); SDXL va mejor con Vulkan en GTX. */
+function engineFor(opt) {
+  const engines = state.engines || [];
+  if (opt?.family === "anima" && state.hw?.gpu?.vendor === "nvidia" && engines.includes("cuda")) return "cuda";
+  return state.hw?.engine;
+}
+
+async function startEngine(engine) {
   setStatus("Iniciando motor…");
   const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null };
-  const port = await invoke("start_server", { opts });
-  state.api = `http://127.0.0.1:${port}`;
+  const r = await invoke("start_server", { opts, engine: engine || null });
+  state.api = `http://127.0.0.1:${r.port}`;
+  state.engine = r.engine; state.device = r.device;
+  if (state.hw) $("hwProfile").textContent = `Perfil: ${({ bajo: "Bajo", medio: "Medio", alto: "Alto" })[state.hw.profile] || state.hw.profile} · ${r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
     try { await api("/sdcpp/v1/models/status"); return true; } catch { /* aun arrancando */ }
@@ -257,6 +268,13 @@ function applyPreset(opt) {
 async function loadModel() {
   const opt = currentOption();
   if (!opt || state.busy) return;
+  const want = engineFor(opt);
+  if (want && state.engine && want !== state.engine) {
+    setStatus(`Cambiando al motor ${want.toUpperCase()} (más rápido para este modelo)…`);
+    state.loaded = null;
+    if (!(await startEngine(want))) return;
+    await refreshEngineMenus();
+  }
   state.busy = true;
   $("genBtn").disabled = true; $("loadBtn").disabled = true;
   store.set("model", opt.id);
@@ -372,7 +390,7 @@ async function runOne(opt, seed) {
     },
     lora: loraSpec.lora,
     // Vulkan y el perfil bajo: VAE por mosaicos (sin ellos el primer intento puede fallar por memoria)
-    vae_tiling_params: { enabled: state.hw.engine !== "cuda" || state.hw.profile === "bajo" },
+    vae_tiling_params: { enabled: (state.engine || state.hw.engine) !== "cuda" || state.hw.profile === "bajo" },
     preview: "proj", preview_interval: 1,
     output_format: "png", embed_image_metadata: true,
   };
@@ -450,20 +468,22 @@ async function setEditImage(src) {
     $("editPreview").src = state.editImage.src;
     $("editPreview").classList.add("on"); $("editEmpty").classList.add("off");
     $("editPreview").title = `${state.editImage.w} × ${state.editImage.h}`;
-    updateGenLabel();
+    setMode("edit");
   } catch (e) { setStatus("No se pudo abrir la foto: " + e.message, "err"); }
 }
 
+/** Editar una foto está dentro de Crear (como el teléfono): con foto se genera a partir de ella. */
 function setMode(mode) {
-  state.mode = mode;
-  $("modeGen").classList.toggle("on", mode === "gen"); $("modeGen").setAttribute("aria-selected", mode === "gen");
-  $("modeEdit").classList.toggle("on", mode === "edit"); $("modeEdit").setAttribute("aria-selected", mode === "edit");
-  $("editStrip").classList.toggle("hidden", mode !== "edit");
+  state.mode = mode === "edit" && state.editImage ? "edit" : "gen";
+  const has = !!state.editImage;
+  $("editClear").classList.toggle("hidden", !has);
+  $("editBox").classList.toggle("on", has);
+  $("editHint").textContent = has ? `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).` : "Elige una foto para generar a partir de ella (imagen a imagen).";
   updateGenLabel();
 }
 
 function updateGenLabel() {
-  $("genBtn").textContent = state.mode === "edit" ? "Aplicar a la foto" : "Generar";
+  $("genBtn").textContent = state.mode === "edit" ? "Generar desde la foto" : "Generar";
   const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
   if (state.mode === "edit" && state.editImage) $("sizeTxt").textContent = `Editando a ${w} × ${h}: el tamaño de la foto`;
   else updateSizeTxt();
@@ -496,8 +516,11 @@ $("editFile").onchange = async () => {
   $("editFile").value = "";
 };
 $("useLast").onclick = () => { if (state.currentImage) setEditImage(state.currentImage); };
-$("modeGen").onclick = () => setMode("gen");
-$("modeEdit").onclick = () => setMode("edit");
+$("editClear").onclick = () => {
+  state.editImage = null;
+  $("editPreview").classList.remove("on"); $("editPreview").removeAttribute("src"); $("editEmpty").classList.remove("off");
+  setMode("gen");
+};
 $("upscaleBtn").onclick = () => Upscale.open();
 
 
@@ -508,7 +531,7 @@ async function generate(opts = {}) {
   if (!opt || state.busy) return;
   if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
-  if (!opts.init && state.mode === "edit" && !state.editImage) { setStatus("Elige una foto o usa la última imagen para editar.", "warn"); return; }
+  
   const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value } : null;
   if (opts.init) { state.mode = "edit"; state.editImage = opts.init; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
   state.busy = true; state.stop = false;
@@ -664,7 +687,7 @@ $("restartBtn").onclick = async () => {
   store.set("offload", $("optOffload").checked);
   store.set("extra", $("optExtra").value.trim());
   state.loaded = null; $("genBtn").disabled = true;
-  if (await startEngine()) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); await loadModel(); }
+  if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); await loadModel(); }
 };
 
 // ---------- arranque: abrir el exe y que cargue todo solo ----------
@@ -679,6 +702,7 @@ $("restartBtn").onclick = async () => {
   try {
     const info = await invoke("app_info");
     state.hw = info.hardware;
+    state.engines = info.engines || [];
     // La consola solo existe en compilaciones de desarrollo; en el .exe final no hay opción.
     if (info.debug) {
       $("optConsoleRow").classList.remove("hidden");
@@ -687,7 +711,9 @@ $("restartBtn").onclick = async () => {
     renderHw(state.hw);
     refreshMemory();
     setInterval(refreshMemory, 3000);
-    if (!(await startEngine())) return;
+    // el motor del último modelo usado (Anima → CUDA) para no arrancarlo dos veces
+    const lastFamily = String(store.get("model", "")).startsWith("anima:") ? "anima" : "sdxl";
+    if (!(await startEngine(engineFor({ family: lastFamily })))) return;
     await refreshEngineMenus();
     await scanModels();
     await Loras.refresh();

@@ -16,14 +16,14 @@
   const civ = async (path) => (await fetch("https://civitai.com/api/v1" + path)).json();
   const handlers = {
     app_info: () => ({
-      root: "C:\\HexAnima", version: "0.1.0-preview", debug: false,
+      root: "C:\\HexAnima", version: "0.1.0-preview", engines: ["vulkan", "cuda"], debug: false,
       hardware: {
         gpu: { name: "NVIDIA GeForce GTX 1650", vendor: "nvidia", vram_gb: 4, driver: "616.56" },
         ram_gb: 15.6, engine: "vulkan", engine_candidates: ["vulkan", "cuda", "cpu"], backend_device: "vulkan1", profile: "medio",
       },
     }),
     memory: () => ({ ram_total_gb: 15.6, ram_free_gb: 7.2, vram_total_gb: 4, vram_free_gb: 2.9, gpu_temp_c: 51 }),
-    start_server: () => SD_PORT,
+    start_server: ({ engine }) => ({ port: SD_PORT, engine: engine || "vulkan", device: "vulkan1" }),
     server_status: () => ({ running: true, port: SD_PORT, log: "[I] vista previa: motor externo en " + SD_PORT }),
     save_image: () => "outputs\\preview.png",
     output_files: () => fakeOutputs,

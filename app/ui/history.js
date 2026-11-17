@@ -142,7 +142,7 @@ const History = {
       await setEditImage(await this.dataUrl(it));
       setMode("edit");
       document.querySelector('.nav[data-page="gen"]').click();
-      toast("Imagen lista para editar: escribe qué cambiar y pulsa Aplicar a la foto", 4500);
+      toast("Imagen lista para editar: escribe qué cambiar y pulsa Generar desde la foto", 4500);
     } catch (e) { toast("No se pudo abrir la imagen: " + (e.message || e)); }
   },
 

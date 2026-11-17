@@ -85,7 +85,7 @@ const Session = {
   edit() {
     const c = this.cur(); if (!c) return;
     setEditImage(c.src).then(() => setMode("edit"));
-    toast("Imagen lista en Editar foto: escribe qué cambiar y pulsa Aplicar a la foto", 4000);
+    toast("Imagen lista en Editar foto: escribe qué cambiar y pulsa Generar desde la foto", 4000);
   },
 };
 
@@ -311,7 +311,7 @@ const Upscale = {
       await refreshEngineMenus();
       if (!state.upscalers.includes(this.stem(kind)) && !state.busy) {
         $("upMsg").textContent = "Reiniciando el motor para que vea el ampliador…";
-        if (await startEngine()) { await refreshEngineMenus(); await loadModel(); }
+        if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await loadModel(); }
       }
       $("upMsg").textContent = state.upscalers.includes(this.stem(kind)) ? "✓ Listo para ampliar" : "Descargado; reinicia el motor desde Ajustes si no aparece.";
     } catch (e) { $("upMsg").textContent = "Falló la descarga: " + (e.message || e); }

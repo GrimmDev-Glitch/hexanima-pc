@@ -260,6 +260,18 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .tags-body { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 14px; }
 .tag-sec { display: flex; flex-direction: column; gap: 6px; }
 
+/* Editar una foto · opcional (panel de Controles, como la sección del teléfono) */
+.prompt-lbl { margin: 0; }
+.edit-box .row { display: flex; align-items: center; justify-content: space-between; }
+.edit-box i { font-style: normal; color: #6E6990; }
+.edit-row { display: flex; align-items: center; gap: 10px; }
+.edit-box .edit-thumb { width: 64px; height: 64px; border-radius: 8px; }
+.edit-btns { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.edit-btns .ghost.sm { justify-content: center; width: 100%; }
+.edit-box .edit-strength { margin: 0; display: flex; }
+.edit-hint { font-size: 12px; }
+.edit-box.on { background: var(--card); border: 1px solid var(--accent); border-radius: 10px; padding: 10px; margin-top: 4px; }
+
 /* Diálogo Ampliar */
 .up-opt { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .up-opt.on { border-color: var(--accent); background: var(--raised); }
