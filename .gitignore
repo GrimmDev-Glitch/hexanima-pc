@@ -44,3 +44,6 @@ app/node_modules/
 app/src-tauri/target/
 app/src-tauri/gen/
 app/target*/
+
+# Ejecutable compilado (se publica en Releases)
+/HexAnima.exe
