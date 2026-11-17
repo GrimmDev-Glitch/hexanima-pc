@@ -356,7 +356,8 @@ async function runOne(opt, seed) {
   const cfg = clampNum($("cfg"), 5);
   // Las etiquetas <lora:nombre:fuerza> del prompt se convierten en la lista que pide el motor
   // (el servidor no lee etiquetas dentro del texto) y se quitan del prompt enviado.
-  const loraSpec = Loras.fromPrompt(expandWildcards($("prompt").value.trim()));
+  const promptWithTags = expandWildcards($("prompt").value.trim());
+  const loraSpec = Loras.fromPrompt(promptWithTags);
   if (loraSpec.missing.length) setStatus(`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
   const body = {
     ...(editing ? { init_image: state.editImage.src, strength: clampNum($("editStrength"), 45) / 100 } : {}),
@@ -394,7 +395,17 @@ async function runOne(opt, seed) {
       showImage("data:image/png;base64," + img);
       const total = (j.completed - j.started) / 1000;
       if (sampMs) store.set("bench:" + opt.id + ":" + w + "x" + h, { step: sampMs / 1000 / steps, fixed: total - sampMs / 1000 });
-      const path = await invoke("save_image", { b64: img, prefix: editing ? "edit" : opt.family });
+      // .json con los ajustes completos junto al PNG (como la galería del teléfono).
+      const meta = {
+        prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
+        steps, cfg, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
+        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? "edit" : "gen",
+        strength: editing ? body.strength : null, loras: loraSpec.lora.map((l) => ({ file: l.path, w: l.multiplier })),
+        seconds: Math.round(total), created: new Date().toISOString(),
+      };
+      const path = await invoke("save_image", { b64: img, prefix: editing ? "edit" : opt.family, meta });
+      state.lastSaved = path;
+      Session.add({ name: path, src: "data:image/png;base64," + img, meta, before: editing ? state.editImage.src : null });
       return { total, path };
     }
     if (j.status === "failed") throw new Error(j.error?.message || "falló la generación");
@@ -464,8 +475,10 @@ async function upscaleCurrent() {
     const result = await api("/sdcpp/v1/upscale", { method: "POST", body: JSON.stringify({ image: state.currentImage, upscaler: state.upscaler, repeats: 1, output_format: "png" }) });
     const image = result.images?.[0]?.b64_json;
     if (!image) throw new Error("El motor no devolvió una imagen ampliada");
-    showImage("data:image/png;base64," + image);
-    await invoke("save_image", { b64: image, prefix: "upscale" });
+    const base = Session.cur()?.meta || {};
+    const meta = { ...base, width: result.width, height: result.height, upscaled: result.upscaler || "ESRGAN", created: new Date().toISOString() };
+    const name = await invoke("save_image", { b64: image, prefix: "upscale", meta });
+    Session.add({ name, src: "data:image/png;base64," + image, meta, before: state.currentImage });
     setStatus(`Ampliación lista · ${result.width} × ${result.height} · ${result.upscaler || "ESRGAN"}`, "ok");
   } catch (e) {
     setStatus("No se pudo ampliar: " + e.message, "err");
@@ -485,80 +498,25 @@ $("modeGen").onclick = () => setMode("gen");
 $("modeEdit").onclick = () => setMode("edit");
 $("upscaleBtn").onclick = upscaleCurrent;
 
-async function scanHistory() {
-  try {
-    state.outputFiles = await invoke("output_files");
-    renderHistory();
-  } catch (e) {
-    $("historyList").textContent = `No se pudo leer outputs: ${e.message || e}`;
-  }
-}
 
-function historyFavorites() { return new Set(store.get("favorites", [])); }
-function renderHistory() {
-  const list = $("historyList"), q = $("historySearch").value.trim().toLocaleLowerCase();
-  const favorites = historyFavorites();
-  list.innerHTML = "";
-  const files = state.outputFiles.filter((f) => !q || f.name.toLocaleLowerCase().includes(q));
-  files.sort((a, b) => Number(favorites.has(b.name)) - Number(favorites.has(a.name)) || b.name.localeCompare(a.name));
-  if (!files.length) {
-    const empty = document.createElement("div"); empty.className = "lbl";
-    empty.textContent = state.outputFiles.length ? "No hay resultados para este filtro." : "Todavía no hay PNG en outputs.";
-    list.appendChild(empty); return;
-  }
-  for (const file of files) {
-    const button = document.createElement("button");
-    button.className = "history-item" + (state.activeHistory === file.name ? " on" : "");
-    const name = document.createElement("span"); name.className = "file-name"; name.textContent = file.name;
-    const size = document.createElement("span"); size.className = "lbl"; size.textContent = `${(file.bytes / 1048576).toFixed(1)} MB`;
-    const star = document.createElement("span"); star.setAttribute("aria-hidden", "true"); star.textContent = favorites.has(file.name) ? "★" : "☆";
-    button.append(name, size, star); button.onclick = () => openHistoryImage(file.name);
-    list.appendChild(button);
-  }
-}
-
-async function openHistoryImage(name) {
-  try {
-    const b64 = await invoke("read_output", { name });
-    const src = "data:image/png;base64," + b64;
-    $("historyImage").src = src; state.currentImage = src; $("useLast").disabled = false;
-    $("historyPreview").classList.add("has");
-    $("historyName").textContent = name;
-    state.activeHistory = name;
-    $("historyFavorite").classList.remove("hidden");
-    const favorite = historyFavorites().has(name);
-    $("historyFavorite").textContent = favorite ? "★ Favorita" : "☆ Favorita";
-    renderHistory();
-  } catch (e) {
-    $("historyEmpty").textContent = `No se pudo abrir la imagen: ${e.message || e}`;
-  }
-}
-
-$("refreshHistory").onclick = scanHistory;
-$("historySearch").oninput = renderHistory;
-$("historyFavorite").onclick = () => {
-  const name = state.activeHistory;
-  if (!name) return;
-  const favorites = historyFavorites();
-  if (favorites.has(name)) favorites.delete(name); else favorites.add(name);
-  store.set("favorites", [...favorites]);
-  $("historyFavorite").textContent = favorites.has(name) ? "★ Favorita" : "☆ Favorita";
-  renderHistory();
-};
-
-async function generate() {
+/** opts (para ↻ Otra vez y Variaciones): {count, newSeed, init: {src,w,h}, strength}.
+ *  init = "Parecidas a esta imagen": img2img desde esa imagen sin tocar la pestaña Editar foto. */
+async function generate(opts = {}) {
   const opt = currentOption();
-  if (!opt || state.loaded !== opt.id || state.busy) return;
+  if (!opt || state.busy) return;
+  if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
-  if (state.mode === "edit" && !state.editImage) { setStatus("Elige una foto o usa la última imagen para editar.", "warn"); return; }
+  if (!opts.init && state.mode === "edit" && !state.editImage) { setStatus("Elige una foto o usa la última imagen para editar.", "warn"); return; }
+  const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value } : null;
+  if (opts.init) { state.mode = "edit"; state.editImage = opts.init; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
   state.busy = true; state.stop = false;
   $("genBtn").disabled = true; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
   $("progress").classList.add("on");
   store.set("params:" + opt.id, { steps: +$("steps").value, cfg: +$("cfg").value, sampler: $("sampler").value, scheduler: $("scheduler").value, neg: $("neg").value });
   store.set("prompt", $("prompt").value);
   rememberPrompt($("prompt").value.trim(), $("neg").value.trim());
-  state.batchTarget = Math.min(999, Math.max(1, parseInt($("count").value, 10) || 1));
-  let seed = parseInt($("seed").value, 10);
+  state.batchTarget = Math.min(999, Math.max(1, opts.count || parseInt($("count").value, 10) || 1));
+  let seed = opts.newSeed ? -1 : parseInt($("seed").value, 10);
   if (!(seed >= 0)) seed = Math.floor(Math.random() * 2 ** 31);
   $("extendBatch").disabled = false;
   try {
@@ -574,6 +532,7 @@ async function generate() {
     $("serverLog").textContent = s.log || "";
     setStatus("Error: " + e.message, "err");
   } finally {
+    if (saved) { state.mode = saved.mode; state.editImage = saved.img; $("editStrength").value = saved.str; }
     state.busy = false; state.job = null;
     $("progress").classList.remove("on");
     $("extendBatch").disabled = true;
@@ -676,9 +635,9 @@ $("model").onchange = () => {
   if (state.loaded !== opt.id) setStatus("Pulsa Cargar para usar este modelo.");
 };
 $("loadBtn").onclick = loadModel;
-$("genBtn").onclick = generate;
+$("genBtn").onclick = () => generate();
 $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.ctrlKey) generate(); });
-$("openOut").onclick = () => invoke("open_folder", { which: "outputs" });
+// (la barra de la imagen la maneja session.js)
 for (const b of document.querySelectorAll("[data-open]")) b.onclick = () => invoke("open_folder", { which: b.dataset.open });
 
 for (const n of document.querySelectorAll(".nav")) {
@@ -686,7 +645,6 @@ for (const n of document.querySelectorAll(".nav")) {
     document.querySelectorAll(".nav").forEach((x) => x.classList.toggle("on", x === n));
     document.querySelectorAll(".page").forEach((p) => p.classList.toggle("on", p.id === "page-" + n.dataset.page));
     if (n.dataset.page === "settings") invoke("server_status").then((s) => { $("serverLog").textContent = s.log || ""; });
-    if (n.dataset.page === "history") scanHistory();
   };
 }
 

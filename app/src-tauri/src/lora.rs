@@ -153,6 +153,121 @@ fn walk(d: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     }
 }
 
+const PREVIEW_EXTS: [&str; 8] = [
+    "preview.jpeg", "preview.jpg", "preview.png", "preview.webp", "png", "jpg", "jpeg", "webp",
+];
+
+/// Imagen de vista previa local: `<stem>.preview.jpeg`, `<stem>.png`… (como los loaders de ComfyUI).
+pub fn local_preview(p: &Path) -> Option<PathBuf> {
+    let stem = p.file_stem()?.to_string_lossy().into_owned();
+    let parent = p.parent()?;
+    PREVIEW_EXTS.iter().map(|e| parent.join(format!("{stem}.{e}"))).find(|c| c.is_file())
+}
+
+/// Subcarpetas de loras/ (relativas, con "/"), para filtrar y mover.
+pub fn folders(root: &Path) -> Vec<String> {
+    fn rec(base: &Path, d: &Path, out: &mut Vec<String>, depth: usize) {
+        if depth > 3 {
+            return;
+        }
+        if let Ok(rd) = fs::read_dir(d) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    out.push(rel(base, &p));
+                    rec(base, &p, out, depth + 1);
+                }
+            }
+        }
+    }
+    let base = dir(root);
+    let mut out = Vec::new();
+    rec(&base, &base, &mut out, 0);
+    out.sort_by_key(|s| s.to_lowercase());
+    out
+}
+
+pub fn make_folder(root: &Path, name: &str) -> Result<String, String> {
+    let clean: Vec<String> = name
+        .split(['/', '\\'])
+        .map(|s| file_name(s))
+        .filter(|s| !s.is_empty() && s != "lora")
+        .collect();
+    if clean.is_empty() {
+        return Err("Nombre de carpeta no válido".into());
+    }
+    let r = clean.join("/");
+    fs::create_dir_all(dir(root).join(&r)).map_err(|e| e.to_string())?;
+    Ok(r)
+}
+
+/// Mueve el LoRA (con su .json y su vista previa) a otra subcarpeta ("" = raíz).
+/// El nombre del archivo no cambia, así que las etiquetas <lora:...> siguen valiendo.
+pub fn move_to(root: &Path, file: &str, folder: &str) -> Result<String, String> {
+    let p = resolve(root, file)?;
+    if folder.contains("..") || folder.contains(':') {
+        return Err("Carpeta no válida".into());
+    }
+    let target_dir = if folder.is_empty() { dir(root) } else { dir(root).join(folder) };
+    if !target_dir.is_dir() {
+        return Err("La carpeta no existe".into());
+    }
+    let name = p.file_name().ok_or("archivo")?;
+    let dst = target_dir.join(name);
+    if dst == p {
+        return Ok(file.to_string());
+    }
+    if dst.exists() {
+        return Err("Ya hay un LoRA con ese nombre en la carpeta".into());
+    }
+    let side = sidecar(&p);
+    let prev = local_preview(&p);
+    fs::rename(&p, &dst).map_err(|e| e.to_string())?;
+    if side.is_file() {
+        let _ = fs::rename(&side, sidecar(&dst));
+    }
+    if let Some(pv) = prev {
+        if let Some(n) = pv.file_name() {
+            let _ = fs::rename(&pv, target_dir.join(n));
+        }
+    }
+    Ok(rel(&dir(root), &dst))
+}
+
+/// Presets (conjuntos de LoRAs con fuerza) en loras/hexanima-presets.json.
+pub fn presets_get(root: &Path) -> Value {
+    fs::read_to_string(dir(root).join("hexanima-presets.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .filter(|v| v.is_array())
+        .unwrap_or_else(|| json!([]))
+}
+
+pub fn presets_set(root: &Path, v: &Value) -> Result<(), String> {
+    if !v.is_array() {
+        return Err("Formato de presets no válido".into());
+    }
+    let _ = fs::create_dir_all(dir(root));
+    fs::write(dir(root).join("hexanima-presets.json"), serde_json::to_string_pretty(v).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
+}
+
+/// SHA256 del archivo (para buscar sus datos en Civitai).
+pub fn sha256(p: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let mut f = File::open(p).map_err(|e| e.to_string())?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+    }
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
 pub fn list(root: &Path) -> Value {
     let base = dir(root);
     let _ = fs::create_dir_all(&base);
@@ -180,9 +295,23 @@ pub fn list(root: &Path) -> Value {
                 .and_then(|v| v.as_str())
                 .map(String::from)
                 .or_else(|| detect_base(&h).map(String::from));
+            let folder = file.rsplit_once('/').map(|(f, _)| f.to_string()).unwrap_or_default();
+            let modified = p
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             json!({
                 "file": file,
                 "stem": stem,
+                "folder": folder,
+                "modified": modified,
+                "preview_local": local_preview(p).map(|x| x.display().to_string()),
+                "fav": m.get("fav").and_then(|v| v.as_bool()).unwrap_or(false),
+                "note": m.get("note"),
+                "civitai_checked": m.get("civitai_checked"),
                 "title": alias.clone().or(name.clone()).unwrap_or(stem.clone()),
                 "alias": alias,
                 "name": name,
@@ -208,6 +337,8 @@ pub struct MetaPatch {
     /// character | clothing | poses | style | concept | background | objects | none
     pub cat: Option<String>,
     pub words: Option<Vec<String>>,
+    pub fav: Option<bool>,
+    pub note: Option<String>,
 }
 
 pub fn set_meta(root: &Path, file: &str, patch: MetaPatch) -> Result<(), String> {
@@ -231,6 +362,13 @@ pub fn set_meta(root: &Path, file: &str, patch: MetaPatch) -> Result<(), String>
         let w: Vec<String> = w.into_iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
         m.insert("words".into(), json!(w));
     }
+    if let Some(f) = patch.fav {
+        m.insert("fav".into(), json!(f));
+    }
+    if let Some(n) = patch.note {
+        let n = n.trim();
+        if n.is_empty() { m.remove("note"); } else { m.insert("note".into(), json!(n)); }
+    }
     write_sidecar(&p, &m)
 }
 
@@ -240,6 +378,9 @@ pub fn trash(root: &Path, file: &str) -> Result<(), String> {
     let mut targets = vec![p.clone()];
     if sidecar(&p).is_file() {
         targets.push(sidecar(&p));
+    }
+    if let Some(pv) = local_preview(&p) {
+        targets.push(pv);
     }
     trash::delete_all(&targets).map_err(|e| format!("No se pudo enviar a la papelera: {e}"))
 }

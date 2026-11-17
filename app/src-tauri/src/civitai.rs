@@ -131,6 +131,101 @@ pub struct DownloadReq {
     pub meta: Map<String, Value>,
 }
 
+/// Guarda la imagen de vista previa como `<stem>.preview.jpeg` junto al modelo (450 px).
+fn save_preview(model_path: &Path, url: &str) {
+    if url.is_empty() || url.ends_with(".mp4") || url.ends_with(".webm") {
+        return;
+    }
+    let small = regex_width(url);
+    let Some(stem) = model_path.file_stem() else { return };
+    let dst = model_path.with_file_name(format!("{}.preview.jpeg", stem.to_string_lossy()));
+    if let Ok(mut r) = get(&small, None) {
+        let mut buf = Vec::new();
+        if r.read_to_end(&mut buf).is_ok() && buf.len() > 512 {
+            let _ = fs::write(dst, buf);
+        }
+    }
+}
+
+/// /width=N/ u /original=true/ -> /width=450/ (miniatura liviana).
+fn regex_width(url: &str) -> String {
+    for pat in ["/original=true/"] {
+        if let Some(i) = url.find(pat) {
+            return format!("{}/width=450/{}", &url[..i], &url[i + pat.len()..]);
+        }
+    }
+    if let Some(i) = url.find("/width=") {
+        if let Some(j) = url[i + 1..].find('/') {
+            return format!("{}/width=450{}", &url[..i], &url[i + 1 + j..]);
+        }
+    }
+    url.to_string()
+}
+
+/// Busca un LoRA local en Civitai por su SHA256 y completa su .json y su vista previa.
+/// No pisa lo que el usuario editó (nombre visible, categoría, activadoras propias).
+pub fn fetch_info(root: &Path, file: &str, key: Option<&str>) -> Result<Value, String> {
+    let p = lora::resolve(root, file)?;
+    let hash = lora::sha256(&p)?;
+    let mut m = lora::read_sidecar(&p);
+    let resp = get(&format!("{API}/model-versions/by-hash/{hash}"), key);
+    let v: Value = match resp {
+        Ok(r) => r.json().map_err(|e| e.to_string())?,
+        Err(e) if e.contains("404") => {
+            m.insert("civitai_checked".into(), json!("not_found"));
+            m.insert("sha256".into(), json!(hash));
+            lora::write_sidecar(&p, &m)?;
+            return Ok(json!({ "found": false }));
+        }
+        Err(e) => return Err(e),
+    };
+    let model = v.get("model").cloned().unwrap_or(Value::Null);
+    let set = |m: &mut Map<String, Value>, k: &str, val: Value| {
+        if !val.is_null() {
+            m.insert(k.into(), val);
+        }
+    };
+    set(&mut m, "name", model.get("name").cloned().unwrap_or(Value::Null));
+    set(&mut m, "type", model.get("type").cloned().unwrap_or(Value::Null));
+    set(&mut m, "nsfw", model.get("nsfw").cloned().unwrap_or(Value::Null));
+    set(&mut m, "version", v.get("name").cloned().unwrap_or(Value::Null));
+    set(&mut m, "model_id", v.get("modelId").cloned().unwrap_or(Value::Null));
+    set(&mut m, "version_id", v.get("id").cloned().unwrap_or(Value::Null));
+    set(&mut m, "base", v.get("baseModel").cloned().unwrap_or(Value::Null));
+    let has_words = m.get("words").and_then(|w| w.as_array()).is_some_and(|a| !a.is_empty());
+    if !has_words {
+        set(&mut m, "words", v.get("trainedWords").cloned().unwrap_or(Value::Null));
+    }
+    let img = v
+        .get("images")
+        .and_then(|a| a.as_array())
+        .and_then(|a| a.iter().find(|i| i.get("type").and_then(|t| t.as_str()) != Some("video")))
+        .and_then(|i| i.get("url"))
+        .and_then(|u| u.as_str())
+        .unwrap_or("")
+        .to_string();
+    if !img.is_empty() {
+        m.insert("preview".into(), json!(img));
+    }
+    // Etiquetas del modelo (para deducir la categoría como el teléfono)
+    if let Some(id) = v.get("modelId").and_then(|x| x.as_u64()) {
+        if let Ok(full) = model_info(id, key) {
+            set(&mut m, "tags", full.get("tags").cloned().unwrap_or(Value::Null));
+        }
+    }
+    m.insert("civitai_checked".into(), json!("ok"));
+    m.insert("sha256".into(), json!(hash));
+    lora::write_sidecar(&p, &m)?;
+    if lora::local_preview(&p).is_none() {
+        save_preview(&p, &img);
+    }
+    Ok(json!({ "found": true, "name": m.get("name") }))
+}
+
+fn model_info(id: u64, key: Option<&str>) -> Result<Value, String> {
+    model(id, key)
+}
+
 fn dest_dir(root: &Path, kind: &str) -> PathBuf {
     match kind {
         "checkpoint" => root.join("models").join("checkpoints"),
@@ -206,6 +301,9 @@ pub fn download(app: &AppHandle, root: &Path, req: DownloadReq, key: Option<Stri
     let mut meta = req.meta.clone();
     meta.retain(|_, v| !v.is_null());
     lora::write_sidecar(&final_path, &meta)?;
+    if let Some(u) = meta.get("preview").and_then(|v| v.as_str()) {
+        save_preview(&final_path, u);
+    }
     let rel = final_path.strip_prefix(&dir).unwrap_or(&final_path).to_string_lossy().replace('\\', "/");
     emit(done, total.max(done), "done", json!({ "file": rel, "stem": stem, "kind": req.kind }));
     Ok(rel)

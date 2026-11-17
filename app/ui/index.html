@@ -15,6 +15,8 @@
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></svg>Generar</button>
     <button class="nav" data-page="loras">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>LoRAs</button>
+    <button class="nav" data-page="civitai">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v7M14 17.5l3.5 3.5 3.5-3.5"/></svg>Civitai</button>
     <button class="nav" data-page="history">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Historial</button>
     <button class="nav" data-page="settings">
@@ -48,9 +50,31 @@
             <div>La imagen generada aparece aquí</div>
             <div id="estimate" style="font-size:13px"></div>
           </div>
+          <!-- Barra de la imagen (como la del teléfono) -->
           <div class="actions">
-            <button id="openOut" class="ghost">Abrir carpeta</button>
-            <button id="upscaleBtn" class="ghost hidden">Ampliar ×4</button>
+            <div id="pager" class="pager hidden">
+              <button id="pgPrev" class="ibtn" title="Anterior" aria-label="Imagen anterior">‹</button>
+              <span id="pgTxt" class="lbl"></span>
+              <button id="pgNext" class="ibtn" title="Siguiente" aria-label="Imagen siguiente">›</button>
+            </div>
+            <button id="imgFav" class="ibtn" title="Favorita" aria-label="Favorita">☆</button>
+            <button id="imgCopy" class="ibtn" title="Copiar imagen (para pegar en otra app)" aria-label="Copiar imagen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
+            <button id="openOut" class="ibtn" title="Mostrar en la carpeta" aria-label="Mostrar en la carpeta">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+            <button id="upscaleBtn" class="ibtn hidden" title="Ampliar" aria-label="Ampliar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+            <button id="imgFull" class="ibtn" title="Ver en grande" aria-label="Ver en grande">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H3v5M21 8V3h-5M16 21h5v-5M3 16v5h5"/></svg></button>
+            <button id="imgClear" class="ibtn" title="Quitar la imagen de la pantalla" aria-label="Quitar la imagen de la pantalla">✕</button>
+          </div>
+          <!-- Fila de resultado: seed, antes/después, editar, otra vez -->
+          <div class="result-bar">
+            <span id="resSeed" class="lbl"></span>
+            <button id="resCompare" class="rbtn hidden" title="Comparar con la foto original">⇆ Antes/después</button>
+            <button id="resEdit" class="rbtn" title="Usar esta imagen en Editar foto">✎ Editar esta imagen</button>
+            <button id="resAgain" class="rbtn" title="Mismo prompt con otra seed · clic derecho: Variaciones">↻ Otra vez</button>
+            <button id="resVar" class="rbtn" title="Varias imágenes nuevas o parecidas a esta">Variaciones…</button>
           </div>
           <div id="progress" class="progress">
             <div class="row"><span id="progStage">Preparando…</span><span id="progTime">0 s</span></div>
@@ -160,14 +184,116 @@
       </div>
     </section>
 
+    <!-- LoRAs (página completa, como el prototipo) -->
+    <section id="page-loras" class="page page-fill">
+     <div class="civ-layout">
+      <aside class="civ-side">
+        <div class="fgroup">
+          <div class="fhead"><span class="chip-lbl">CARPETAS</span><button id="lpNewFolder" class="link">+ Nueva</button></div>
+          <div id="lpFolders" class="flist"></div>
+        </div>
+        <div class="fgroup">
+          <div class="fhead"><span class="chip-lbl">PRESETS</span><button id="lpSavePreset" class="link" title="Guardar los LoRAs activos del prompt como preset">+ Guardar</button></div>
+          <div id="lpPresets" class="flist"></div>
+          <div class="fhead"><button id="lpExport" class="link">Exportar</button><button id="lpImportPresets" class="link">Importar</button></div>
+        </div>
+      </aside>
+      <div class="civ-main">
+      <div class="page-top">
+        <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
+          <input id="lpSearch" class="field" placeholder="Buscar en tus LoRAs: nombre o palabra activadora…" aria-label="Buscar LoRAs"></div>
+        <label class="lbl" for="lpSort">Ordenar</label>
+        <select id="lpSort" class="field"><option value="name">Nombre</option><option value="new">Más recientes</option><option value="size">Tamaño</option><option value="active">En uso primero</option></select>
+        <button id="lpImport" class="ghost">Importar archivo .safetensors</button>
+        <button class="ghost icon" data-open="loras" title="Abrir la carpeta loras" aria-label="Abrir la carpeta loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+      </div>
+      <div class="filter-rows">
+        <div class="frow"><span class="chip-lbl">BASE</span><div id="lpBase" class="chips"></div></div>
+        <div class="frow"><span class="chip-lbl">CATEGORÍA</span><div id="lpCats" class="chips"></div></div>
+      </div>
+      <div class="page-meta">
+        <span id="lpCount" class="lbl"></span>
+        <span class="meta-actions">
+          <button id="lpFetchAll" class="link" title="Busca en Civitai (por huella SHA256) los LoRAs sin datos">Buscar datos en Civitai</button>
+          <button id="lpSelect" class="ghost sm">Seleccionar</button>
+        </span>
+      </div>
+      <div id="lpBulk" class="bulk hidden">
+        <span id="lpSelCount" class="lbl"></span>
+        <button id="lpSelAll" class="ghost sm">Seleccionar todo</button>
+        <button id="lpBulkUse" class="ghost sm">Activar</button>
+        <button id="lpBulkOff" class="ghost sm">Desactivar</button>
+        <button id="lpBulkCat" class="ghost sm">Categoría…</button>
+        <button id="lpBulkMove" class="ghost sm">Mover a carpeta…</button>
+        <button id="lpBulkInfo" class="ghost sm">Buscar datos en Civitai</button>
+        <button id="lpBulkPreset" class="ghost sm">Guardar como preset</button>
+        <button id="lpBulkTrash" class="ghost sm danger-txt">Eliminar</button>
+      </div>
+      <div id="lpGrid" class="card-grid"></div>
+      </div>
+     </div>
+    </section>
+
+    <!-- Civitai (página completa) -->
+    <section id="page-civitai" class="page page-fill">
+      <div class="civ-layout">
+        <aside class="civ-side">
+          <div class="fgroup"><div class="chip-lbl">TIPO</div><div id="civType" class="flist"></div></div>
+          <div class="fgroup"><div class="chip-lbl">FAMILIA</div><div id="civFamily" class="flist"></div></div>
+          <div class="fgroup"><div class="chip-lbl">CATEGORÍA</div><div id="civCat" class="flist"></div></div>
+          <label class="lbl civ-nsfw"><input id="civNsfw" type="checkbox"> Mostrar +18</label>
+        </aside>
+        <div class="civ-main">
+          <div class="page-top">
+            <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
+              <input id="civQuery" class="field" placeholder="Buscar en Civitai, o pega un enlace de civitai.com / civitai.red" aria-label="Buscar en Civitai"></div>
+            <label class="lbl" for="civSort">Ordenar</label>
+            <select id="civSort" class="field"><option value="Most Downloaded">Más descargados</option><option value="Highest Rated">Mejor valorados</option><option value="Newest">Más recientes</option></select>
+            <button id="civGo" class="ghost">Buscar</button>
+          </div>
+          <div class="page-meta"><span id="civInfo" class="lbl"></span><span id="civFilterTxt" class="lbl"></span></div>
+          <div id="civGrid" class="card-grid civ-grid"></div>
+          <div class="more-row"><button id="civMore" class="ghost hidden">Más resultados</button></div>
+        </div>
+      </div>
+    </section>
+
     <!-- Historial -->
-    <section id="page-history" class="page">
-      <h1>Historial</h1>
-      <p>Imágenes guardadas localmente. Selecciona una para verla en grande; usa Favoritas para marcar las que quieras conservar a mano.</p>
-      <div class="btnrow history-toolbar"><button class="ghost" data-open="outputs">Abrir outputs</button><button id="refreshHistory" class="ghost">Actualizar</button><input id="historySearch" class="field" placeholder="Filtrar por nombre…" aria-label="Filtrar historial"></div>
+    <section id="page-history" class="page page-fill">
+      <div class="page-top">
+        <div class="tabs" role="tablist" aria-label="Historial">
+          <button class="tab on" data-htab="all">Todas <span id="hCountAll" class="lbl"></span></button>
+          <button class="tab" data-htab="fav">★ Favoritas <span id="hCountFav" class="lbl"></span></button>
+        </div>
+        <select id="hModel" class="field" aria-label="Filtrar por modelo"><option value="">Todos los modelos</option></select>
+        <select id="hLora" class="field" aria-label="Filtrar por LoRA"><option value="">Todas las LoRA</option></select>
+        <div class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/></svg>
+          <input id="hSearch" class="field" placeholder="Buscar en los prompts…" aria-label="Buscar en los prompts"></div>
+        <button id="hSelect" class="ghost">Seleccionar</button>
+      </div>
+      <div id="hBulk" class="bulk hidden">
+        <span id="hSelCount" class="lbl"></span>
+        <button id="hSelAll" class="ghost sm">Seleccionar todo</button>
+        <button id="hBulkFav" class="ghost sm">★ Favorita</button>
+        <button id="hBulkTrash" class="ghost sm danger-txt">Mover a la papelera</button>
+      </div>
       <div class="history-layout">
-        <div id="historyList" class="history-list"></div>
-        <div id="historyPreview" class="history-preview"><img id="historyImage" alt="Vista previa de imagen del historial"><div id="historyEmpty" class="lbl">Elige una imagen del historial.</div><div class="row"><span id="historyName" class="lbl"></span><button id="historyFavorite" class="ghost hidden">☆ Favorita</button></div></div>
+        <div id="hGrid" class="thumb-grid"></div>
+        <div id="hDetail" class="h-detail">
+          <div class="h-img"><img id="hImg" alt="Imagen del historial"><div id="hEmpty" class="lbl">Elige una imagen del historial.</div></div>
+          <div id="hInfo" class="lbl h-info"></div>
+          <button id="hPrompt" class="h-prompt hidden" title="Copiar prompt"></button>
+          <div id="hActions" class="h-actions hidden">
+            <button id="hFav" class="ghost sm">☆ Favorita</button>
+            <button id="hUse" class="ghost sm">↻ Usar estos ajustes</button>
+            <button id="hEdit" class="ghost sm">✎ Editar esta imagen</button>
+            <button id="hCopyPrompt" class="ghost sm">Copiar prompt</button>
+            <button id="hCopyImg" class="ghost sm">Copiar imagen</button>
+            <button id="hUpscale" class="ghost sm hidden">Ampliar</button>
+            <button id="hReveal" class="ghost sm">Mostrar en la carpeta</button>
+            <button id="hTrash" class="ghost sm danger-txt">Mover a la papelera</button>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -201,30 +327,9 @@
     <div id="loraRows" class="lora-rows"></div>
     <div class="dlg-foot">
       <span id="loraHint" class="lbl"></span>
-      <button id="loraCivitai" class="ghost">Civitai</button>
       <button id="loraImport" class="ghost">Importar</button>
       <button class="primary sm" data-close>Hecho</button>
     </div>
-  </div>
-</div>
-
-<!-- Civitai -->
-<div id="civDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="civTitle">
-  <div class="dlg dlg-civ">
-    <div class="dlg-head"><h2 id="civTitle">Civitai</h2><span id="civInfo" class="lbl"></span>
-      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
-    <div class="civ-search">
-      <input id="civQuery" class="field" placeholder="Nombre o enlace de civitai.com / civitai.red" aria-label="Buscar en Civitai">
-      <button id="civGo" class="ghost">Buscar</button>
-      <label class="lbl civ-nsfw"><input id="civNsfw" type="checkbox"> Mostrar +18</label>
-    </div>
-    <div class="civ-filters">
-      <div class="chips"><span class="chip-lbl">FAMILIA</span><span id="civFamily" class="chips"></span></div>
-      <div class="chips"><span class="chip-lbl">CATEGORÍA</span><span id="civCat" class="chips"></span></div>
-      <div class="chips"><span class="chip-lbl">TIPO</span><span id="civType" class="chips"></span><span class="chip-lbl">ORDENAR</span><span id="civSort" class="chips"></span></div>
-    </div>
-    <div id="civGrid" class="civ-grid"></div>
-    <div class="dlg-foot"><button id="civMore" class="ghost hidden">Más</button></div>
   </div>
 </div>
 
@@ -261,10 +366,48 @@
   </div>
 </div>
 
+<!-- Visor a pantalla completa -->
+<div id="viewer" class="viewer hidden" role="dialog" aria-modal="true" aria-label="Visor">
+  <div class="v-top">
+    <span id="vCount" class="lbl"></span><span id="vInfo" class="lbl v-info"></span>
+    <button class="x v-close" id="vClose" aria-label="Cerrar">×</button>
+  </div>
+  <div id="vStage" class="v-stage"><img id="vImg" alt="Imagen" draggable="false"></div>
+  <button id="vPrev" class="v-nav v-left" aria-label="Anterior">‹</button>
+  <button id="vNext" class="v-nav v-right" aria-label="Siguiente">›</button>
+  <div class="v-bottom">
+    <button id="vPrompt" class="h-prompt v-prompt" title="Copiar prompt"></button>
+    <div class="v-actions">
+      <button id="vFav" class="ghost sm">☆ Favorita</button>
+      <button id="vUse" class="ghost sm">↻ Usar estos ajustes</button>
+      <button id="vEdit" class="ghost sm">✎ Editar esta imagen</button>
+      <button id="vCopy" class="ghost sm">Copiar imagen</button>
+      <button id="vReveal" class="ghost sm">Mostrar en la carpeta</button>
+      <button id="vTrash" class="ghost sm danger-txt">Mover a la papelera</button>
+      <span class="lbl">Rueda: zoom · arrastra para mover · doble clic: 1:1 · ← →</span>
+    </div>
+  </div>
+</div>
+
+<!-- Antes / después -->
+<div id="cmpDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cmpTitle">
+  <div class="dlg dlg-cmp">
+    <div class="dlg-head"><h2 id="cmpTitle">Antes / después</h2><span class="lbl">Arrastra sobre la imagen para mover la línea.</span>
+      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div id="cmpStage" class="cmp-stage">
+      <img id="cmpAfter" alt="Editada"><div id="cmpClip" class="cmp-clip"><img id="cmpBefore" alt="Original"></div>
+      <div id="cmpLine" class="cmp-line"></div><span class="cmp-tag l">Original</span><span class="cmp-tag r">Editada</span>
+    </div>
+    <div class="dlg-foot"><button id="cmpSave" class="ghost">Guardar lado a lado</button><button class="primary sm" data-close>Hecho</button></div>
+  </div>
+</div>
+
 <div id="ctxMenu" class="ctx hidden" role="menu"></div>
 <div id="toast" class="toast hidden" role="status"></div>
 
 <script src="app.js"></script>
 <script src="loras.js"></script>
+<script src="lorapage.js"></script>
+<script src="history.js"></script>
 </body>
 </html>

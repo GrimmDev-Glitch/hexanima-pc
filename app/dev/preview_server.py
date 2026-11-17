@@ -25,6 +25,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
+        # Imágenes de outputs/ y loras/ (equivalen al protocolo asset: de Tauri)
+        for prefix, folder in (("/__outputs/", "outputs"), ("/__loras/", "loras")):
+            if path.startswith(prefix):
+                from urllib.parse import unquote
+                rel = unquote(path[len(prefix):])
+                base = (HERE.parent.parent / folder).resolve()
+                f = (base / rel).resolve()
+                if base in f.parents and f.is_file():
+                    ctype = "image/png" if f.suffix.lower() == ".png" else "image/jpeg"
+                    return self._send(f.read_bytes(), ctype)
+                self.send_error(404)
+                return
+        if path == "/__gallery":
+            import json, struct
+            out = []
+            d = HERE.parent.parent / "outputs"
+            for f in sorted(d.glob("*.png"), reverse=True):
+                meta = {}
+                side = f.with_suffix(".json")
+                if side.is_file():
+                    meta = json.loads(side.read_text(encoding="utf-8"))
+                out.append({"name": f.name, "path": str(f), "bytes": f.stat().st_size, "modified": int(f.stat().st_mtime), "meta": meta})
+            return self._send(json.dumps(out).encode(), "application/json")
         if path == "/__stub.js":
             return self._send((HERE / "tauri_stub.js").read_bytes(), "text/javascript")
         if path in ("/", "/index.html"):

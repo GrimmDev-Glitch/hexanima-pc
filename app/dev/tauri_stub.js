@@ -7,9 +7,9 @@
     { name: "20261117-151124-anima.png", bytes: 985000 },
   ];
   const loras = [
-    { file: "FrierenK112.safetensors", stem: "FrierenK112", name: null, alias: null, cat: "character", words: ["frieren", "elf", "pointy ears"], base: "SDXL", bytes: 228646924 },
-    { file: "watercolor_v2.safetensors", stem: "watercolor_v2", name: "Watercolor Style", alias: null, cat: "style", words: ["watercolor"], base: "Illustrious", bytes: 145000000 },
-    { file: "anima_turbo_lora.safetensors", stem: "anima_turbo_lora", name: "Anima Turbo LoRA", alias: null, cat: null, words: [], base: "Anima", bytes: 98000000 },
+    { file: "FrierenK112.safetensors", stem: "FrierenK112", folder: "", name: null, alias: null, cat: "character", words: ["frieren", "elf", "pointy ears"], base: "SDXL", bytes: 228646924, fav: true, preview: "https://image.civitai.com/xG1nkqKTMzGDvpLrqFT7WA/2b51113d-1a94-4635-9651-fe5778760f54/width=320/118378407.jpeg" },
+    { file: "watercolor_v2.safetensors", stem: "watercolor_v2", folder: "Estilos", name: "Watercolor Style", alias: null, cat: "style", words: ["watercolor"], base: "Illustrious", bytes: 145000000 },
+    { file: "anima_turbo_lora.safetensors", stem: "anima_turbo_lora", folder: "", name: "Anima Turbo LoRA", alias: null, cat: null, words: [], base: "Anima", bytes: 98000000 },
   ];
   const title = (l) => l.alias || l.name || l.stem;
   const listeners = {};
@@ -60,9 +60,26 @@
       return req.file_name;
     },
     civitai_cancel: () => null,
+    gallery_list: async () => (await fetch("/__gallery")).json(),
+    gallery_fav: () => null,
+    gallery_trash: () => null,
+    gallery_reveal: () => null,
+    lora_folders: () => ["Personajes", "Estilos"],
+    lora_make_folder: ({ name }) => name,
+    lora_move: ({ file, folder }) => { const l = loras.find((x) => x.file === file); l.folder = folder; return file; },
+    lora_presets_get: () => presets,
+    lora_presets_set: ({ presets: p }) => { presets.splice(0, presets.length, ...p); },
+    lora_fetch_info: async () => ({ found: true }),
   };
+  const presets = [{ name: "Frieren 3D", loras: [{ stem: "FrierenK112", w: 0.8 }, { stem: "watercolor_v2", w: 0.4 }] }];
   window.__TAURI__ = {
     core: {
+      // Equivale a convertFileSrc de Tauri: outputs/ y loras/ los sirve el servidor de vista previa.
+      convertFileSrc: (p) => {
+        const s = String(p).replace(/\\/g, "/");
+        const i = s.search(/\/(outputs|loras)\//);
+        return i < 0 ? s : (s.slice(i).startsWith("/outputs/") ? "/__outputs/" + s.slice(i + 9) : "/__loras/" + s.slice(i + 7));
+      },
       invoke: async (cmd, args) => {
         if (!(cmd in handlers)) throw new Error("stub: comando desconocido " + cmd);
         return handlers[cmd](args || {});

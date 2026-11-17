@@ -334,7 +334,6 @@ const Loras = {
 $("loraOpen").onclick = () => Loras.open();
 $("loraFilter").oninput = () => Loras.renderLib();
 $("loraImport").onclick = () => Loras.import();
-$("loraCivitai").onclick = () => Civitai.open();
 $("prompt").addEventListener("input", () => Loras.renderPanel());
 
 // ---------- Civitai ----------
@@ -360,26 +359,22 @@ const Civitai = {
   async open() {
     if (!this.family) this.family = currentOption()?.family === "anima" ? "anima" : "illustrious";
     $("civNsfw").checked = !!this.key() && store.get("civitaiNsfw", false);
+    $("civSort").value = this.sort;
     this.renderChips();
-    openModal("civDlg");
     if (!this.items.length) this.search();
-    setTimeout(() => $("civQuery").focus(), 0);
   },
 
+  /** Filtros en columna (página Civitai): TIPO, FAMILIA y CATEGORÍA con iconos y una línea resumen. */
   renderChips() {
     const group = (el, opts, cur, set) => {
       el.innerHTML = "";
-      for (const o of opts) {
-        const b = document.createElement("button");
-        b.className = "chip" + (cur === o.key ? " on" : ""); b.textContent = o.label;
-        b.onclick = () => { set(o.key); this.renderChips(); this.search(); };
-        el.appendChild(b);
-      }
+      for (const o of opts) el.appendChild(flistItem(o.icon, o.label, null, cur === o.key, () => { set(o.key); this.renderChips(); this.search(); }));
     };
-    group($("civFamily"), FAMILIES, this.family, (k) => (this.family = k));
-    group($("civCat"), [{ key: "", label: "Todas" }, ...CAT_ORDER.map((c) => ({ key: c, label: CAT_LABEL[c] }))], this.cat, (k) => (this.cat = k));
-    group($("civType"), [{ key: "LORA", label: "LoRA" }, { key: "Checkpoint", label: "Modelos" }], this.type, (k) => (this.type = k));
-    group($("civSort"), SORTS, this.sort, (k) => (this.sort = k));
+    group($("civType"), [{ key: "LORA", label: "LoRA", icon: "preset" }, { key: "Checkpoint", label: "Modelos (checkpoints)", icon: "objects" }], this.type, (k) => (this.type = k));
+    group($("civFamily"), FAMILIES.map((f) => ({ ...f, icon: null })), this.family, (k) => (this.family = k));
+    group($("civCat"), [{ key: "", label: "Todas", icon: "all" }, ...CAT_ORDER.map((c) => ({ key: c, label: CAT_LABEL[c], icon: c }))], this.cat, (k) => (this.cat = k));
+    const fam = FAMILIES.find((f) => f.key === this.family)?.label;
+    $("civFilterTxt").textContent = [this.type === "LORA" ? "LoRA" : "Modelos", fam, this.cat ? CAT_LABEL[this.cat] : "", $("civNsfw").checked ? "+18" : ""].filter(Boolean).join(" · ");
   },
 
   /** Enlace o id de civitai.com / civitai.red -> abre la ficha directamente. */
@@ -401,7 +396,7 @@ const Civitai = {
       [this.index] = await Promise.all([invoke("downloaded_index"), Promise.resolve()]);
       const fam = FAMILIES.find((f) => f.key === this.family);
       const r = await invoke("civitai_search", {
-        params: { query: q || null, tag: this.cat || null, types: [this.type], base_models: fam ? fam.base : [], sort: this.sort, nsfw: $("civNsfw").checked, cursor: this.cursor },
+        params: { query: q || null, tag: this.cat || null, types: [this.type], base_models: fam ? fam.base : [], sort: $("civSort").value, nsfw: $("civNsfw").checked, cursor: this.cursor },
         key: this.key(),
       });
       const items = r.items || [];
@@ -439,21 +434,30 @@ const Civitai = {
     return img.url.replace(/\/(width=\d+|original=true)\//, "/width=320/");
   },
 
+  /** Tarjeta estilo prototipo: imagen arriba, datos y botón abajo. */
   card(m) {
     const v = m.modelVersions?.[0] || {};
-    const c = document.createElement("button");
-    c.className = "civ-card";
+    const c = document.createElement("div");
+    c.className = "ccard";
     const src = this.thumb(m);
-    c.innerHTML = `<div class="civ-thumb">${src ? `<img loading="lazy" alt="">` : '<span class="lbl">sin vista previa</span>'}</div>
-      <div class="civ-txt"><div class="civ-name"></div><div class="civ-ok hidden">✓ Descargada</div>
-      <div class="lbl civ-meta"></div><div class="lbl civ-by"></div><div class="lbl civ-trig"></div></div>`;
+    const done = this.isDownloaded(m);
+    c.innerHTML = `<div class="cthumb">${src ? '<img loading="lazy" alt="">' : '<span class="lbl">sin vista previa</span>'}
+        ${done ? '<span class="cok">✓ Descargada</span>' : ""}${m.nsfw ? '<span class="c18">18+</span>' : ""}</div>
+      <div class="cbody"><div class="cname"></div>
+        <div class="lmeta"><span class="cbase"></span><span class="csize"></span></div>
+        <div class="lbl cby"></div><div class="lbl ctrig"></div>
+        <button class="ghost sm cbtn"></button></div>`;
     if (src) c.querySelector("img").src = src;
-    c.querySelector(".civ-name").textContent = m.name;
-    c.querySelector(".civ-ok").classList.toggle("hidden", !this.isDownloaded(m));
-    c.querySelector(".civ-meta").textContent = [m.type, v.baseModel, m.nsfw ? "18+" : ""].filter(Boolean).join(" · ");
-    c.querySelector(".civ-by").textContent = `${m.creator?.username || ""} · ⬇ ${(m.stats?.downloadCount || 0).toLocaleString("es")}`;
+    c.querySelector(".cname").textContent = m.name;
+    const tw = v.trainedWords || [];
+    c.title = [m.name, [m.type, v.baseModel].filter(Boolean).join(" · "), tw.length ? "Activadoras: " + tw.join(", ") : "", "Clic: ver versiones y descargar"].filter(Boolean).join("\n");
+    c.querySelector(".cbase").textContent = [m.type === "LORA" ? "LoRA" : m.type, v.baseModel].filter(Boolean).join(" · ");
+    const f = this.mainFile(v);
+    c.querySelector(".csize").textContent = f?.sizeKB ? fmtMB(f.sizeKB * 1024) : "";
+    c.querySelector(".cby").textContent = `${m.creator?.username || ""} · ⬇ ${(m.stats?.downloadCount || 0).toLocaleString("es")}`;
     const words = v.trainedWords || [];
-    c.querySelector(".civ-trig").textContent = words.length ? "Activador: " + words[0] + (words.length > 1 ? "…" : "") : "";
+    c.querySelector(".ctrig").textContent = words.length ? "Activador: " + words[0] + (words.length > 1 ? "…" : "") : "";
+    c.querySelector(".cbtn").textContent = done ? "Ver · ya la tienes" : "Ver y descargar";
     c.onclick = () => this.openModel(m.id, null, m);
     return c;
   },
@@ -544,6 +548,7 @@ function fileName(n) {
 }
 
 $("civGo").onclick = () => Civitai.search();
+$("civSort").onchange = () => { Civitai.sort = $("civSort").value; Civitai.search(); };
 $("civQuery").addEventListener("keydown", (e) => { if (e.key === "Enter") Civitai.search(); });
 $("civMore").onclick = () => Civitai.search(true);
 $("civNsfw").onchange = () => {
@@ -553,6 +558,7 @@ $("civNsfw").onchange = () => {
     return;
   }
   store.set("civitaiNsfw", $("civNsfw").checked);
+  Civitai.renderChips();
   Civitai.search();
 };
 $("sheetVersion").onchange = () => Civitai.renderSheet();
@@ -576,6 +582,13 @@ $("optCivitaiKey").value = store.get("civitaiKey", "");
 $("optCivitaiKey").onchange = () => { store.set("civitaiKey", $("optCivitaiKey").value.trim()); };
 $("openCivitaiAccount").onclick = () => invoke("open_url", { url: "https://civitai.com/user/account" });
 
-// La pestaña LoRAs de la barra lateral abre la biblioteca.
-document.querySelector('.nav[data-page="loras"]').onclick = () => Loras.open();
+// Páginas de la barra lateral: LoRAs (completa), Civitai e Historial se preparan al abrirlas.
+for (const n of document.querySelectorAll(".nav")) {
+  n.addEventListener("click", () => {
+    const p = n.dataset.page;
+    if (p === "loras") LoraPage.show();
+    if (p === "civitai") Civitai.open();
+    if (p === "history") History.show();
+  });
+}
 Loras.renderPanel();

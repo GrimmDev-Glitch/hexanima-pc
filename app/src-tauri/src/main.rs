@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod civitai;
+mod gallery;
 mod hw;
 mod lora;
 mod server;
@@ -90,7 +91,7 @@ fn server_status(state: State<AppState>) -> serde_json::Value {
 
 /// Guarda la imagen (PNG en base64, con metadatos ya incrustados por el motor) en outputs/.
 #[tauri::command]
-fn save_image(state: State<AppState>, b64: String, prefix: Option<String>) -> Result<String, String> {
+fn save_image(state: State<AppState>, b64: String, prefix: Option<String>, meta: Option<serde_json::Value>) -> Result<String, String> {
     let data = base64::engine::general_purpose::STANDARD
         .decode(b64.trim_start_matches("data:image/png;base64,"))
         .map_err(|e| e.to_string())?;
@@ -105,7 +106,37 @@ fn save_image(state: State<AppState>, b64: String, prefix: Option<String>) -> Re
         i += 1;
     }
     std::fs::write(&path, data).map_err(|e| e.to_string())?;
-    Ok(path.display().to_string())
+    // Ajustes completos al lado (como la galería del teléfono): permiten "Usar estos ajustes".
+    if let Some(serde_json::Value::Object(m)) = meta {
+        let _ = gallery::write_json(&path, &m);
+    }
+    Ok(path.file_name().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
+#[tauri::command]
+fn gallery_list(state: State<AppState>) -> Result<serde_json::Value, String> {
+    gallery::list(&state.root)
+}
+
+#[tauri::command]
+fn gallery_fav(state: State<AppState>, name: String, fav: bool) -> Result<(), String> {
+    gallery::set_fav(&state.root, &name, fav)
+}
+
+#[tauri::command]
+fn gallery_trash(state: State<AppState>, names: Vec<String>) -> Result<usize, String> {
+    gallery::trash(&state.root, &names)
+}
+
+/// Muestra la imagen seleccionada en el Explorador.
+#[tauri::command]
+fn gallery_reveal(state: State<AppState>, name: String) -> Result<(), String> {
+    let p = gallery::resolve(&state.root, &name)?;
+    std::process::Command::new("explorer")
+        .arg(format!("/select,{}", p.display()))
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// Lista PNG de outputs por nombre y tamaño; el contenido se carga solo al seleccionar uno.
@@ -188,6 +219,40 @@ fn lora_set_meta(state: State<AppState>, file: String, patch: lora::MetaPatch) -
 #[tauri::command]
 fn lora_trash(state: State<AppState>, file: String) -> Result<(), String> {
     lora::trash(&state.root, &file)
+}
+
+#[tauri::command]
+fn lora_folders(state: State<AppState>) -> Vec<String> {
+    lora::folders(&state.root)
+}
+
+#[tauri::command]
+fn lora_make_folder(state: State<AppState>, name: String) -> Result<String, String> {
+    lora::make_folder(&state.root, &name)
+}
+
+#[tauri::command]
+fn lora_move(state: State<AppState>, file: String, folder: String) -> Result<String, String> {
+    lora::move_to(&state.root, &file, &folder)
+}
+
+#[tauri::command]
+fn lora_presets_get(state: State<AppState>) -> serde_json::Value {
+    lora::presets_get(&state.root)
+}
+
+#[tauri::command]
+fn lora_presets_set(state: State<AppState>, presets: serde_json::Value) -> Result<(), String> {
+    lora::presets_set(&state.root, &presets)
+}
+
+/// Datos de Civitai por SHA256 para un LoRA local (en un hilo aparte).
+#[tauri::command]
+async fn lora_fetch_info(app: tauri::AppHandle, file: String, key: Option<String>) -> Result<serde_json::Value, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || civitai::fetch_info(&root, &file, key.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Selector de archivos de Windows para importar LoRAs (async: el diálogo no bloquea la ventana).
@@ -274,11 +339,32 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState { root: find_root(), hw: Mutex::new(None), server: Mutex::new(None) })
+        .setup(|app| {
+            // Miniaturas del Historial servidas directamente desde outputs/ (solo esa carpeta).
+            let out = app.state::<AppState>().root.join("outputs");
+            let _ = std::fs::create_dir_all(&out);
+            let _ = app.asset_protocol_scope().allow_directory(&out, false);
+            // Vistas previas de los LoRAs (imágenes junto a cada archivo, en subcarpetas también).
+            let loras = app.state::<AppState>().root.join("loras");
+            let _ = std::fs::create_dir_all(&loras);
+            let _ = app.asset_protocol_scope().allow_directory(&loras, true);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            gallery_list,
+            gallery_fav,
+            gallery_trash,
+            gallery_reveal,
             lora_list,
             lora_set_meta,
             lora_trash,
             lora_import,
+            lora_folders,
+            lora_make_folder,
+            lora_move,
+            lora_presets_get,
+            lora_presets_set,
+            lora_fetch_info,
             downloaded_index,
             civitai_search,
             civitai_model,
