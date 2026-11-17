@@ -35,3 +35,12 @@ venv/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Recursos locales del desarrollador (modelos y LoRAs de prueba)
+recursos/
+
+# App Tauri: dependencias y salidas de compilación
+app/node_modules/
+app/src-tauri/target/
+app/src-tauri/gen/
+app/target*/

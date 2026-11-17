@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 96 96">
+  <!-- Icono de HexAnima (app/res/drawable/ic.xml del proyecto Android), sin cambios -->
+  <path fill="#161A2E" d="M20,0h56a20,20 0 0 1 20,20v56a20,20 0 0 1 -20,20h-56a20,20 0 0 1 -20,-20v-56a20,20 0 0 1 20,-20z"/>
+  <path fill="#7C8CFF" d="M48,16 L56,40 L80,48 L56,56 L48,80 L40,56 L16,48 L40,40 z"/>
+  <path fill="#FFFFFF" d="M72,14 L74.5,21.5 L82,24 L74.5,26.5 L72,34 L69.5,26.5 L62,24 L69.5,21.5 z"/>
+</svg>

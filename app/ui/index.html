@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HexAnima</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <aside class="side">
+    <div class="brand"><img src="icon.svg" alt=""> HexAnima <span class="pc">PC</span></div>
+    <button class="nav on" data-page="gen">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3l2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5z"/></svg>Generar</button>
+    <button class="nav" data-page="loras">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>LoRAs</button>
+    <button class="nav" data-page="history">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Historial</button>
+    <button class="nav" data-page="settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Ajustes</button>
+
+    <div class="hwcard">
+      <div class="lbl">Hardware detectado</div>
+      <div id="hwName" style="font-size:14px;font-weight:600">Detectando…</div>
+      <div id="hwProfile" style="font-size:13px;color:var(--accent);font-weight:500"></div>
+      <div class="meter"><div class="row"><span>VRAM</span><span id="vramTxt">—</span></div><div class="bar"><i id="vramBar"></i></div></div>
+      <div class="meter"><div class="row"><span>RAM</span><span id="ramTxt">—</span></div><div class="bar ram"><i id="ramBar"></i></div></div>
+      <div id="tempTxt" class="lbl" style="font-size:11px"></div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <!-- Generar -->
+    <section id="page-gen" class="page on">
+      <div class="work">
+        <div class="toprow">
+          <label class="lbl" for="model">Modelo</label>
+          <select id="model" class="field" style="min-width:260px"></select>
+          <button id="loadBtn" class="ghost">Cargar</button>
+          <span id="modelStatus" class="status">Iniciando motor…</span>
+        </div>
+
+        <div id="canvas" class="canvas">
+          <img id="result" alt="Imagen generada">
+          <div class="empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+            <div>La imagen generada aparece aquí</div>
+            <div id="estimate" style="font-size:13px"></div>
+          </div>
+          <div class="actions">
+            <button id="openOut" class="ghost">Abrir carpeta</button>
+            <button id="upscaleBtn" class="ghost hidden">Ampliar ×4</button>
+          </div>
+          <div id="progress" class="progress">
+            <div class="row"><span id="progStage">Preparando…</span><span id="progTime">0 s</span></div>
+            <div class="bar"><i id="progBar"></i></div>
+          </div>
+        </div>
+
+        <div class="prompt-head">
+          <div class="tabs" role="tablist" aria-label="Modo">
+            <button id="modeGen" class="tab on" role="tab" aria-selected="true">Crear</button>
+            <button id="modeEdit" class="tab" role="tab" aria-selected="false">Editar foto</button>
+          </div>
+          <div class="prompt-tools">
+            <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
+            <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
+            <select id="templatePick" class="mini-select" aria-label="Plantillas de prompt"><option value="">Plantillas</option></select>
+            <button id="saveTemplate" class="mini" title="Guardar el prompt como plantilla" aria-label="Guardar plantilla">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg></button>
+            <button id="deleteTemplate" class="mini" title="Quitar la plantilla elegida" aria-label="Quitar plantilla" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+            <select id="recentPick" class="mini-select" aria-label="Prompts recientes"><option value="">Recientes</option></select>
+          </div>
+        </div>
+
+        <div id="editStrip" class="edit-strip hidden">
+          <img id="editPreview" class="edit-thumb" alt="Foto a editar">
+          <div id="editEmpty" class="edit-thumb empty-thumb" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+          </div>
+          <label class="ghost sm file-btn">Elegir foto<input id="editFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+          <button id="useLast" class="ghost sm" disabled>Usar la última</button>
+          <div class="edit-strength">
+            <div class="row lbl"><label for="editStrength">Cuánto cambia</label><span id="editStrengthTxt">0,45</span></div>
+            <input id="editStrength" type="range" min="0.05" max="1" step="0.05" value="0.45">
+          </div>
+        </div>
+
+        <div class="prompt-box">
+          <textarea id="prompt" class="field" rows="3" aria-label="Prompt" placeholder="1girl, silver hair, night city, rain, looking at viewer"></textarea>
+          <span id="promptMeta" class="prompt-meta"></span>
+        </div>
+        <div class="chips" id="chips"></div>
+        <input id="neg" class="field" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark">
+
+        <div class="btnrow">
+          <button id="genBtn" class="primary" disabled>Generar</button>
+          <button id="stopBtn" class="ghost" disabled>Detener</button>
+          <div class="batch" title="Imágenes del lote (hasta 999)">
+            <label class="lbl" for="count">Lote</label>
+            <input id="count" class="field" type="number" min="1" max="999" value="1">
+          </div>
+          <button id="extendBatch" class="ghost" disabled title="Sumar estas imágenes al lote en curso">+ Cola</button>
+        </div>
+      </div>
+
+      <div class="ctrl">
+        <div class="sec">Controles</div>
+        <div class="group">
+          <div class="lbl">Tamaño</div>
+          <div class="seg" id="aspect">
+            <button class="ghost on" data-a="p">Retrato</button>
+            <button class="ghost" data-a="s">Cuadrado</button>
+            <button class="ghost" data-a="l">Paisaje</button>
+            <button class="ghost" data-a="c">Otro</button>
+          </div>
+          <div id="customSize" class="custom-size hidden">
+            <label class="lbl" for="customW">Ancho</label>
+            <input id="customW" class="field" type="number" min="256" max="2048" step="64" value="896" inputmode="numeric">
+            <span class="lbl" aria-hidden="true">×</span>
+            <label class="lbl" for="customH">Alto</label>
+            <input id="customH" class="field" type="number" min="256" max="2048" step="64" value="1152" inputmode="numeric">
+            <button id="swapSize" class="ghost icon" title="Intercambiar ancho y alto" aria-label="Intercambiar ancho y alto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg></button>
+          </div>
+          <div id="sizeTxt" class="lbl"></div>
+        </div>
+        <div class="group">
+          <div class="row lbl"><label for="steps">Pasos</label><span id="stepsTxt"></span></div>
+          <input id="steps" type="range" min="1" max="50" value="8">
+        </div>
+        <div class="group">
+          <div class="row lbl"><label for="cfg">CFG</label><span id="cfgTxt"></span></div>
+          <input id="cfg" type="range" min="1" max="12" step="0.5" value="1">
+        </div>
+        <div class="two">
+          <div class="group"><label class="lbl" for="sampler">Sampler</label>
+            <select id="sampler" class="field">
+              <option value="euler">Euler</option><option value="euler_a">Euler a</option>
+              <option value="dpm++2m">DPM++ 2M</option><option value="dpm++2s_a">DPM++ 2S a</option>
+              <option value="lcm">LCM</option>
+            </select></div>
+          <div class="group"><label class="lbl" for="scheduler">Scheduler</label>
+            <select id="scheduler" class="field">
+              <option value="discrete">Discreto</option><option value="karras">Karras</option>
+              <option value="exponential">Exponencial</option><option value="sgm_uniform">SGM Uniform</option>
+            </select></div>
+        </div>
+        <div class="two">
+          <div class="group"><label class="lbl" for="seed">Seed</label><div class="seed-controls"><input id="seed" class="field" value="-1" inputmode="numeric"><button id="randomSeed" class="ghost icon" title="Seed aleatoria" aria-label="Seed aleatoria"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></button></div></div>
+          <div class="group"><label class="lbl" for="clipskip">Clip skip</label>
+            <select id="clipskip" class="field"><option value="-1">Auto</option><option value="1">1</option><option value="2">2</option></select></div>
+        </div>
+
+        <div class="group divider">
+          <div class="row"><div class="lbl">LoRAs activas</div><button id="addLora" class="link">+ Añadir</button></div>
+          <select id="loraPick" class="field hidden" aria-label="Elegir LoRA"></select>
+          <div id="loraList" class="group"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LoRAs -->
+    <section id="page-loras" class="page">
+      <h1>LoRAs</h1>
+      <p>LoRAs locales (.safetensors). Filtra la biblioteca y activa varios adaptadores con una fuerza independiente.</p>
+      <div class="btnrow" style="margin:14px 0"><button class="ghost" data-open="loras">Abrir carpeta loras</button><button id="refreshLoras" class="ghost">Actualizar</button></div>
+      <input id="loraSearch" class="field" style="max-width:640px" placeholder="Filtrar LoRAs por nombre…" aria-label="Filtrar LoRAs">
+      <div id="loraLib" class="group" style="max-width:640px"></div>
+    </section>
+
+    <!-- Historial -->
+    <section id="page-history" class="page">
+      <h1>Historial</h1>
+      <p>Imágenes guardadas localmente. Selecciona una para verla en grande; usa Favoritas para marcar las que quieras conservar a mano.</p>
+      <div class="btnrow history-toolbar"><button class="ghost" data-open="outputs">Abrir outputs</button><button id="refreshHistory" class="ghost">Actualizar</button><input id="historySearch" class="field" placeholder="Filtrar por nombre…" aria-label="Filtrar historial"></div>
+      <div class="history-layout">
+        <div id="historyList" class="history-list"></div>
+        <div id="historyPreview" class="history-preview"><img id="historyImage" alt="Vista previa de imagen del historial"><div id="historyEmpty" class="lbl">Elige una imagen del historial.</div><div class="row"><span id="historyName" class="lbl"></span><button id="historyFavorite" class="ghost hidden">☆ Favorita</button></div></div>
+      </div>
+    </section>
+
+    <!-- Ajustes -->
+    <section id="page-settings" class="page">
+      <h1>Ajustes</h1>
+      <p>Motor, gráfica y perfil detectados al abrir. Las opciones extra se pasan al motor tal cual (como COMMANDLINE_ARGS de Forge) y reinician el motor.</p>
+      <div class="group" style="max-width:640px;margin-top:14px">
+        <div id="setInfo" class="lbl"></div>
+        <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload): recomendado con 8 GB de VRAM o menos</label>
+        <label id="optConsoleRow" class="lbl hidden" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optHideConsole" type="checkbox" checked> Ocultar la consola de desarrollo</label>
+        <label class="lbl" for="optExtra">Opciones extra del motor</label>
+        <input id="optExtra" class="field" placeholder="--max-vram 3">
+        <div class="btnrow"><button id="restartBtn" class="ghost">Reiniciar motor</button><button class="ghost" data-open="models">Abrir models</button><button class="ghost" data-open="logs">Abrir logs</button></div>
+        <div class="lbl" style="margin-top:10px">Registro del motor</div>
+        <div id="serverLog" class="log"></div>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

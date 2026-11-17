@@ -29,7 +29,7 @@ M = ROOT / "models"
 FAMILIES = {
     "anima": {
         "files": {
-            "--diffusion-model": M / "checkpoints" / "anima-turbo-v1.1.safetensors",
+            "--diffusion-model": M / "diffusion_models" / "anima-turbo-v1.1.safetensors",
             "--llm": M / "text_encoders" / "qwen_3_06b_base.safetensors",
             "--vae": M / "vae" / "qwen_image_vae.safetensors",
         },
@@ -95,6 +95,7 @@ def main():
     ap.add_argument("-H", "--height", type=int)
     ap.add_argument("--lora", action="append", default=[], help="nombre:fuerza (archivo en loras/)")
     ap.add_argument("--model", help="ruta a otro checkpoint de la misma familia")
+    ap.add_argument("--lora-dir", default=str(ROOT / "loras"), help="carpeta de LoRAs (por defecto loras/)")
     ap.add_argument("--count", type=int, default=1, help="imagenes del lote (semilla +1 cada una)")
     ap.add_argument("--no-adaptive", action="store_true", help="usar el perfil fijo, sin medir memoria")
     ap.add_argument("--sim-vram", type=float, help="simular otro equipo: GB de VRAM libre")
@@ -165,7 +166,7 @@ def main():
                 "--cfg-scale", str(a.cfg if a.cfg is not None else fam["cfg"]),
                 "--sampling-method", a.sampler or fam["sampler"],
                 "-s", str(seed + i),
-                "--lora-model-dir", str(ROOT / "loras")]
+                "--lora-model-dir", str(Path(a.lora_dir).resolve())]
         if fam.get("scheduler"):
             cmd += ["--scheduler", fam["scheduler"]]
         negative = a.negative or fam.get("negative", "")

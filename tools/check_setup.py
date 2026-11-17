@@ -29,7 +29,7 @@ ENGINE_FILES = {
 }
 # Lo minimo para la primera imagen con el modelo recomendado (Anima Turbo).
 STARTER_MODELS = [
-    ("models/checkpoints/anima-turbo-v1.1.safetensors", "Anima Turbo"),
+    ("models/diffusion_models/anima-turbo-v1.1.safetensors", "Anima Turbo"),
     ("models/text_encoders/qwen_3_06b_base.safetensors", "Codificador de texto Qwen3 0.6B"),
     ("models/vae/qwen_image_vae.safetensors", "VAE de Anima"),
 ]

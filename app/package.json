@@ -1,0 +1,15 @@
+{
+  "name": "hexanima-pc",
+  "private": true,
+  "version": "0.1.0",
+  "description": "HexAnima para Windows (Tauri + stable-diffusion.cpp)",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build --no-bundle",
+    "icon": "tauri icon icon-source.svg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
