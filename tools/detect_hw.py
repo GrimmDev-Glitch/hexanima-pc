@@ -22,7 +22,9 @@ CONFIG = ROOT / "config.json"
 PROFILES = {
     "bajo": {
         "descripcion": "Hasta 2 GB de VRAM o sin GPU compatible",
-        "weight_type": "q4_K",      # --type: cuantiza al cargar
+        # q8 y no q4: en GTX q4_K es ~3.6x mas lento (medido). La memoria se ahorra
+        # con resolucion menor y, si hace falta, leyendo los pesos desde el disco.
+        "weight_type": "q8_0",      # --type: cuantiza al cargar
         "offload_to_cpu": True,     # --offload-to-cpu
         "vae_tiling": True,         # --vae-tiling
         "flash_attn": False,
@@ -180,6 +182,7 @@ def main():
         cfg.setdefault("manual", {"engine": None, "profile": None, "vram_limit_gb": None})
         # Como COMMANDLINE_ARGS de Forge: se pasan tal cual a sd-cli, despues del perfil.
         cfg["manual"].setdefault("extra_args", "")
+        cfg["manual"].setdefault("allow_low_quant", False)
         CONFIG.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
         print(f"\nGuardado en {CONFIG}")
 

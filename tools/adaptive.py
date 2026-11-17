@@ -26,13 +26,19 @@ from detect_hw import ROOT, system_ram_gb
 GB = 1024 ** 3
 VRAM_RESERVE_GB = 0.5      # lo que se deja libre para Windows y el navegador
 RAM_RESERVE_GB = 1.5       # idem en RAM: por debajo Windows empieza a paginar
+RAM_OVERFLOW_GB = 1.0      # cuanto puede pasarse antes de ir al disco (medido: ok con 0,9 GB libres)
 TEMP_PAUSE_C = 83          # pausa entre imagenes si la GPU llega aqui...
 TEMP_RESUME_C = 72         # ...y sigue cuando baja de aqui
 BENCH_FILE = ROOT / "cache" / "bench.json"
 
 # Tamano relativo a f16 de cada tipo de peso (aprox. ggml).
 QUANT_RATIO = {"f16": 1.0, "q8_0": 0.53, "q5_K": 0.36, "q4_K": 0.30}
-LADDER_TYPES = ["f16", "q8_0", "q5_K", "q4_K"]
+# Medido en GTX 1650 (SDXL 832x1216, offload): q8 17 s/paso, f16 37 s, q4_K 61 s.
+# En graficas sin tensor cores q4/q5 ahorran memoria pero triplican el tiempo, asi
+# que la escalera automatica no baja de q8: primero baja resolucion y luego usa disco.
+# config.json -> manual.allow_low_quant = true los vuelve a habilitar (p.ej. en RTX).
+LADDER_TYPES = ["f16", "q8_0"]
+LADDER_TYPES_LOWQ = ["f16", "q8_0", "q5_K", "q4_K"]
 
 # Memoria de calculo en la GPU (activaciones) a 1 megapixel, medida/estimada.
 COMPUTE_GB_PER_MP = {"anima": 0.9, "sdxl": 1.4}
@@ -56,7 +62,7 @@ def measure():
     """Recursos libres AHORA."""
     _, ram_free = system_ram_gb()
     q = _nvidia_query("memory.free,temperature.gpu")
-    vram_free = int(q[0]) / 1024 if q else None
+    vram_free = round(int(q[0]) / 1024, 1) if q else None
     temp = int(q[1]) if q and q[1].isdigit() else None
     return {"ram_free_gb": ram_free, "vram_free_gb": vram_free, "gpu_temp_c": temp}
 
@@ -72,7 +78,7 @@ def model_f16_gb(files):
     return total
 
 
-def plan(family, files, w, h, rules, engine, vram_limit_gb=None, sim=None):
+def plan(family, files, w, h, rules, engine, vram_limit_gb=None, sim=None, allow_low_quant=False):
     """Elige escalon. Devuelve dict con args extra, tamano final, notas y estimacion.
 
     rules: perfil (techo de calidad: tipo de peso minimo y lado maximo).
@@ -96,18 +102,32 @@ def plan(family, files, w, h, rules, engine, vram_limit_gb=None, sim=None):
     notes = []
 
     # El perfil marca el mejor tipo permitido; la escalera solo baja desde ahi.
-    start = LADDER_TYPES.index(rules["weight_type"]) if rules["weight_type"] in LADDER_TYPES else 1
+    ladder = LADDER_TYPES_LOWQ if allow_low_quant else LADDER_TYPES
+    best = rules["weight_type"] if rules["weight_type"] in ladder else "q8_0"
+    start = ladder.index(best)
     chosen = None
-    for t in LADDER_TYPES[start:]:
+    # f16 solo si cabe entero en VRAM: con offload es mas lento que q8.
+    for t in ladder[start:]:
         weights = f16 * QUANT_RATIO[t]
         if engine != "cpu" and weights + compute <= vram_usable:
             chosen = {"type": t, "place": "vram", "weights_gb": weights}
             break
-        if weights <= ram_usable:
-            chosen = {"type": t, "place": "ram", "weights_gb": weights}
-            break
     if chosen is None:
-        t = LADDER_TYPES[-1]
+        for t in ladder[max(start, 1):]:
+            weights = f16 * QUANT_RATIO[t]
+            if weights <= ram_usable:
+                chosen = {"type": t, "place": "ram", "weights_gb": weights}
+                break
+    if chosen is None:
+        # Se pasa por poco: RAM igual (Windows pagina un poco, como en Forge). Es mas
+        # rapido que leer todo del disco; solo avisamos.
+        t = ladder[max(start, 1)]
+        weights = f16 * QUANT_RATIO[t]
+        if weights <= res["ram_free_gb"] + RAM_OVERFLOW_GB:
+            chosen = {"type": t, "place": "ram", "weights_gb": weights}
+            notes.append("RAM justa: cierra el navegador u otros programas para que vaya más rápido.")
+    if chosen is None:
+        t = ladder[-1]
         chosen = {"type": t, "place": "disk", "weights_gb": f16 * QUANT_RATIO[t]}
         notes.append("Poca RAM libre: los pesos se leen desde el disco. Funciona, pero tarda bastante más.")
 

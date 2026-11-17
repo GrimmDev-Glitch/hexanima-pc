@@ -20,6 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adaptive  # noqa: E402
+
+allow_low_quant = False  # config.json -> manual.allow_low_quant
 M = ROOT / "models"
 
 # Familias de modelo: archivos y muestreo por defecto (como en la app del telefono).
@@ -62,6 +64,8 @@ def load_config():
         sys.path.insert(0, str(ROOT / "tools"))
         from detect_hw import PROFILES
         rules = dict(PROFILES[profile])
+    global allow_low_quant
+    allow_low_quant = bool(manual.get("allow_low_quant", False))
     return engine, profile, rules, manual.get("vram_limit_gb"), manual.get("extra_args", "")
 
 
@@ -140,7 +144,8 @@ def main():
         else:
             r = dict(rules)
             r["vae_tiling"] = rules["vae_tiling"] or fam.get("vae_tiling", False)
-            pl = adaptive.plan(a.family, fam["files"].values(), w, h, r, engine, vram_limit, sim)
+            pl = adaptive.plan(a.family, fam["files"].values(), w, h, r, engine, vram_limit, sim,
+                               allow_low_quant=allow_low_quant)
 
         out = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{a.family}.png"
         cmd = [str(exe)]

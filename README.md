@@ -12,7 +12,7 @@ Versión para Windows de [HexAnima · Snapdragon 8 Gen 2](https://github.com/Gri
 
 | Perfil | Cuándo | Ajustes |
 |---|---|---|
-| Bajo | ≤ 2 GB de VRAM o sin GPU | q4, offload a RAM, VAE por mosaicos, hasta 768 px |
+| Bajo | ≤ 2 GB de VRAM o sin GPU | q8, offload a RAM, VAE por mosaicos, hasta 768 px |
 | Medio | 3–7 GB | q8, offload a RAM, hasta 1024 px (SDXL hasta 1216) |
 | Alto | ≥ 8 GB | f16 en GPU, hasta 1536 px |
 
@@ -45,7 +45,17 @@ Opciones extra para el motor (como `COMMANDLINE_ARGS` de Forge): `config.json` �
 
 Antes de cada imagen, `tools/adaptive.py` mide la VRAM y RAM **libres** y elige el primer escalón que entra. Nunca rechaza; en equipos chicos solo tarda más.
 
-1. Pesos en VRAM → 2. pesos en RAM con offload → 3. q8 → q5 → q4 → 4. VAE por mosaicos y ~0,45 MP → 5. pesos leídos del disco (mmap).
+1. Pesos en VRAM (f16 o q8) → 2. q8 en RAM con offload → 3. VAE por mosaicos y ~0,45 MP → 4. RAM justa (se pasa hasta 1 GB, con aviso) → 5. pesos leídos del disco (mmap).
+
+q4/q5 quedan fuera de la escalera automática: en GTX sin tensor cores son ~3,6× más lentos que q8 (`manual.allow_low_quant: true` los habilita).
+
+| SDXL 832×1216 en GTX 1650, offload | s/paso |
+|---|---|
+| q8 + flash attention on | ~17 |
+| q8 + flash attention auto | 20,7 |
+| q8 sin flash attention | 22,1 |
+| f16 | 37 |
+| q4_K | 61,5 |
 
 Protecciones: deja 0,5 GB de VRAM y 1,5 GB de RAM para Windows, corre el motor con prioridad baja, en CPU deja 2 núcleos libres y en lotes pausa si la GPU llega a 83 °C (sigue al bajar de 72 °C). El tiempo estimado aprende de las generaciones anteriores (`cache/bench.json`).
 
