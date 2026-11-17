@@ -416,6 +416,7 @@ async function runOne(opt, seed) {
 
 function showImage(src, final = true) {
   $("result").src = src;
+  $("canvas").classList.toggle("previewing", !final);
   if (final) { state.currentImage = src; $("useLast").disabled = false; }
   $("canvas").classList.add("has");
 }

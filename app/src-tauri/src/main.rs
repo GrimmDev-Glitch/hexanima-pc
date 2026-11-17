@@ -46,6 +46,9 @@ fn app_info(state: State<AppState>) -> serde_json::Value {
         "root": state.root.display().to_string(),
         "hardware": hw.clone(),
         "version": env!("CARGO_PKG_VERSION"),
+        "engines": ["vulkan", "cuda", "cpu"].iter()
+            .filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file())
+            .collect::<Vec<_>>(),
         "debug": cfg!(debug_assertions),
     })
 }
@@ -57,7 +60,7 @@ fn memory() -> hw::Memory {
 
 /// Arranca (o reinicia) el motor. Devuelve el puerto local.
 #[tauri::command]
-fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>) -> Result<u16, String> {
+fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine: Option<String>) -> Result<serde_json::Value, String> {
     let hw = {
         let mut g = state.hw.lock().unwrap();
         if g.is_none() {
@@ -65,19 +68,24 @@ fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>) -> Res
         }
         g.clone().unwrap()
     };
+    // Motor pedido (p. ej. CUDA para Anima: su VAE es mucho más rápido ahí) si está instalado;
+    // si no, el detectado para la gráfica.
+    let wanted = engine.filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file());
+    let (eng, device) = match wanted {
+        Some(e) if e != hw.engine => {
+            let d = hw::engine_device(&state.root, &e, hw.gpu.as_ref());
+            (e, d)
+        }
+        _ => (hw.engine.clone(), hw.backend_device.clone()),
+    };
     let mut srv = state.server.lock().unwrap();
     if let Some(mut s) = srv.take() {
         s.stop();
     }
-    let s = server::Server::start(
-        &state.root,
-        &hw.engine,
-        hw.backend_device.as_deref(),
-        &opts.unwrap_or_default(),
-    )?;
+    let s = server::Server::start(&state.root, &eng, device.as_deref(), &opts.unwrap_or_default())?;
     let port = s.port;
     *srv = Some(s);
-    Ok(port)
+    Ok(json!({ "port": port, "engine": eng, "device": device }))
 }
 
 #[tauri::command]
