@@ -41,6 +41,20 @@ python tools/generate.py sdxl "masterpiece, 1girl" --model "ruta/a/checkpoint_il
 
 Opciones extra para el motor (como `COMMANDLINE_ARGS` de Forge): `config.json` → `manual.extra_args`.
 
+### Modo adaptativo
+
+Antes de cada imagen, `tools/adaptive.py` mide la VRAM y RAM **libres** y elige el primer escalón que entra. Nunca rechaza; en equipos chicos solo tarda más.
+
+1. Pesos en VRAM → 2. pesos en RAM con offload → 3. q8 → q5 → q4 → 4. VAE por mosaicos y ~0,45 MP → 5. pesos leídos del disco (mmap).
+
+Protecciones: deja 0,5 GB de VRAM y 1,5 GB de RAM para Windows, corre el motor con prioridad baja, en CPU deja 2 núcleos libres y en lotes pausa si la GPU llega a 83 °C (sigue al bajar de 72 °C). El tiempo estimado aprende de las generaciones anteriores (`cache/bench.json`).
+
+```bash
+python tools/generate.py sdxl "1girl" --model ruta.safetensors --count 4      # lote con pausas por temperatura
+python tools/generate.py sdxl "1girl" --model ruta.safetensors --sim-vram 2 --sim-ram 8 --dry   # ver qué haría en otro equipo
+python tools/generate.py anima "1girl" --no-adaptive                          # perfil fijo, sin medir
+```
+
 ## Modelos probados (GTX 1650 4 GB, 16 GB RAM)
 
 | Modelo | Ajustes | Tiempo |

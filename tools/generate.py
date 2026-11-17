@@ -10,6 +10,7 @@ Ejemplos:
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -17,6 +18,8 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import adaptive  # noqa: E402
 M = ROOT / "models"
 
 # Familias de modelo: archivos y muestreo por defecto (como en la app del telefono).
@@ -80,6 +83,10 @@ def main():
     ap.add_argument("-H", "--height", type=int)
     ap.add_argument("--lora", action="append", default=[], help="nombre:fuerza (archivo en loras/)")
     ap.add_argument("--model", help="ruta a otro checkpoint de la misma familia")
+    ap.add_argument("--count", type=int, default=1, help="imagenes del lote (semilla +1 cada una)")
+    ap.add_argument("--no-adaptive", action="store_true", help="usar el perfil fijo, sin medir memoria")
+    ap.add_argument("--sim-vram", type=float, help="simular otro equipo: GB de VRAM libre")
+    ap.add_argument("--sim-ram", type=float, help="simular otro equipo: GB de RAM libre")
     ap.add_argument("--dry", action="store_true", help="solo muestra el comando")
     a = ap.parse_args()
 
@@ -109,62 +116,95 @@ def main():
     w, h = fit(w, ms), fit(h, ms)
 
     prompt = a.prompt + "".join(f" <lora:{l.rsplit(':', 1)[0]}:{l.rsplit(':', 1)[1] if ':' in l else '1'}>" for l in a.lora)
+    steps = a.steps or fam["steps"]
     out_dir = ROOT / "outputs"
     out_dir.mkdir(exist_ok=True)
-    out = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{a.family}.png"
+    sim = {k: v for k, v in (("vram_gb", a.sim_vram), ("ram_gb", a.sim_ram)) if v is not None} or None
 
-    cmd = [str(exe)]
-    for flag, path in fam["files"].items():
-        cmd += [flag, str(path)]
-    cmd += ["-p", prompt, "-o", str(out),
-            "-W", str(w), "-H", str(h),
-            "--steps", str(a.steps or fam["steps"]),
-            "--cfg-scale", str(a.cfg if a.cfg is not None else fam["cfg"]),
-            "--sampling-method", a.sampler or fam["sampler"],
-            "-s", str(a.seed),
-            "--lora-model-dir", str(ROOT / "loras")]
-    if fam.get("scheduler"):
-        cmd += ["--scheduler", fam["scheduler"]]
-    negative = a.negative or fam.get("negative", "")
-    if negative:
-        cmd += ["-n", negative]
-    # Ajustes del perfil
-    if rules["weight_type"] != "f16":
-        cmd += ["--type", rules["weight_type"]]
-    if rules["offload_to_cpu"]:
-        cmd += ["--offload-to-cpu"]
-    if rules["vae_tiling"] or fam.get("vae_tiling"):
-        cmd += ["--vae-tiling"]
-    cmd += ["--flash-attn", "on" if rules["flash_attn"] else "auto"]
-    if engine == "cpu":
-        cmd += ["--backend", "cpu"]
-    if vram_limit:
-        cmd += ["--max-vram", str(vram_limit)]
-    if extra_args:
-        import shlex
-        cmd += shlex.split(extra_args, posix=False)
+    seed = a.seed if a.seed >= 0 else int(time.time()) % 2**31
+    for i in range(a.count):
+        if i > 0:
+            adaptive.wait_if_hot()  # proteccion: pausa entre imagenes si la GPU se calienta
 
-    print(f"Motor {engine} · perfil {profile} · {w}x{h}")
-    print(" ".join(f'"{c}"' if " " in c else c for c in cmd))
-    if a.dry:
-        return
-    t0 = time.time()
-    log = ROOT / "logs" / f"{out.stem}.log"
-    log.parent.mkdir(exist_ok=True)
-    # buffering=1: el registro se escribe linea a linea para poder seguir el progreso en vivo.
-    with open(log, "w", encoding="utf-8", errors="replace", buffering=1) as lf:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                             encoding="utf-8", errors="replace", cwd=str(exe.parent))
-        for line in p.stdout:
-            lf.write(line)
-            sys.stdout.write(line)
-        p.wait()
-    dt = time.time() - t0
-    if p.returncode == 0 and out.exists():
-        print(f"\nListo en {dt:.1f} s -> {out}")
-    else:
-        print(f"\nFallo (codigo {p.returncode}) tras {dt:.1f} s. Registro: {log}")
-        sys.exit(p.returncode or 1)
+        # Plan por imagen: la memoria libre cambia si el usuario abre o cierra programas.
+        if a.no_adaptive:
+            pl = {"args": [], "w": w, "h": h, "type": rules["weight_type"],
+                  "place": "ram" if rules["offload_to_cpu"] else "vram",
+                  "vae_tiling": rules["vae_tiling"], "notes": [], "resources": {}}
+            if rules["weight_type"] != "f16":
+                pl["args"] += ["--type", rules["weight_type"]]
+            if rules["offload_to_cpu"]:
+                pl["args"] += ["--offload-to-cpu"]
+            if rules["vae_tiling"] or fam.get("vae_tiling"):
+                pl["args"] += ["--vae-tiling"]
+        else:
+            r = dict(rules)
+            r["vae_tiling"] = rules["vae_tiling"] or fam.get("vae_tiling", False)
+            pl = adaptive.plan(a.family, fam["files"].values(), w, h, r, engine, vram_limit, sim)
+
+        out = out_dir / f"{datetime.now():%Y%m%d-%H%M%S}-{a.family}.png"
+        cmd = [str(exe)]
+        for flag, path in fam["files"].items():
+            cmd += [flag, str(path)]
+        cmd += ["-p", prompt, "-o", str(out),
+                "-W", str(pl["w"]), "-H", str(pl["h"]),
+                "--steps", str(steps),
+                "--cfg-scale", str(a.cfg if a.cfg is not None else fam["cfg"]),
+                "--sampling-method", a.sampler or fam["sampler"],
+                "-s", str(seed + i),
+                "--lora-model-dir", str(ROOT / "loras")]
+        if fam.get("scheduler"):
+            cmd += ["--scheduler", fam["scheduler"]]
+        negative = a.negative or fam.get("negative", "")
+        if negative:
+            cmd += ["-n", negative]
+        cmd += pl["args"]
+        cmd += ["--flash-attn", "on" if rules["flash_attn"] else "auto"]
+        if engine == "cpu":
+            cmd += ["--backend", "cpu"]
+        if extra_args:
+            import shlex
+            cmd += shlex.split(extra_args, posix=False)
+
+        res = pl.get("resources", {})
+        print(f"[{i + 1}/{a.count}] Motor {engine} · perfil {profile} · {pl['w']}x{pl['h']} · "
+              f"pesos {pl['type']} en {pl['place'].upper()}"
+              + (f" · libre: VRAM {res.get('vram_free_gb')} GB, RAM {res.get('ram_free_gb')} GB" if res else ""))
+        for n in pl["notes"]:
+            print("  · " + n)
+        est = adaptive.estimate(a.family, pl, steps)
+        if est:
+            print(f"  · Tiempo estimado: ~{est / 60:.1f} min" if est >= 90 else f"  · Tiempo estimado: ~{est:.0f} s")
+        if a.dry:
+            print(" ".join(f'"{c}"' if " " in c else c for c in cmd))
+            continue
+
+        t0 = time.time()
+        log = ROOT / "logs" / f"{out.stem}.log"
+        log.parent.mkdir(exist_ok=True)
+        sampling_s = None
+        # buffering=1: registro linea a linea para seguir el progreso en vivo.
+        # Prioridad baja: Windows sigue respondiendo bien mientras genera.
+        prio = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0)
+        with open(log, "w", encoding="utf-8", errors="replace", buffering=1) as lf:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 encoding="utf-8", errors="replace", cwd=str(exe.parent),
+                                 creationflags=prio)
+            for line in p.stdout:
+                lf.write(line)
+                sys.stdout.write(line)
+                m = re.search(r"sampling completed, taking ([\d.]+)s", line)
+                if m:
+                    sampling_s = float(m.group(1))
+            p.wait()
+        dt = time.time() - t0
+        if p.returncode == 0 and out.exists():
+            print(f"\nListo en {dt:.1f} s -> {out}")
+            if sampling_s:
+                adaptive.record(a.family, pl, steps, sampling_s, dt)
+        else:
+            print(f"\nFallo (codigo {p.returncode}) tras {dt:.1f} s. Registro: {log}")
+            sys.exit(p.returncode or 1)
 
 
 if __name__ == "__main__":
