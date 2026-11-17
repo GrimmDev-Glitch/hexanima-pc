@@ -42,13 +42,16 @@ fn app_info(state: State<AppState>) -> serde_json::Value {
     if hw.is_none() {
         *hw = Some(hw::detect(&state.root));
     }
+    // Motores instalados (la app usa CUDA para Anima si está, y el de la gráfica para el resto).
+    let engines: Vec<&str> = ["vulkan", "cuda", "cpu"]
+        .into_iter()
+        .filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file())
+        .collect();
     json!({
         "root": state.root.display().to_string(),
         "hardware": hw.clone(),
         "version": env!("CARGO_PKG_VERSION"),
-        "engines": ["vulkan", "cuda", "cpu"].iter()
-            .filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file())
-            .collect::<Vec<_>>(),
+        "engines": engines,
         "debug": cfg!(debug_assertions),
     })
 }
