@@ -37,10 +37,11 @@
     <section id="page-gen" class="page on">
       <div class="work">
         <div class="toprow">
-          <label class="lbl" for="model">Modelo</label>
-          <select id="model" class="field" style="min-width:260px"></select>
-          <button id="loadBtn" class="ghost">Cargar</button>
+          <select id="model" class="hidden" aria-hidden="true" tabindex="-1"></select>
+          <button id="modelBtn" class="model-chip" title="Elegir modelo"><span id="modelDot" class="dot"></span><span id="modelName">Sin modelo</span><span class="caret">▾</span></button>
+          <button id="loadBtn" class="ghost sm">Cargar modelo</button>
           <span id="modelStatus" class="status">Iniciando motor…</span>
+          <button id="menuBtn" class="ibtn menu-btn" title="Más opciones" aria-label="Más opciones">⋯</button>
         </div>
 
         <!-- Barra de la imagen (fuera de la imagen, como la del teléfono) -->
@@ -93,6 +94,7 @@
             <button id="modeEdit" class="tab" role="tab" aria-selected="false">Editar foto</button>
           </div>
           <div class="prompt-tools">
+            <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button>
             <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
             <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
             <select id="templatePick" class="mini-select" aria-label="Plantillas de prompt"><option value="">Plantillas</option></select>
@@ -101,6 +103,8 @@
             <button id="deleteTemplate" class="mini" title="Quitar la plantilla elegida" aria-label="Quitar plantilla" disabled>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
             <select id="recentPick" class="mini-select" aria-label="Prompts recientes"><option value="">Recientes</option></select>
+            <button id="clearPrompt" class="mini" title="Borrar el prompt" aria-label="Borrar el prompt">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
           </div>
         </div>
 
@@ -120,9 +124,17 @@
         <div class="prompt-box">
           <textarea id="prompt" class="field" rows="3" aria-label="Prompt" placeholder="1girl, silver hair, night city, rain, looking at viewer"></textarea>
           <span id="promptMeta" class="prompt-meta"></span>
+          <div id="acBox" class="ac-box hidden" role="listbox" aria-label="Sugerencias de etiquetas"></div>
         </div>
         <div class="chips" id="chips"></div>
-        <input id="neg" class="field" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark">
+        <div class="neg-row">
+          <input id="neg" class="field" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark">
+          <span id="negMeta" class="neg-meta"></span>
+          <button id="negDefault" class="mini" title="Poner el negativo predeterminado del modelo">Predeterminado</button>
+          <select id="negPick" class="mini-select" aria-label="Plantillas del prompt negativo"><option value="">Plantillas</option></select>
+          <button id="negClear" class="mini" title="Borrar el negativo" aria-label="Borrar el negativo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
+        </div>
 
         <div class="btnrow">
           <button id="genBtn" class="primary" disabled>Generar</button>
@@ -136,7 +148,7 @@
       </div>
 
       <div class="ctrl">
-        <div class="sec">Controles</div>
+        <div class="sec-row"><div class="sec">Controles</div><button id="resetSampling" class="mini" title="Restablecer pasos, CFG, sampler y scheduler del modelo">↺ Restablecer</button></div>
         <div class="group">
           <div class="lbl">Tamaño</div>
           <div class="seg" id="aspect">
@@ -360,6 +372,40 @@
   </div>
 </div>
 
+<!-- Selector de modelo (como el del teléfono) -->
+<div id="modelDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modelTitle">
+  <div class="dlg dlg-lib">
+    <div class="dlg-head"><h2 id="modelTitle">Modelo</h2><span id="modelCount" class="lbl"></span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div id="modelCards" class="model-cards"></div>
+    <div class="dlg-foot">
+      <span class="lbl">Clic para elegir · ✎ cambia el nombre</span>
+      <button id="mdCatalog" class="ghost">＋ Catálogo</button>
+      <button id="mdCivitai" class="ghost">＋ Civitai</button>
+      <button id="mdImport" class="ghost">＋ Importar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Paleta de etiquetas -->
+<div id="tagsDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tagsTitle">
+  <div class="dlg dlg-lib">
+    <div class="dlg-head"><h2 id="tagsTitle">Etiquetas</h2><span class="lbl">Toca una etiqueta para ponerla o quitarla del prompt</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div id="tagsBody" class="tags-body"></div>
+    <div class="dlg-foot"><button class="primary sm" data-close>Hecho</button></div>
+  </div>
+</div>
+
+<!-- Plantillas de configuración -->
+<div id="cfgDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
+  <div class="dlg dlg-ask">
+    <div class="dlg-head"><h2 id="cfgTitle">Plantillas de configuración</h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="lbl">Guardan modelo, prompt, negativo, muestreo, tamaño, seed, cantidad y LoRAs. Clic para cargar · clic derecho: más opciones.</div>
+    <button id="cfgSave" class="ghost">＋ Guardar la configuración actual</button>
+    <div id="cfgList" class="ask-list"></div>
+    <div class="dlg-foot"><button class="ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
 <!-- Diálogo genérico (texto / elegir / confirmar) -->
 <div id="askDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="askTitle">
   <div class="dlg dlg-ask">
@@ -428,5 +474,6 @@
 <script src="lorapage.js"></script>
 <script src="history.js"></script>
 <script src="session.js"></script>
+<script src="tools.js"></script>
 </body>
 </html>

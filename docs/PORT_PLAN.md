@@ -6,6 +6,8 @@ Fuente: el código de la app Android (`Hexanima/app/src/com/hexanima/npu/*.java`
 
 **Estado:** ✅ hecho · 🟡 parcial · ⬜ falta · ➖ no aplica en PC
 
+> **Avance (17 nov 2026):** fase 1 hecha — barra de la imagen (solo iconos, fuera del lienzo), visor, Otra vez / Variaciones, antes/después, Ampliar (Real-ESRGAN / UltraSharp ×2/×4), selector de modelo con tarjetas, Cargar / Liberar, menú ⋯, plantillas de configuración, ajustes desde PNG, # Etiquetas, autocompletar Danbooru, negativo (Predeterminado / Plantillas / Borrar), contador de tokens, ↺. Historial completo con filtros y selección múltiple; papelera = Papelera de reciclaje de Windows (en lugar de la de 30 días). Pendiente de la fase 1: exportar ZIP desde el Historial.
+
 ---
 
 ## 1. Pantalla principal (Generar)
