@@ -65,6 +65,26 @@ python tools/generate.py sdxl "1girl" --model ruta.safetensors --sim-vram 2 --si
 python tools/generate.py anima "1girl" --no-adaptive                          # perfil fijo, sin medir
 ```
 
+## Motores
+
+La app elige el motor según la gráfica y usa siempre la tarjeta dedicada (en laptops con Intel integrada + NVIDIA, Vulkan numera primero la integrada).
+
+| Gráfica | Orden de preferencia |
+|---|---|
+| NVIDIA GTX (9xx/10xx/16xx) | Vulkan → CUDA → CPU |
+| NVIDIA RTX | CUDA → Vulkan → CPU |
+| AMD / Intel | Vulkan → CPU |
+
+Comparación en GTX 1650 (Nova3DCG IL v9, SDXL 832×1216, q8, 6 pasos):
+
+| Motor | Descarga | s/paso | VAE |
+|---|---|---|---|
+| **Vulkan oficial** | **28 MB** | **16,9** | **29 s** |
+| CUDA oficial | ~0,9 GB | 20,9 | 49 s |
+| CUDA compilado para GTX (`tools/build_engine_gtx.ps1`, sm_61 + FORCE_MMQ) | ~0,9 GB | 24,9 | 110 s — descartado |
+
+Con Anima Turbo el muestreo es igual en Vulkan y CUDA (98,6 s, 8 pasos); el VAE es más rápido en CUDA.
+
 ## Modelos probados (GTX 1650 4 GB, 16 GB RAM)
 
 | Modelo | Ajustes | Tiempo |

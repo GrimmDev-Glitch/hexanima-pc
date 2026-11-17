@@ -23,6 +23,7 @@ MIN_NVIDIA_DRIVER = (528, 33)
 MIN_FREE_DISK_GB = 10
 ENGINE_FILES = {
     "cuda": ["sd-cli.exe", "stable-diffusion.dll", "ggml-cuda.dll", "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll"],
+    "cuda-gtx": ["sd-cli.exe", "stable-diffusion.dll", "ggml-cuda.dll", "cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll"],
     "vulkan": ["sd-cli.exe", "stable-diffusion.dll", "ggml-vulkan.dll"],
     "cpu": ["sd-cli.exe", "stable-diffusion.dll"],
 }
@@ -109,7 +110,9 @@ def check_engine_runs(hw):
     if engine != "cpu" and not gpu_dev:
         return item("engine_run", "error", "El motor no ve la grafica", text.strip()[-300:],
                     "Actualiza el driver; mientras tanto se puede usar el motor CPU.")
-    names = ", ".join(f"{d[0]} ({d[1]})" for d in gpu_dev) or "CPU"
+    chosen = hw.get("backend_device")
+    names = ", ".join(f"{d[0]} ({d[1]})" + (" ← se usa esta" if d[0].lower() == chosen and len(gpu_dev) > 1 else "")
+                      for d in gpu_dev) or "CPU"
     warn = "lack of tensor cores" in text
     return item("engine_run", "ok", "El motor arranca y ve la grafica", names +
                 (" · sin tensor cores: rinde menos que una RTX" if warn else ""))

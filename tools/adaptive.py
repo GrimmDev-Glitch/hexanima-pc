@@ -133,7 +133,10 @@ def plan(family, files, w, h, rules, engine, vram_limit_gb=None, sim=None, allow
 
     # VAE: mosaicos si no cabe entero en lo que queda de VRAM.
     vae_need = VAE_GB_PER_MP.get(family, 2.0) * mp
-    vae_tiling = rules.get("vae_tiling", False) or engine == "cpu" or vae_need > vram_usable
+    # Vulkan reserva mas memoria para el VAE: sin mosaicos falla el primer intento
+    # (medido con Anima en GTX 1650) y el reintento tarda mas que hacerlo por mosaicos.
+    vae_tiling = (rules.get("vae_tiling", False) or engine in ("cpu", "vulkan")
+                  or vae_need > vram_usable)
     # Resolucion: la palanca mas grande en equipos chicos (la atencion crece mas rapido
     # que los pixeles). Con disco o <2 GB de VRAM util, ~0.45 MP (p.ej. 576x768),
     # como se usa en Forge con GTX 1050 de 2 GB.

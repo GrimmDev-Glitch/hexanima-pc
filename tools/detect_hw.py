@@ -152,18 +152,65 @@ def detect():
     # La de mas VRAM primero (portatiles con integrada + dedicada).
     gpus.sort(key=lambda g: g.get("vram_gb") or 0, reverse=True)
     gpu = gpus[0] if gpus else None
-    engine, profile = pick_profile(gpu, ram_total)
-    engine_dir = ROOT / "engine" / engine
+    _, profile = pick_profile(gpu, ram_total)
+    candidates = engine_candidates(gpu)
+    engine = next((e for e in candidates if (ROOT / "engine" / e / "sd-cli.exe").exists()), candidates[0])
+    device = engine_device(engine, gpu)
     return {
         "gpu": gpu,
         "all_gpus": gpus,
         "ram_gb": ram_total,
         "ram_free_gb": ram_free,
         "engine": engine,
-        "engine_present": (engine_dir / "sd-cli.exe").exists(),
+        "engine_candidates": candidates,
+        "engine_present": (ROOT / "engine" / engine / "sd-cli.exe").exists(),
+        "backend_device": device,
         "profile": profile,
         "profile_rules": PROFILES[profile],
     }
+
+
+def is_gtx(gpu):
+    """NVIDIA sin tensor cores: GTX 9xx/10xx/16xx (y Quadro/MX de esas generaciones)."""
+    n = (gpu or {}).get("name", "").upper()
+    return gpu is not None and gpu.get("vendor") == "nvidia" and ("GTX" in n or " MX" in n)
+
+
+def engine_candidates(gpu):
+    """Motores en orden de preferencia segun la grafica (el primero instalado gana).
+
+    Medido en GTX 1650 (SDXL 832x1216, q8, 6 pasos): Vulkan 16,9 s/paso y VAE 29 s,
+    CUDA oficial 20,9 s/paso y VAE 49 s, CUDA compilado para GTX (sm_61 + FORCE_MMQ)
+    24,9 s/paso y VAE 110 s (descartado). Anima: muestreo igual en Vulkan y CUDA.
+    Vulkan ademas pesa 28 MB frente a ~0,9 GB.
+    """
+    if gpu is None:
+        return ["cpu", "vulkan"]
+    if gpu.get("vendor") == "nvidia":
+        return ["vulkan", "cuda", "cpu"] if is_gtx(gpu) else ["cuda", "vulkan", "cpu"]
+    return ["vulkan", "cpu"]
+
+
+def engine_device(engine, gpu):
+    """Dispositivo del motor para --backend. Con integrada + dedicada (tipico en laptops)
+    Vulkan numera primero la integrada: hay que elegir la dedicada por nombre."""
+    if engine == "cpu":
+        return "cpu"
+    exe = ROOT / "engine" / engine / "sd-cli.exe"
+    if not exe.exists():
+        return None
+    out = _run([str(exe), "--list-devices"])
+    devs = [l.split("\t", 1) for l in out.splitlines() if "\t" in l and not l.upper().startswith("CPU")]
+    if not devs:
+        return None
+    want = (gpu or {}).get("name", "").lower()
+    for name, desc in devs:  # coincidencia con la grafica detectada
+        if want and (want in desc.lower() or desc.lower() in want):
+            return name.lower()
+    for name, desc in devs:  # si no, la primera que no sea integrada/software
+        if not any(k in desc.lower() for k in ("intel", "microsoft", "llvmpipe", "basic")):
+            return name.lower()
+    return devs[0][0].lower()
 
 
 def main():

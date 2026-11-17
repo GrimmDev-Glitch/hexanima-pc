@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import adaptive  # noqa: E402
 
 allow_low_quant = False  # config.json -> manual.allow_low_quant
+backend_device = None    # p.ej. "vulkan1" para no usar la Intel integrada
 M = ROOT / "models"
 
 # Familias de modelo: archivos y muestreo por defecto (como en la app del telefono).
@@ -64,8 +65,15 @@ def load_config():
         sys.path.insert(0, str(ROOT / "tools"))
         from detect_hw import PROFILES
         rules = dict(PROFILES[profile])
-    global allow_low_quant
+    global allow_low_quant, backend_device
     allow_low_quant = bool(manual.get("allow_low_quant", False))
+    # Grafica concreta del motor (laptops con integrada + dedicada): la detectada,
+    # o se recalcula si el usuario fijo otro motor a mano.
+    if engine == hw.get("engine"):
+        backend_device = hw.get("backend_device")
+    else:
+        from detect_hw import engine_device
+        backend_device = engine_device(engine, hw.get("gpu"))
     return engine, profile, rules, manual.get("vram_limit_gb"), manual.get("extra_args", "")
 
 
@@ -165,14 +173,14 @@ def main():
             cmd += ["-n", negative]
         cmd += pl["args"]
         cmd += ["--flash-attn", "on" if rules["flash_attn"] else "auto"]
-        if engine == "cpu":
-            cmd += ["--backend", "cpu"]
+        if backend_device:
+            cmd += ["--backend", backend_device]
         if extra_args:
             import shlex
             cmd += shlex.split(extra_args, posix=False)
 
         res = pl.get("resources", {})
-        print(f"[{i + 1}/{a.count}] Motor {engine} · perfil {profile} · {pl['w']}x{pl['h']} · "
+        print(f"[{i + 1}/{a.count}] Motor {engine} ({backend_device or 'auto'}) · perfil {profile} · {pl['w']}x{pl['h']} · "
               f"pesos {pl['type']} en {pl['place'].upper()}"
               + (f" · libre: VRAM {res.get('vram_free_gb')} GB, RAM {res.get('ram_free_gb')} GB" if res else ""))
         for n in pl["notes"]:
