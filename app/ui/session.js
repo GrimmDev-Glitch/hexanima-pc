@@ -12,7 +12,7 @@ const Session = {
 
   add(item) {
     this.list.push(item);
-    if (this.list.length > 60) this.list.shift(); // la sesión no crece sin límite (el historial guarda todo)
+    if (this.list.length > 30) this.list.shift(); // la sesión no crece sin límite (el historial guarda todo)
     this.i = this.list.length - 1;
     this.render();
   },
@@ -25,17 +25,16 @@ const Session = {
 
   render() {
     const c = this.cur();
-    $("pager").classList.toggle("hidden", this.list.length < 2);
-    $("pgTxt").textContent = `${this.i + 1} / ${this.list.length}`;
+    $("pgTxt").textContent = this.list.length ? `${this.i + 1} / ${this.list.length}` : "0 / 0";
     $("pgPrev").disabled = this.i <= 0;
     $("pgNext").disabled = this.i >= this.list.length - 1;
-    if (!c) return;
+    for (const id of ["resVar", "resEdit", "upscaleBtn", "imgFav", "imgCopy", "imgFull", "imgClear"]) $(id).disabled = !c;
+    if (!c) { $("resSeed").textContent = ""; $("resCompare").classList.add("hidden"); return; }
     if (!state.busy) showImage(c.src);
     $("imgFav").textContent = c.meta?.fav ? "★" : "☆";
     $("imgFav").classList.toggle("on", !!c.meta?.fav);
     $("resSeed").textContent = c.meta?.seed != null ? `seed ${c.meta.seed}${c.meta.width ? ` · ${c.meta.width} × ${c.meta.height}` : ""}` : "";
     $("resCompare").classList.toggle("hidden", !c.before);
-    $("resVar").disabled = $("resAgain").disabled = false;
   },
 
   clear() {
@@ -161,10 +160,17 @@ $("vFav").onclick = async () => {
   if (Viewer.source === "history") History.show();
 };
 $("vUse").onclick = () => { const it = vItem(); if (it) { Viewer.close(); History.useSettings(vHist(it)); } };
-$("vEdit").onclick = () => { const it = vItem(); if (!it) return; Viewer.close(); setEditImage(it.src).then(() => setMode("edit")); document.querySelector('.nav[data-page="gen"]').click(); };
+/** Las imágenes del historial se ven por asset:, pero para editarlas o copiarlas se leen como data URL. */
+async function asDataUrl(it) { return it.src.startsWith("data:") ? it.src : "data:image/png;base64," + (await invoke("read_output", { name: it.name })); }
+$("vEdit").onclick = async () => {
+  const it = vItem(); if (!it) return;
+  Viewer.close();
+  await setEditImage(await asDataUrl(it)); setMode("edit");
+  document.querySelector('.nav[data-page="gen"]').click();
+};
 $("vCopy").onclick = async () => {
   const it = vItem(); if (!it) return;
-  try { const blob = await (await fetch(it.src)).blob(); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); toast("Imagen copiada"); }
+  try { const blob = await (await fetch(await asDataUrl(it))).blob(); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); toast("Imagen copiada"); }
   catch { toast("No se pudo copiar la imagen", 3000); }
 };
 $("vReveal").onclick = () => { const it = vItem(); if (it) invoke("gallery_reveal", { name: it.name }); };
@@ -187,8 +193,9 @@ const Compare = {
   apply() {
     const p = (this.pos * 100).toFixed(2) + "%";
     $("cmpClip").style.width = p; $("cmpLine").style.left = p;
-    // la imagen recortada debe medir lo mismo que la de fondo
+    // la imagen recortada mide exactamente lo mismo que la de fondo (aunque su resolución sea otra)
     $("cmpBefore").style.width = $("cmpAfter").clientWidth + "px";
+    $("cmpBefore").style.height = $("cmpAfter").clientHeight + "px";
   },
   async saveSideBySide() {
     const load = (src) => new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = src; });
@@ -203,7 +210,7 @@ const Compare = {
 };
 let cmpDrag = false;
 const cmpMove = (e) => { const r = $("cmpAfter").getBoundingClientRect(); Compare.pos = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); Compare.apply(); };
-$("cmpStage").addEventListener("mousedown", (e) => { cmpDrag = true; cmpMove(e); });
+$("cmpBox").addEventListener("mousedown", (e) => { cmpDrag = true; cmpMove(e); });
 window.addEventListener("mousemove", (e) => { if (cmpDrag) cmpMove(e); });
 window.addEventListener("mouseup", () => { cmpDrag = false; });
 window.addEventListener("resize", () => { if (!$("cmpDlg").classList.contains("hidden")) Compare.apply(); });
@@ -236,3 +243,106 @@ $("hImg").addEventListener("click", () => {
   if (i >= 0) Viewer.open(list, i, "history");
 });
 Session.render();
+
+// ---------- Ampliar: Rápido · Real-ESRGAN / Detallado · UltraSharp, ×2 / ×4 (como el teléfono) ----------
+const UP_INFO = {
+  fast: { label: "Rápido · Real-ESRGAN", desc: "Para anime e ilustración; el más ligero.", mb: 18 },
+  detail: { label: "Detallado · UltraSharp", desc: "Conserva mejor texturas, ojos y líneas finas; más lento.", mb: 67 },
+};
+const Upscale = {
+  kind: store.get("upKind", "fast"),
+  status: [],
+  src: null, w: 0, h: 0,
+  busy: false,
+
+  async open(src) {
+    this.src = src || Session.cur()?.src || state.currentImage;
+    if (!this.src) return;
+    const im = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = this.src; });
+    this.w = im.naturalWidth; this.h = im.naturalHeight;
+    try { this.status = await invoke("upscaler_status"); } catch { this.status = []; }
+    $("upMsg").textContent = "";
+    this.render();
+    openModal("upDlg");
+  },
+
+  installed(kind) { return this.status.find((s) => s.kind === kind)?.installed; },
+  stem(kind) { return this.status.find((s) => s.kind === kind)?.stem; },
+
+  render() {
+    const box = $("upOpts"); box.innerHTML = "";
+    for (const kind of ["fast", "detail"]) {
+      const info = UP_INFO[kind], ok = this.installed(kind);
+      const row = document.createElement("label");
+      row.className = "up-opt" + (this.kind === kind ? " on" : "");
+      row.innerHTML = '<input type="radio" name="upk"><div><div class="t"></div><div class="d"></div></div>';
+      row.querySelector(".t").textContent = info.label;
+      row.querySelector(".d").textContent = ok ? info.desc : `${info.desc} Hay que descargarlo una vez (${info.mb} MB).`;
+      const r = row.querySelector("input"); r.checked = this.kind === kind;
+      r.onchange = () => { this.kind = kind; store.set("upKind", kind); this.render(); };
+      if (!ok) {
+        const b = document.createElement("button");
+        b.className = "ghost sm"; b.textContent = `Descargar ${info.mb} MB`;
+        b.onclick = (e) => { e.preventDefault(); this.download(kind, b); };
+        row.appendChild(b);
+      }
+      box.appendChild(row);
+    }
+    const ok = this.installed(this.kind);
+    const lim = 8192;
+    for (const [id, f] of [["up2", 2], ["up4", 4]]) {
+      const W = this.w * f, H = this.h * f, big = W > lim || H > lim;
+      $(id).textContent = big ? `×${f} · demasiado grande` : `×${f} · ${W} × ${H}`;
+      $(id).disabled = !ok || big || this.busy;
+    }
+  },
+
+  async download(kind, btn) {
+    btn.disabled = true; btn.textContent = "Descargando…";
+    const off = await window.__TAURI__.event.listen("dl-progress", (ev) => {
+      const p = ev.payload; if (p.id !== "up-" + kind) return;
+      btn.textContent = p.total ? `${Math.round((100 * p.done) / p.total)} %` : "Descargando…";
+    });
+    try {
+      await invoke("upscaler_download", { kind });
+      this.status = await invoke("upscaler_status");
+      // El motor lee la carpeta de ampliadores al arrancar: se reinicia si todavía no lo ve.
+      await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
+      await refreshEngineMenus();
+      if (!state.upscalers.includes(this.stem(kind)) && !state.busy) {
+        $("upMsg").textContent = "Reiniciando el motor para que vea el ampliador…";
+        if (await startEngine()) { await refreshEngineMenus(); await loadModel(); }
+      }
+      $("upMsg").textContent = state.upscalers.includes(this.stem(kind)) ? "✓ Listo para ampliar" : "Descargado; reinicia el motor desde Ajustes si no aparece.";
+    } catch (e) { $("upMsg").textContent = "Falló la descarga: " + (e.message || e); }
+    finally { off(); this.render(); }
+  },
+
+  async run(f) {
+    if (this.busy || state.busy) return;
+    this.busy = true; this.render();
+    $("upMsg").textContent = "Ampliando… (por trozos; puede tardar en equipos modestos)";
+    state.busy = true;
+    try {
+      const r = await api("/sdcpp/v1/upscale", { method: "POST", body: JSON.stringify({ image: this.src, upscaler: this.stem(this.kind), repeats: 1, output_format: "png" }) });
+      let b64 = r.images?.[0]?.b64_json;
+      if (!b64) throw new Error("El motor no devolvió una imagen");
+      let W = r.width, H = r.height;
+      if (f === 2) { // el modelo amplía ×4: para ×2 se reduce a la mitad con buena calidad
+        const im = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = "data:image/png;base64," + b64; });
+        W = this.w * 2; H = this.h * 2;
+        const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+        const g = cv.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(im, 0, 0, W, H);
+        b64 = cv.toDataURL("image/png").split(",")[1];
+      }
+      const meta = { ...(Session.cur()?.meta || {}), width: W, height: H, upscaled: `${UP_INFO[this.kind].label} ×${f}`, created: new Date().toISOString() };
+      const name = await invoke("save_image", { b64, prefix: "ampliada", meta });
+      Session.add({ name, src: "data:image/png;base64," + b64, meta, before: this.src });
+      closeModal("upDlg");
+      toast(`Ampliada ×${f} · ${W} × ${H} · guardada en el Historial`, 4000);
+    } catch (e) { $("upMsg").textContent = "No se pudo ampliar: " + (e.message || e); }
+    finally { this.busy = false; state.busy = false; this.render(); }
+  },
+};
+$("up2").onclick = () => Upscale.run(2);
+$("up4").onclick = () => Upscale.run(4);

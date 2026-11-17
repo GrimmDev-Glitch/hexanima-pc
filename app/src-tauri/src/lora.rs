@@ -100,6 +100,14 @@ fn detect_base(h: &Map<String, Value>) -> Option<&'static str> {
     None
 }
 
+/// Tipo de modelo completo por sus tensores: "anima" (solo DiT) o "checkpoint" (SDXL…).
+pub fn model_kind(p: &Path) -> &'static str {
+    match header(p) {
+        Some(h) if h.keys().any(|k| k.starts_with("net.blocks") || k.contains("llm_adapter") || k.contains("t_embedder")) => "anima",
+        _ => "checkpoint",
+    }
+}
+
 /// Palabras activadoras declaradas dentro del archivo (no se adivinan por frecuencia).
 fn embedded_words(h: &Map<String, Value>) -> Vec<String> {
     let md = h.get("__metadata__").and_then(|v| v.as_object());

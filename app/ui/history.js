@@ -95,7 +95,7 @@ const History = {
     $("hPrompt").textContent = m.prompt || "";
     $("hFav").textContent = m.fav ? "★ Favorita" : "☆ Favorita";
     $("hFav").classList.toggle("on", !!m.fav);
-    $("hUpscale").classList.toggle("hidden", !state.upscaler);
+    $("hUpscale").classList.remove("hidden");
     $("hUse").disabled = !m.prompt;
   },
 
@@ -148,7 +148,7 @@ const History = {
 
   async copyImage(it) {
     try {
-      const blob = await (await fetch(assetUrl(it.path))).blob();
+      const blob = await (await fetch(await this.dataUrl(it))).blob();
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
       toast("Imagen copiada al portapapeles");
     } catch { toast("No se pudo copiar la imagen; usa «Mostrar en la carpeta»", 4000); }
@@ -195,9 +195,7 @@ $("hReveal").onclick = () => { const it = History.item(); if (it) invoke("galler
 $("hTrash").onclick = () => { const it = History.item(); if (it) History.trash([it.name]); };
 $("hUpscale").onclick = async () => {
   const it = History.item(); if (!it) return;
-  state.currentImage = await History.dataUrl(it);
-  await upscaleCurrent();
-  await History.show();
+  await Upscale.open(await History.dataUrl(it));
 };
 document.addEventListener("keydown", (e) => {
   if (!$("page-history").classList.contains("on") || e.target.closest("input,textarea,select") || document.querySelector(".modal:not(.hidden)")) return;

@@ -27,7 +27,7 @@
     server_status: () => ({ running: true, port: SD_PORT, log: "[I] vista previa: motor externo en " + SD_PORT }),
     save_image: () => "outputs\\preview.png",
     output_files: () => fakeOutputs,
-    read_output: () => "",
+    read_output: async ({ name }) => { const b = await (await fetch("/__outputs/" + name)).arrayBuffer(); let s = ""; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(s); },
     open_folder: () => null,
     set_console_visible: () => null,
     open_url: ({ url }) => { window.open(url, "_blank"); },
@@ -70,6 +70,8 @@
     lora_presets_get: () => presets,
     lora_presets_set: ({ presets: p }) => { presets.splice(0, presets.length, ...p); },
     lora_fetch_info: async () => ({ found: true }),
+    upscaler_status: () => [{ kind: 'fast', stem: 'RealESRGAN_x4plus_anime_6B', installed: true }, { kind: 'detail', stem: '4x-UltraSharp', installed: false }],
+    upscaler_download: async () => 'ok',
   };
   const presets = [{ name: "Frieren 3D", loras: [{ stem: "FrierenK112", w: 0.8 }, { stem: "watercolor_v2", w: 0.4 }] }];
   window.__TAURI__ = {

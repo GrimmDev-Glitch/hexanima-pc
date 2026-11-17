@@ -43,38 +43,43 @@
           <span id="modelStatus" class="status">Iniciando motor…</span>
         </div>
 
+        <!-- Barra de la imagen (fuera de la imagen, como la del teléfono) -->
+        <div class="imgbar">
+          <div id="pager" class="pager">
+            <button id="pgPrev" class="ibtn" title="Anterior (←)" aria-label="Imagen anterior">‹</button>
+            <span id="pgTxt" class="lbl">0 / 0</span>
+            <button id="pgNext" class="ibtn" title="Siguiente (→)" aria-label="Imagen siguiente">›</button>
+          </div>
+          <span id="resSeed" class="lbl res-seed"></span>
+          <div class="imgbar-actions">
+            <button id="resAgain" aria-label="Otra vez" class="ibtn" title="Mismo prompt con otra seed · clic derecho: Variaciones">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg></button>
+            <button id="resVar" aria-label="Variaciones" class="ibtn" title="Varias imágenes nuevas o parecidas a esta">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
+            <button id="resEdit" aria-label="Editar esta imagen" class="ibtn" title="Usar esta imagen en Editar foto">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+            <button id="resCompare" aria-label="Antes y después" class="ibtn hidden" title="Comparar con la foto original">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
+            <button id="upscaleBtn" aria-label="Ampliar" class="ibtn" title="Ampliar ×2 / ×4 (Real-ESRGAN o UltraSharp)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+            <span class="sep" aria-hidden="true"></span>
+            <button id="imgFav" class="ibtn" title="Favorita" aria-label="Favorita">☆</button>
+            <button id="imgCopy" class="ibtn" title="Copiar imagen (para pegar en otra app)" aria-label="Copiar imagen">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
+            <button id="openOut" class="ibtn" title="Mostrar en la carpeta" aria-label="Mostrar en la carpeta">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+            <button id="imgFull" class="ibtn" title="Ver en grande" aria-label="Ver en grande">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H3v5M21 8V3h-5M16 21h5v-5M3 16v5h5"/></svg></button>
+            <button id="imgClear" class="ibtn" title="Quitar la imagen de la pantalla" aria-label="Quitar la imagen de la pantalla">✕</button>
+          </div>
+        </div>
+
         <div id="canvas" class="canvas">
           <img id="result" alt="Imagen generada">
           <div class="empty">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
             <div>La imagen generada aparece aquí</div>
             <div id="estimate" style="font-size:13px"></div>
-          </div>
-          <!-- Barra de la imagen (como la del teléfono) -->
-          <div class="actions">
-            <div id="pager" class="pager hidden">
-              <button id="pgPrev" class="ibtn" title="Anterior" aria-label="Imagen anterior">‹</button>
-              <span id="pgTxt" class="lbl"></span>
-              <button id="pgNext" class="ibtn" title="Siguiente" aria-label="Imagen siguiente">›</button>
-            </div>
-            <button id="imgFav" class="ibtn" title="Favorita" aria-label="Favorita">☆</button>
-            <button id="imgCopy" class="ibtn" title="Copiar imagen (para pegar en otra app)" aria-label="Copiar imagen">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg></button>
-            <button id="openOut" class="ibtn" title="Mostrar en la carpeta" aria-label="Mostrar en la carpeta">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
-            <button id="upscaleBtn" class="ibtn hidden" title="Ampliar" aria-label="Ampliar">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
-            <button id="imgFull" class="ibtn" title="Ver en grande" aria-label="Ver en grande">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M8 3H3v5M21 8V3h-5M16 21h5v-5M3 16v5h5"/></svg></button>
-            <button id="imgClear" class="ibtn" title="Quitar la imagen de la pantalla" aria-label="Quitar la imagen de la pantalla">✕</button>
-          </div>
-          <!-- Fila de resultado: seed, antes/después, editar, otra vez -->
-          <div class="result-bar">
-            <span id="resSeed" class="lbl"></span>
-            <button id="resCompare" class="rbtn hidden" title="Comparar con la foto original">⇆ Antes/después</button>
-            <button id="resEdit" class="rbtn" title="Usar esta imagen en Editar foto">✎ Editar esta imagen</button>
-            <button id="resAgain" class="rbtn" title="Mismo prompt con otra seed · clic derecho: Variaciones">↻ Otra vez</button>
-            <button id="resVar" class="rbtn" title="Varias imágenes nuevas o parecidas a esta">Variaciones…</button>
           </div>
           <div id="progress" class="progress">
             <div class="row"><span id="progStage">Preparando…</span><span id="progTime">0 s</span></div>
@@ -395,10 +400,23 @@
     <div class="dlg-head"><h2 id="cmpTitle">Antes / después</h2><span class="lbl">Arrastra sobre la imagen para mover la línea.</span>
       <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
     <div id="cmpStage" class="cmp-stage">
-      <img id="cmpAfter" alt="Editada"><div id="cmpClip" class="cmp-clip"><img id="cmpBefore" alt="Original"></div>
-      <div id="cmpLine" class="cmp-line"></div><span class="cmp-tag l">Original</span><span class="cmp-tag r">Editada</span>
+      <div id="cmpBox" class="cmp-box">
+        <img id="cmpAfter" alt="Editada"><div id="cmpClip" class="cmp-clip"><img id="cmpBefore" alt="Original"></div>
+        <div id="cmpLine" class="cmp-line"></div><span class="cmp-tag l">Original</span><span class="cmp-tag r">Editada</span>
+      </div>
     </div>
     <div class="dlg-foot"><button id="cmpSave" class="ghost">Guardar lado a lado</button><button class="primary sm" data-close>Hecho</button></div>
+  </div>
+</div>
+
+<!-- Ampliar (como "Ampliar en la NPU" del teléfono) -->
+<div id="upDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upTitle">
+  <div class="dlg dlg-ask">
+    <div class="dlg-head"><h2 id="upTitle">Ampliar</h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div id="upOpts" class="group"></div>
+    <div id="upMsg" class="lbl"></div>
+    <div class="up-sizes"><button id="up2" class="ghost">×2</button><button id="up4" class="ghost">×4</button></div>
+    <div class="dlg-foot"><button class="ghost" data-close>Cancelar</button></div>
   </div>
 </div>
 
@@ -409,5 +427,6 @@
 <script src="loras.js"></script>
 <script src="lorapage.js"></script>
 <script src="history.js"></script>
+<script src="session.js"></script>
 </body>
 </html>

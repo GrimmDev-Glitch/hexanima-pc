@@ -125,6 +125,15 @@ pub fn meta(p: &Path) -> Map<String, Value> {
     m
 }
 
+/// Ajustes de cualquier PNG elegido por el usuario (para "Cargar ajustes desde un PNG").
+pub fn settings_from_png(p: &Path) -> Result<Value, String> {
+    let m = meta(p);
+    if !m.contains_key("prompt") {
+        return Err("Este PNG no tiene ajustes guardados (prompt, seed…)".into());
+    }
+    Ok(Value::Object(m))
+}
+
 pub fn list(root: &Path) -> Result<Value, String> {
     let d = dir(root);
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;

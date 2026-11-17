@@ -128,6 +128,97 @@ fn gallery_trash(state: State<AppState>, names: Vec<String>) -> Result<usize, St
     gallery::trash(&state.root, &names)
 }
 
+/// "Cargar ajustes desde un PNG": selector de archivos y lectura de sus metadatos.
+#[tauri::command]
+async fn png_pick_settings(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(f) = app.dialog().file().set_title("Cargar ajustes desde un PNG").add_filter("PNG", &["png"]).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let p = f.into_path().map_err(|e| e.to_string())?;
+    gallery::settings_from_png(&p).map(Some)
+}
+
+/// Pequeños almacenes JSON de la app en config/ (plantillas, etc.). Solo nombres conocidos.
+fn store_path(root: &Path, key: &str) -> Result<PathBuf, String> {
+    const KEYS: [&str; 4] = ["config-templates", "negatives", "model-names", "settings"];
+    if !KEYS.contains(&key) {
+        return Err("Clave no permitida".into());
+    }
+    let d = root.join("config");
+    std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    Ok(d.join(format!("{key}.json")))
+}
+
+#[tauri::command]
+fn store_get(state: State<AppState>, key: String) -> Result<serde_json::Value, String> {
+    let p = store_path(&state.root, &key)?;
+    Ok(std::fs::read_to_string(p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+fn store_set(state: State<AppState>, key: String, value: serde_json::Value) -> Result<(), String> {
+    let p = store_path(&state.root, &key)?;
+    std::fs::write(p, serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+}
+
+/// Tamaño de los archivos de models/ (para las tarjetas del selector de modelo).
+#[tauri::command]
+fn model_sizes(state: State<AppState>) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for d in ["checkpoints", "diffusion_models", "text_encoders", "vae"] {
+        if let Ok(rd) = std::fs::read_dir(state.root.join("models").join(d)) {
+            for e in rd.flatten() {
+                if let Ok(m) = e.metadata() {
+                    if m.is_file() {
+                        out.insert(format!("{d}/{}", e.file_name().to_string_lossy()), json!(m.len()));
+                    }
+                }
+            }
+        }
+    }
+    serde_json::Value::Object(out)
+}
+
+/// ＋ Importar modelo: copia un .safetensors/.gguf a models/checkpoints (SDXL y similares)
+/// o models/diffusion_models (Anima: solo el modelo de difusión), según sus tensores.
+#[tauri::command]
+async fn model_import(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(f) = app.dialog().file().set_title("Importar un modelo").add_filter("Modelo", &["safetensors", "gguf"]).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let src = f.into_path().map_err(|e| e.to_string())?;
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let kind = lora::model_kind(&src);
+        let dir = root.join("models").join(if kind == "anima" { "diffusion_models" } else { "checkpoints" });
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let name = src.file_name().ok_or("archivo")?;
+        let dst = dir.join(name);
+        if dst.exists() {
+            return Err("Ya hay un modelo con ese nombre".into());
+        }
+        std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
+        Ok(Some(format!("{}/{}", dir.file_name().unwrap().to_string_lossy(), name.to_string_lossy())))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn upscaler_status(state: State<AppState>) -> serde_json::Value {
+    civitai::upscaler_status(&state.root)
+}
+
+#[tauri::command]
+async fn upscaler_download(app: tauri::AppHandle, kind: String) -> Result<String, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || civitai::upscaler_download(&app, &root, &kind))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Muestra la imagen seleccionada en el Explorador.
 #[tauri::command]
 fn gallery_reveal(state: State<AppState>, name: String) -> Result<(), String> {
@@ -355,6 +446,13 @@ fn main() {
             gallery_fav,
             gallery_trash,
             gallery_reveal,
+            png_pick_settings,
+            store_get,
+            store_set,
+            model_sizes,
+            model_import,
+            upscaler_status,
+            upscaler_download,
             lora_list,
             lora_set_meta,
             lora_trash,

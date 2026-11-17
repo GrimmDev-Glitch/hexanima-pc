@@ -302,9 +302,10 @@ async function refreshEngineMenus() {
     api("/sdapi/v1/upscalers").catch(() => null),
   ]);
   // "Ampliar" necesita un modelo ESRGAN en models\upscalers; sin él el botón no aparece.
-  state.upscaler = Array.isArray(upscalers) ? upscalers.find((u) => u.model_path)?.name || null : null;
-  $("upscaleBtn").classList.toggle("hidden", !state.upscaler);
-  if (state.upscaler) $("upscaleBtn").textContent = `Ampliar ×${upscalers.find((u) => u.name === state.upscaler).scale || 4}`;
+  // Ampliadores instalados (modelos ESRGAN en models\\upscalers). El botón Ampliar siempre está:
+  // si falta el modelo, su diálogo ofrece descargarlo (como el teléfono).
+  state.upscalers = Array.isArray(upscalers) ? upscalers.filter((u) => u.model_path).map((u) => u.name) : [];
+  state.upscaler = state.upscalers[0] || null;
   if (Array.isArray(samplers) && samplers.length) {
     const select = $("sampler"), selected = select.value;
     select.innerHTML = "";
@@ -496,7 +497,7 @@ $("editFile").onchange = async () => {
 $("useLast").onclick = () => { if (state.currentImage) setEditImage(state.currentImage); };
 $("modeGen").onclick = () => setMode("gen");
 $("modeEdit").onclick = () => setMode("edit");
-$("upscaleBtn").onclick = upscaleCurrent;
+$("upscaleBtn").onclick = () => Upscale.open();
 
 
 /** opts (para ↻ Otra vez y Variaciones): {count, newSeed, init: {src,w,h}, strength}.

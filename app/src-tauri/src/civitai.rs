@@ -226,6 +226,49 @@ fn model_info(id: u64, key: Option<&str>) -> Result<Value, String> {
     model(id, key)
 }
 
+/// Modelos para "Ampliar" (como el teléfono: Rápido / Detallado). Solo estos enlaces fijos.
+pub const UPSCALERS: [(&str, &str, &str); 2] = [
+    ("fast", "RealESRGAN_x4plus_anime_6B.pth", "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth"),
+    ("detail", "4x-UltraSharp.pth", "https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth"),
+];
+
+pub fn upscaler_status(root: &Path) -> Value {
+    let d = root.join("models").join("upscalers");
+    json!(UPSCALERS.iter().map(|(k, f, _)| json!({ "kind": k, "file": f, "stem": f.trim_end_matches(".pth"), "installed": d.join(f).is_file() })).collect::<Vec<_>>())
+}
+
+pub fn upscaler_download(app: &AppHandle, root: &Path, kind: &str) -> Result<String, String> {
+    let (_, file, url) = UPSCALERS.iter().find(|(k, _, _)| *k == kind).ok_or("Ampliador desconocido")?;
+    let d = root.join("models").join("upscalers");
+    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    let part = d.join(format!("{file}.part"));
+    let id = format!("up-{kind}");
+    let mut resp = get(url, None)?;
+    let total = resp.content_length().unwrap_or(0);
+    let mut out = File::create(&part).map_err(|e| e.to_string())?;
+    let mut buf = vec![0u8; 1 << 20];
+    let mut done = 0u64;
+    let mut last = Instant::now();
+    loop {
+        let n = resp.read(&mut buf).map_err(|e| { let _ = fs::remove_file(&part); format!("Falló la descarga: {e}") })?;
+        if n == 0 { break; }
+        out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        done += n as u64;
+        if last.elapsed() > Duration::from_millis(250) {
+            let _ = app.emit("dl-progress", json!({ "id": id, "done": done, "total": total, "state": "downloading" }));
+            last = Instant::now();
+        }
+    }
+    drop(out);
+    if total > 0 && done < total {
+        let _ = fs::remove_file(&part);
+        return Err("La descarga se cortó antes de terminar".into());
+    }
+    fs::rename(&part, d.join(file)).map_err(|e| e.to_string())?;
+    let _ = app.emit("dl-progress", json!({ "id": id, "done": done, "total": total, "state": "done" }));
+    Ok(file.to_string())
+}
+
 fn dest_dir(root: &Path, kind: &str) -> PathBuf {
     match kind {
         "checkpoint" => root.join("models").join("checkpoints"),
