@@ -120,7 +120,7 @@ def main():
         if os.path.exists(src):
             copy(src, os.path.join(out, "forge", rel))
     for n in os.listdir(os.path.join(ROOT, "torch_engine")):
-        if n.endswith((".py", ".md")):
+        if n.endswith((".py", ".md", ".pt")):
             copy(os.path.join(ROOT, "torch_engine", n), os.path.join(out, "hexanima", n))
     print(f"Listo: {out} · {size(out) / 2**30:.2f} GB")
 

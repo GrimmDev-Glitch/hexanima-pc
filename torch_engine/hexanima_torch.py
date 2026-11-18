@@ -56,19 +56,21 @@ class Engine:
         self.path = None
         self.lora_key = None
 
-    def load(self, path):
-        if self.path == path:
+    def load(self, path, vae=None):
+        key = (path, vae)
+        if self.path == key:
             return
         self.sd = None
         memory_management.unload_all_models()
         memory_management.soft_empty_cache()
         t = time.time()
-        self.sd = forge_loader(path)
+        # VAE aparte (p. ej. sdxl_vae.safetensors): Forge lo carga como diccionario adicional
+        self.sd = forge_loader(path, additional_state_dicts=[vae] if vae else None)
         if self.sd is None:
             raise RuntimeError("Modelo no reconocido")
-        self.path = path
+        self.path = key
         self.lora_key = None
-        print(f"[hexanima] modelo cargado en {time.time() - t:.1f}s: {os.path.basename(path)}", flush=True)
+        print(f"[hexanima] modelo cargado en {time.time() - t:.1f}s: {os.path.basename(path)}{' + VAE ' + os.path.basename(vae) if vae else ''}", flush=True)
 
     def set_loras(self, loras):
         """loras: [(ruta, peso)]. Igual que la extensión de LoRA de Forge (parches sobre una copia)."""

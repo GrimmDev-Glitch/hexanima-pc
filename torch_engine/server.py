@@ -38,7 +38,7 @@ JOBS = {}
 QUEUE = queue.Queue()
 LOCK = threading.Lock()
 RUN = threading.Lock()  # una sola carga o generación a la vez (el modelo es compartido)
-CATS = ["checkpoints", "diffusion_models", "text_encoders", "vae", "upscalers", "detectors"]
+CATS = ["checkpoints", "diffusion_models", "text_encoders", "vae", "vae_approx", "upscalers", "detectors"]
 SAMPLERS = ["euler_a", "euler", "dpm++2m", "dpm++2s_a", "dpm++2m_sde", "heun", "dpm2", "lms"]
 SCHEDULERS = ["discrete", "karras", "exponential"]
 EXTS = (".safetensors", ".ckpt", ".gguf", ".pth", ".pt", ".bin")
@@ -72,15 +72,78 @@ def to_pil(t):
     return Image.fromarray(((t[0].float().clamp(-1, 1) + 1) * 127.5).round().byte().permute(1, 2, 0).cpu().numpy())
 
 
-# Vista previa rápida del latente SDXL (aproximación lineal latente -> RGB, como "proj" de sd.cpp)
-_RGB = torch.tensor([[0.3651, 0.4232, 0.4341], [-0.2533, -0.0042, 0.1068], [0.1076, 0.1111, -0.0362], [-0.3165, -0.2492, -0.2188]])
-_BIAS = torch.tensor([0.1084, -0.0175, -0.0011])
+# Vista previa durante la generación:
+#  · TAESD-XL (models/vae_approx/taesdxl_decoder.pth, 5 MB, se descarga desde Ajustes): casi como la final.
+#  · si no, el «Approx NN» de Forge/WebUI (vaeapprox-sdxl.pt, incluido): 2× la resolución del latente.
+import torch.nn as nn  # noqa: E402
 
 
+class VAEApprox(nn.Module):  # de stable-diffusion-webui (AGPL-3.0), modules/sd_vae_approx.py
+    def __init__(self):
+        super().__init__()
+        ch = [4, 8, 16, 32, 64, 32, 16, 8, 3]; k = [7, 5, 3, 3, 3, 3, 3, 3]
+        for n in range(8):
+            setattr(self, f"conv{n + 1}", nn.Conv2d(ch[n], ch[n + 1], (k[n], k[n])))
+
+    def forward(self, x):
+        x = nn.functional.interpolate(x, (x.shape[2] * 2, x.shape[3] * 2))
+        x = nn.functional.pad(x, (11, 11, 11, 11))
+        for n in range(8):
+            x = nn.functional.leaky_relu(getattr(self, f"conv{n + 1}")(x), 0.1)
+        return x
+
+
+def _tconv(i, o, **k): return nn.Conv2d(i, o, 3, padding=1, **k)
+
+
+class _Clamp(nn.Module):
+    def forward(self, x): return torch.tanh(x / 3) * 3
+
+
+class _Block(nn.Module):
+    def __init__(self, i, o):
+        super().__init__()
+        self.conv = nn.Sequential(_tconv(i, o), nn.ReLU(), _tconv(o, o), nn.ReLU(), _tconv(o, o))
+        self.skip = nn.Conv2d(i, o, 1, bias=False) if i != o else nn.Identity()
+        self.fuse = nn.ReLU()
+
+    def forward(self, x): return self.fuse(self.conv(x) + self.skip(x))
+
+
+def taesd_decoder():  # https://github.com/madebyollin/taesd (MIT)
+    B = _Block
+    return nn.Sequential(_Clamp(), _tconv(4, 64), nn.ReLU(), B(64, 64), B(64, 64), B(64, 64), nn.Upsample(scale_factor=2), _tconv(64, 64, bias=False),
+                         B(64, 64), B(64, 64), B(64, 64), nn.Upsample(scale_factor=2), _tconv(64, 64, bias=False),
+                         B(64, 64), B(64, 64), B(64, 64), nn.Upsample(scale_factor=2), _tconv(64, 64, bias=False), B(64, 64), _tconv(64, 3))
+
+
+_PREV = {"kind": None, "model": None}
+
+
+def previewer():
+    taesd = os.path.join(ARGS.model_dir, "vae_approx", "taesdxl_decoder.pth")
+    kind = "taesd" if os.path.isfile(taesd) else "approx"
+    if _PREV["kind"] != kind:
+        if kind == "taesd":
+            m = taesd_decoder(); m.load_state_dict(torch.load(taesd, map_location="cpu"))
+        else:
+            m = VAEApprox(); m.load_state_dict(torch.load(os.path.join(HERE, "vaeapprox-sdxl.pt"), map_location="cpu"))
+        _PREV.update(kind=kind, model=m.eval())
+    return _PREV["kind"], _PREV["model"]
+
+
+@torch.inference_mode()
 def preview_b64(latent):
-    x = latent[0].float().cpu().permute(1, 2, 0) @ _RGB + _BIAS
-    x = ((x.clamp(-1, 1) + 1) * 127.5).byte().numpy()
-    return png_b64(Image.fromarray(x))
+    kind, m = previewer()
+    x = latent[:1].float().cpu()
+    if kind == "taesd":
+        y = m(x).clamp(0, 1)[0]                      # 0..1, tamaño final
+    else:
+        y = ((m(x).clamp(-1, 1) + 1) / 2)[0]          # -1..1 -> 0..1, 2× el latente
+    img = Image.fromarray((y.permute(1, 2, 0).numpy() * 255).round().astype(np.uint8))
+    if kind != "taesd":                               # que se vea suave al llenar el lienzo
+        img = img.resize((img.width * 2, img.height * 2), Image.BICUBIC)
+    return png_b64(img)
 
 
 # ---------- modelos ----------
@@ -109,12 +172,13 @@ def load_model(body):
     if recipe != "sdxl-checkpoint" or "model" not in models:
         raise ValueError("Este motor solo carga checkpoints SDXL / Illustrious / Pony")
     path = safe_join(ARGS.model_dir, models["model"])
+    vae = safe_join(ARGS.model_dir, models["vae"]) if models.get("vae") else None
     with LOCK:
         STATUS.update(state="loading", recipe=recipe, models=models, error=None)
     t = time.time()
     try:
         with RUN:
-            ENGINE.load(path)
+            ENGINE.load(path, vae)
         with LOCK:
             STATUS.update(state="ready", load_elapsed_seconds=time.time() - t, revision=STATUS["revision"] + 1)
     except Exception as e:
@@ -199,12 +263,64 @@ def run_img_gen(job, body):
         w, h = tw, th
 
     out = to_pil(img)
+    # ADetailer: busca caras / manos y redibuja cada una (recorte ampliado, como el ADetailer de WebUI)
+    ad = body.get("adetailer") or {}
+    if ad.get("model") in ("face", "hand"):
+        prog("adetailer")
+        out = adetail(out, ad, body, w=out.width, h=out.height, steps=steps, cfg=cfg, seed=seed, sampler=sampler,
+                      scheduler=scheduler, clip_skip=clip_skip, loras=loras, prog=prog)
     if init is not None and body.get("mask_image"):
         # pegar solo la zona pintada: el resto queda idéntico a la foto
         m = decode_image(body["mask_image"]).convert("L").resize(out.size, Image.BILINEAR)
         out = Image.composite(out, init.convert("RGB").resize(out.size, Image.LANCZOS), m)
     prog("encoding")
     return {"images": [{"b64_json": png_b64(out), "width": out.width, "height": out.height, "seed": seed}]}
+
+
+# ---------- ADetailer ----------
+_DET = {}
+
+
+def detector(kind):
+    path = os.path.join(ARGS.model_dir, "detectors", f"{kind}_yolov8n.safetensors")
+    if not os.path.isfile(path):
+        raise ValueError(f"Falta el detector de {'caras' if kind == 'face' else 'manos'} (se descarga al elegirlo en ADetailer)")
+    if kind not in _DET:
+        from detector import YOLOv8
+        _DET[kind] = YOLOv8(path)
+    return _DET[kind]
+
+
+def adetail(pil, ad, body, w, h, steps, cfg, seed, sampler, scheduler, clip_skip, loras, prog):
+    from PIL import ImageDraw, ImageFilter
+    det = detector(ad["model"])
+    boxes = det.detect(pil, float(ad.get("confidence") or 0.3))
+    boxes.sort(key=lambda b: b[0])
+    log(f"ADetailer: {len(boxes)} {'caras' if ad['model'] == 'face' else 'manos'}")
+    strength = float(ad.get("strength") or 0.4)
+    prompt = (ad.get("prompt") or "").replace("[PROMPT]", body.get("prompt", "")) or body.get("prompt", "")
+    neg = body.get("negative_prompt", "")
+    W, H = pil.size
+    T = 768  # lado largo del recorte que se redibuja: más detalle en caras pequeñas
+    for i, (x1, y1, x2, y2, _c) in enumerate(boxes[:8]):
+        prog("adetailer", i, len(boxes[:8]))
+        bw, bh = x2 - x1, y2 - y1
+        pad = max(32, 0.25 * max(bw, bh))
+        cx1, cy1, cx2, cy2 = max(0, x1 - pad), max(0, y1 - pad), min(W, x2 + pad), min(H, y2 + pad)
+        cw, ch = cx2 - cx1, cy2 - cy1
+        k = T / max(cw, ch)
+        tw, th = max(64, int(round(cw * k / 8)) * 8), max(64, int(round(ch * k / 8)) * 8)
+        crop = pil.crop((int(cx1), int(cy1), int(cx2), int(cy2)))
+        m = Image.new("L", crop.size, 0)
+        ImageDraw.Draw(m).rectangle([x1 - cx1 - 4, y1 - cy1 - 4, x2 - cx1 + 4, y2 - cy1 + 4], fill=255)
+        m = m.filter(ImageFilter.GaussianBlur(4))
+        lat = ENGINE.encode(to_tensor(crop, tw, th))
+        mk = torch.from_numpy(np.asarray(m.resize((tw // 8, th // 8), Image.BILINEAR)).astype(np.float32) / 255.0)[None, None]
+        res = ENGINE.generate2(prompt, neg, tw, th, steps, cfg, seed + i + 1, sampler=sampler, scheduler=scheduler,
+                               clip_skip=clip_skip, loras=loras, init_latent=lat, strength=strength, mask=mk)
+        piece = to_pil(res).resize(crop.size, Image.LANCZOS)
+        pil.paste(piece, (int(cx1), int(cy1)), m)
+    return pil
 
 
 # ---------- ampliadores (Real-ESRGAN / UltraSharp con spandrel, por trozos) ----------
@@ -349,6 +465,13 @@ class H(BaseHTTPRequestHandler):
                 j = JOBS.get(p.split("/")[-2])
                 if j: j["cancel"] = True
                 return self.send(200, {"ok": True})
+            if p == "/hexanima/v1/detect":
+                b = self.body()
+                img = decode_image(b["image"])
+                with RUN:
+                    boxes = detector(b.get("kind", "face")).detect(img, float(b.get("confidence") or 0.3))
+                return self.send(200, {"items": [{"x1": x1, "y1": y1, "x2": x2, "y2": y2, "confidence": c} for x1, y1, x2, y2, c in boxes],
+                                       "width": img.width, "height": img.height})
             if p == "/sdcpp/v1/upscale":
                 b = self.body()
                 with RUN:

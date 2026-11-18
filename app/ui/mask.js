@@ -337,6 +337,7 @@ const Ad = {
 
   /** Correcciones: deja cargado el detector `kind` (reinicia el motor y recarga el modelo si hace falta). */
   async ensureKind(kind) {
+    if (state.engine === "torch") return this.install(kind);  // detector propio, sin reiniciar
     if (state.adLoaded === kind) return true;
     if (!(await this.install(kind))) return false;
     this.force = kind;
@@ -354,11 +355,12 @@ const Ad = {
     if (mode !== "off" && !(await this.install(mode))) return;
     this.mode = mode;
     this.save();
-    if (mode !== "off" && state.adLoaded !== mode) setStatus(`ADetailer (${mode === "face" ? "caras" : "manos"}): el motor se reinicia al generar para cargar el detector.`);
+    if (mode !== "off" && state.adLoaded !== mode && state.engine !== "torch") setStatus(`ADetailer (${mode === "face" ? "caras" : "manos"}): el motor se reinicia al generar para cargar el detector.`);
   },
 
   /** Antes de generar: si el detector cargado no es el elegido, reinicia el motor y recarga el modelo. */
   async ensure() {
+    if (state.engine === "torch") return this.mode === "off" || (await this.install(this.mode));  // ADetailer propio
     if (this.mode === "off" || state.adLoaded === this.mode) return true;
     if (state.busy) return false;
     setStatus("Reiniciando el motor para cargar el detector de ADetailer…");

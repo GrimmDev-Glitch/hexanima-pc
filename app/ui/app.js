@@ -190,9 +190,8 @@ async function refreshMemory() {
 function engineFor(opt) {
   const engines = state.engines || [];
   const nvidia = state.hw?.gpu?.vendor === "nvidia";
-  // ADetailer y la detección de Correcciones usan el detector del motor clásico (sd.cpp)
-  const needDetector = typeof Ad !== "undefined" && (Ad.force || Ad.mode !== "off");
-  const torchOk = opt?.family === "sdxl" && engines.includes("torch") && !needDetector;
+  // El motor PyTorch trae su propio ADetailer y detector (YOLOv8): SDXL siempre puede usarlo
+  const torchOk = opt?.family === "sdxl" && engines.includes("torch");
   const pref = store.get("enginePref", "auto");
   if (pref === "torch") return torchOk ? "torch" : (nvidia && engines.includes("cuda") ? "cuda" : state.hw?.engine);
   if (pref !== "auto" && engines.includes(pref)) return pref;
@@ -301,7 +300,8 @@ async function loadModel() {
   const t0 = Date.now();
   const tick = setInterval(() => setStatus(`Cargando ${opt.label}… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
   try {
-    await api("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify({ recipe: opt.recipe, models: opt.models }) });
+    const models = typeof Vae !== "undefined" ? Vae.modelsFor(opt) : opt.models;
+    await api("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify({ recipe: opt.recipe, models }) });
     state.loaded = opt.id;
     setStatus(`Listo · ${opt.label} (${Math.round((Date.now() - t0) / 1000)} s)`, "ok");
   } catch (e) {
@@ -403,7 +403,9 @@ async function runOne(opt, seed) {
     ...(editing && state.editMask ? { mask_image: state.editMask.src } : {}),
     ...(Hires.body(w, h) ? { hires: Hires.body(w, h) } : {}),
     // Con un detector cargado, ADetailer corre siempre: si está en "No" se le pide una confianza imposible.
-    ...(state.adLoaded ? { extra_ad_args: Ad.args() } : {}),
+    ...(state.adLoaded && state.engine !== "torch" ? { extra_ad_args: Ad.args() } : {}),
+    // Motor PyTorch: ADetailer propio (detector YOLOv8 en PyTorch + redibujado por recorte)
+    ...(state.engine === "torch" && Ad.mode !== "off" ? { adetailer: { model: Ad.mode, strength: Ad.den() / 100, confidence: 0.3 } } : {}),
     prompt: loraSpec.prompt,
     negative_prompt: $("neg").value.trim(),
     clip_skip: +$("clipskip").value,
@@ -442,7 +444,7 @@ async function runOne(opt, seed) {
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
         steps, cfg, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
-        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: Ad.active() ? { mode: Ad.mode, strength: Ad.den() } : null,
+        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: (state.engine === "torch" ? Ad.mode !== "off" : Ad.active()) ? { mode: Ad.mode, strength: Ad.den() } : null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
       };

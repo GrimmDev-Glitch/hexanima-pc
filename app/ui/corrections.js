@@ -264,6 +264,13 @@ const Fix = {
     const w = a64(b.w * s), h = a64(b.h * s);
     const c = document.createElement("canvas"); c.width = w; c.height = h;
     c.getContext("2d").drawImage(im, 0, 0, w, h);
+    if (state.engine === "torch") {
+      // motor PyTorch: detección directa (YOLOv8 en PyTorch), sin pasada de generación
+      this.status("Buscando…");
+      const r = await api("/hexanima/v1/detect", { method: "POST", body: JSON.stringify({ image: c.toDataURL("image/png"), kind, confidence: kind === "face" ? 0.35 : 0.3 }) });
+      const [pw0, ph0] = this.paintSize();
+      return (r.items || []).map((d) => ({ x1: d.x1 * pw0 / w, y1: d.y1 * ph0 / h, x2: d.x2 * pw0 / w, y2: d.y2 * ph0 / h }));
+    }
     const before = (await invoke("ad_detections")).seq;
     // pasada casi nula (no cambia nada) solo para que el detector mire la imagen; mask_min_ratio impide que pinte
     await this.job({

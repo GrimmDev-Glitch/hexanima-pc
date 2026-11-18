@@ -237,6 +237,46 @@ async fn model_import(app: tauri::AppHandle) -> Result<Option<String>, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Importar un VAE (.safetensors) a models/vae.
+#[tauri::command]
+async fn vae_import(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let Some(f) = app.dialog().file().set_title("Importar un VAE").add_filter("VAE", &["safetensors", "pt", "ckpt"]).blocking_pick_file() else {
+        return Ok(None);
+    };
+    let src = f.into_path().map_err(|e| e.to_string())?;
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = root.join("models").join("vae");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let name = src.file_name().ok_or("archivo")?.to_owned();
+        let dst = dir.join(&name);
+        if dst.exists() {
+            return Err("Ya hay un VAE con ese nombre".into());
+        }
+        // mismo disco: enlace duro (no ocupa espacio extra); si no, copia
+        if std::fs::hard_link(&src, &dst).is_err() {
+            std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
+        }
+        Ok(Some(format!("vae/{}", name.to_string_lossy())))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn asset_status(state: State<AppState>) -> serde_json::Value {
+    civitai::asset_status(&state.root)
+}
+
+#[tauri::command]
+async fn asset_download(app: tauri::AppHandle, kind: String) -> Result<String, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || civitai::asset_download(&app, &root, &kind))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn upscaler_status(state: State<AppState>) -> serde_json::Value {
     civitai::upscaler_status(&state.root)
@@ -545,6 +585,9 @@ fn main() {
             model_sizes,
             model_import,
             upscaler_status,
+            vae_import,
+            asset_status,
+            asset_download,
             upscaler_download,
             detector_status,
             ad_detections,

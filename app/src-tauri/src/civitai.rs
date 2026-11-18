@@ -238,6 +238,26 @@ pub const UPSCALERS: [(&str, &str, &str); 2] = [
     ("detail", "4x-UltraSharp.pth", "https://huggingface.co/Kim2091/UltraSharp/resolve/main/4x-UltraSharp.pth"),
 ];
 
+/// Descargas sueltas de models/: (clave, carpeta, archivo, url, MB).
+pub const ASSETS: [(&str, &str, &str, &str, u32); 2] = [
+    ("sdxl_vae", "vae", "sdxl_vae_fp16_fix.safetensors", "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors", 335),
+    ("taesdxl", "vae_approx", "taesdxl_decoder.pth", "https://github.com/madebyollin/taesd/raw/main/taesdxl_decoder.pth", 5),
+];
+
+pub fn asset_status(root: &Path) -> Value {
+    json!(ASSETS.iter().map(|(k, d, f, _, mb)| json!({ "kind": k, "file": format!("{d}/{f}"), "mb": mb, "installed": root.join("models").join(d).join(f).is_file() })).collect::<Vec<_>>())
+}
+
+pub fn asset_download(app: &AppHandle, root: &Path, kind: &str) -> Result<String, String> {
+    let (_, dir, file, url, _) = ASSETS.iter().find(|a| a.0 == kind).ok_or("Descarga desconocida")?;
+    let d = root.join("models").join(dir);
+    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    let part = d.join(format!("{file}.part"));
+    fetch_to(app, url, &part, &format!("asset-{kind}"))?;
+    fs::rename(&part, d.join(file)).map_err(|e| e.to_string())?;
+    Ok(format!("{dir}/{file}"))
+}
+
 pub fn upscaler_status(root: &Path) -> Value {
     let d = root.join("models").join("upscalers");
     json!(UPSCALERS.iter().map(|(k, f, _)| json!({ "kind": k, "file": f, "stem": f.trim_end_matches(".pth"), "installed": d.join(f).is_file() })).collect::<Vec<_>>())
