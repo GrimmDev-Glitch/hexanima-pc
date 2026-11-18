@@ -449,10 +449,23 @@ def encode_reference(pil, clip_vision_path):
     _MMAP["ptrs"].clear()
     del sd
     try:
-        memory_management.load_model_gpu(clip.patcher)
+        # capa a capa: cada una va a la gráfica (~75 MB en bigG), calcula y se suelta; la copia leída del
+        # archivo no se toca (functional_call usa tensores temporales en la gráfica)
+        from torch.func import functional_call
+        gpu = memory_management.get_torch_device()
+        def run(mod, *args):
+            ps = {k: v.to(gpu, non_blocking=True) for k, v in list(mod.named_parameters()) + list(mod.named_buffers())}
+            return functional_call(mod, ps, args)
+        m = clip.model
+        vm = m.vision_model
         img = torch.from_numpy(np.asarray(pil.convert("RGB")).astype(np.float32) / 255.0)[None]
-        px = cv.clip_preprocess(img.to(clip.load_device)).to(torch.float16)
-        out = clip.model(pixel_values=px).image_embeds.float().cpu()
+        px = cv.clip_preprocess(img.to(gpu)).to(torch.float16)
+        x = run(vm.embeddings, px)
+        x = run(vm.pre_layrnorm, x)
+        for layer in vm.encoder.layers:
+            x = run(layer, x, None, None)[0]
+        pooled = run(vm.post_layernorm, x[:, 0, :])
+        out = run(m.visual_projection, pooled).float().cpu()
     finally:
         memory_management.unload_all_models()
         del clip

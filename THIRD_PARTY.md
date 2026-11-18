@@ -16,12 +16,15 @@
 
 | Componente | Origen | Licencia |
 |---|---|---|
-| Motor PyTorch de HexAnima PC (Python 3.10, PyTorch, backend de Forge) | [hexanima-packs/pc_torch](https://huggingface.co/GrimmDev-Glitch/hexanima-packs/tree/main/pc_torch) | AGPL-3.0 (Forge); PyTorch BSD-3-Clause; cada paquete conserva la suya en su `*.dist-info` |
+| Motor PyTorch de HexAnima PC (Python 3.10, PyTorch, backend de Forge, IP-Adapter de Forge/cubiq) | [hexanima-packs/pc_torch](https://huggingface.co/GrimmDev-Glitch/hexanima-packs/tree/main/pc_torch) | AGPL-3.0 (Forge); IP-Adapter GPL-3.0; PyTorch BSD-3-Clause; cada paquete conserva la suya en su `*.dist-info` |
 | Anima Turbo, Qwen3 0.6B, Qwen Image VAE | [circlestone-labs/Anima](https://huggingface.co/circlestone-labs/Anima) | ver `LICENSE.md` del repositorio |
 | Detectores YOLOv8 de ADetailer | [Bingsu/adetailer](https://huggingface.co/Bingsu/adetailer) | AGPL-3.0 (Ultralytics) |
 | Real-ESRGAN anime 6B | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | BSD-3-Clause |
 | 4x-UltraSharp | [Kim2091/UltraSharp](https://huggingface.co/Kim2091/UltraSharp) | CC BY-NC-SA 4.0 |
 | SDXL VAE fp16 fix | [madebyollin/sdxl-vae-fp16-fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix) | MIT |
 | DMD2 4-step LoRA (⚡ Modo rápido) | [tianweiy/DMD2](https://huggingface.co/tianweiy/DMD2) | CC BY-NC 4.0 (uso no comercial) |
+| WD ViT Tagger v3 (Prompt desde una imagen) | [SmilingWolf/wd-vit-tagger-v3](https://huggingface.co/SmilingWolf/wd-vit-tagger-v3) | Apache-2.0 |
+| noobIPA Mark1 (personaje de referencia) | [subby2006/noob-ipa](https://huggingface.co/subby2006/noob-ipa) | FAIPL-1.0-SD |
+| CLIP ViT-bigG (codificador de imágenes) | [comfyanonymous/clip_vision_g](https://huggingface.co/comfyanonymous/clip_vision_g) (LAION) | MIT |
 | TAESD XL | [madebyollin/taesd](https://github.com/madebyollin/taesd) | MIT |
 | Modelos y LoRAs de Civitai | civitai.com | la de cada autor |

@@ -143,7 +143,6 @@ def run_img_gen(job, body):
     loras = [(safe_join(ARGS.lora_model_dir, l["path"]), float(l.get("multiplier", 1.0))) for l in body.get("lora") or []]
     want_preview = bool(body.get("preview"))
     t0 = time.time()
-    ipa = ipa_for(body, lambda st: prog(st))
 
     def prog(stage, done=None, total=None):
         if job.get("cancel"):
@@ -172,6 +171,8 @@ def run_img_gen(job, body):
         a = np.asarray(m.resize((pw // 8, ph // 8), Image.BILINEAR)).astype(np.float32) / 255.0
         return torch.from_numpy(a)[None, None]
 
+    # personaje de referencia: se prepara aquí (la primera vez con cada imagen tarda unos segundos)
+    ipa = ipa_for(body, prog)
     prog("conditioning")
     init_latent = None
     strength = 1.0

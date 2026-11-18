@@ -650,7 +650,20 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .fast-info { flex-basis: 100%; font-size: 12px; }
 .fast-row.off-family { opacity: .55; }
 
-/* Personaje de referencia */
+/* Personaje de referencia (dentro de Editar una foto) y Prompt desde una imagen */
+.ref-toggle { margin-top: 8px; }
+#editBox.ref-on .edit-strength, #editBox.ref-on #maskRow { display: none; }
+.dlg-pic { max-width: 640px; }
+.pic-top { display: flex; gap: 14px; align-items: flex-start; }
+.pic-thumb { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); flex: none; }
+.pic-opts { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; min-height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--accent); font-weight: 600; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #1b172f; border-color: var(--accent); }
+.pic-only { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.35; cursor: pointer; }
+.pic-only input { margin-top: 2px; accent-color: var(--accent); }
+#picOut { min-height: 110px; resize: vertical; font-size: 14px; line-height: 1.45; }
+#picDlg .dlg-foot button { min-height: 42px; padding: 0 18px; font-size: 15px; }
 .ref-actions { margin: 8px 0 4px; }
 .ref-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
 .ref-tag { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }

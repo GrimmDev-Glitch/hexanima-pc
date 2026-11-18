@@ -56,7 +56,7 @@
         <div class="prompt-head">
           <span class="chip-lbl prompt-lbl">DESCRIPCIÓN</span>
           <div class="prompt-tools">
-            <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button>
+            <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button><button id="picPromptBtn" class="mini" title="Prompt desde una imagen: lee una imagen y escribe su prompt (etiquetas o frase)">🖼 Desde imagen</button>
             <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
             <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
             <select id="templatePick" class="mini-select" aria-label="Plantillas de prompt"><option value="">Plantillas</option></select>
@@ -159,36 +159,6 @@
         </div>
             </div>
           </section>
-          <section class="acc" data-acc="ref">
-            <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">Personaje de referencia</span><span class="acc-sum" id="sum-ref"></span></button>
-            <div class="acc-body">
-        <div class="group edit-box">
-          <div class="row"><span class="lbl">Imagen de tu personaje (toma pelo, ojos, ropa y colores, no la pose ni el fondo)</span><button id="refClear" class="link hidden" title="Quitar la imagen">✕ Quitar</button></div>
-          <div class="edit-row">
-            <img id="refPreview" class="edit-thumb" alt="Personaje de referencia">
-            <div id="refEmpty" class="edit-thumb empty-thumb" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
-            </div>
-            <div class="edit-btns">
-              <label class="ghost sm file-btn">Elegir<input id="refFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-              <button id="refLast" class="ghost sm" disabled title="Usar la última imagen generada">↳ Última imagen</button>
-            </div>
-          </div>
-          <div class="btnrow ref-actions">
-            <button id="refRead" class="ghost sm" disabled title="Lee los rasgos del personaje (WD Tagger) y los propone como etiquetas">🔍 Leer rasgos</button>
-            <button id="refAdd" class="ghost sm" disabled title="Añade al prompt los rasgos marcados">＋ Añadir al prompt</button>
-          </div>
-          <div id="refTags" class="ref-tags"></div>
-          <label class="fast-toggle"><input id="refUse" type="checkbox" disabled> <b>Usar la imagen como referencia</b> <span class="lbl">(IP-Adapter)</span></label>
-          <div class="row lbl ref-weight" title="Más: se parece más a la imagen. Menos: el prompt y los LoRAs mandan más.">
-            <label for="refWeight">Parecido</label>
-            <input id="refWeight" type="range" min="0.3" max="1" step="0.05" value="0.7">
-            <span id="refWeightTxt">0,70</span>
-          </div>
-          <div id="refInfo" class="lbl fast-info">Elige una imagen de tu personaje. «Leer rasgos» escribe sus etiquetas (pelo, ojos, ropa…); «Usar como referencia» copia su aspecto. Después pide en el prompt la escena: «singing, holding sword»…</div>
-        </div>
-            </div>
-          </section>
           <section class="acc" data-acc="hires">
             <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">Hires fix</span><span class="acc-sum" id="sum-hires"></span></button>
             <div class="acc-body">
@@ -240,6 +210,15 @@
             <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
           </div>
           <div id="editHint" class="lbl edit-hint">Elige una foto para generar a partir de ella (imagen a imagen).</div>
+          <label class="fast-toggle ref-toggle" title="En vez de partir de la foto, toma de ella el aspecto del personaje (pelo, ojos, ropa, colores) y lo pone en lo que pidas en el prompt"><input id="refUse" type="checkbox"> <b>Usar la imagen como referencia del personaje</b></label>
+          <div id="refBox" class="hidden">
+            <div class="row lbl ref-weight" title="Más: se parece más a la imagen. Menos: el prompt y los LoRAs mandan más.">
+              <label for="refWeight">Parecido</label>
+              <input id="refWeight" type="range" min="0.3" max="1" step="0.05" value="0.7">
+              <span id="refWeightTxt">0,70</span>
+            </div>
+            <div id="refInfo" class="lbl fast-info">Toma pelo, ojos, ropa y colores del personaje, no la pose ni el fondo. Escribe en el prompt el estilo, la pose o el lugar (por ejemplo: singing, holding sword).</div>
+          </div>
           <div id="maskRow" class="row edit-mask hidden">
             <button id="maskBtn" class="ghost sm" title="Pinta la parte de la foto que se debe volver a generar">✎ Zona a cambiar</button>
             <button id="maskClear" class="link hidden" title="Quitar la zona pintada">✕ Quitar zona</button>
@@ -625,6 +604,26 @@
     <div class="dlg-foot">
       <button id="packCancel" class="ghost hidden">Cancelar descarga</button>
       <button id="packSkip" class="ghost">Omitir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Prompt desde una imagen (WD Tagger, como el teléfono) -->
+<div id="picDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="picTitle">
+  <div class="dlg dlg-pic">
+    <div class="dlg-head"><h2 id="picTitle">Prompt desde una imagen</h2><span id="picCount" class="lbl"></span><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="pic-top"><img id="picImg" class="pic-thumb" alt=""><div class="pic-opts">
+      <div class="seg" id="picKind"><button data-v="tags">Etiquetas</button><button data-v="sentence">Frase</button></div>
+      <div class="seg" id="picLen"><button data-v="0">Corto</button><button data-v="1">Medio</button><button data-v="2">Largo</button></div>
+      <label class="pic-only"><input id="picOnly" type="checkbox"> Solo el personaje (sin pose ni fondo): añade tú el estilo, la pose o el lugar</label>
+    </div></div>
+    <textarea id="picOut" class="field" rows="5" spellcheck="false"></textarea>
+    <div class="lbl">Puedes editar el texto antes de usarlo. Anima, Illustrious y Pony entienden mejor las etiquetas.</div>
+    <div class="dlg-foot">
+      <button id="picOther" class="ghost">Otra imagen</button>
+      <button id="picCopy" class="ghost">Copiar</button>
+      <button id="picAdd" class="ghost">Añadir</button>
+      <button id="picUse" class="primary">Usar</button>
     </div>
   </div>
 </div>

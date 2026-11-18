@@ -3,7 +3,7 @@
 "use strict";
 
 const Acc = {
-  defaults: { sampling: true, size: true, loras: true, ref: false, hires: false, ad: false, edit: false },
+  defaults: { sampling: true, size: true, loras: true, hires: false, ad: false, edit: false },
   el(key) { return document.querySelector(`.acc[data-acc="${key}"]`); },
   set(key, open, save = true) {
     const e = this.el(key); if (!e) return;
@@ -39,8 +39,8 @@ const Acc = {
     const hon = $("hiresOn").checked;
     put("hires", hon ? `×${$("hiresScale").value} · denoise ${$("hiresDen").value}` : "apagado", hon);
     put("ad", Ad.mode === "face" ? "caras" : Ad.mode === "hand" ? "manos" : "apagado", Ad.mode !== "off");
-    if (typeof Ref !== "undefined") put("ref", Ref.summary(), Ref.image);
-    put("edit", state.editImage ? (state.editMask ? "con zona pintada" : "con foto") : "sin foto", state.editImage);
+    const refOn = typeof Ref !== "undefined" && Ref.on();
+    put("edit", state.editImage ? (refOn ? "personaje de referencia" : state.editMask ? "con zona pintada" : "con foto") : "sin foto", state.editImage);
   },
 };
 

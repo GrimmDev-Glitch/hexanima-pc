@@ -195,7 +195,8 @@ const Mask = {
     $("maskBtn").textContent = m ? "✎ Zona pintada · editar" : "✎ Zona a cambiar";
     $("maskBtn").classList.toggle("on", m);
     $("maskClear").classList.toggle("hidden", !m);
-    if (has) $("editHint").textContent = m
+    if (has && typeof Ref !== "undefined" && Ref.on()) $("editHint").textContent = "Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño».";
+    else if (has) $("editHint").textContent = m
       ? `Solo se redibuja la zona pintada; el resto de la foto se conserva (${state.editImage.w} × ${state.editImage.h}).`
       : `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}). Usa «✎ Zona a cambiar» para cambiar solo una parte.`;
   },

@@ -513,12 +513,17 @@ async function setEditImage(src) {
 
 /** Editar una foto está dentro de Crear (como el teléfono): con foto se genera a partir de ella. */
 function setMode(mode) {
-  state.mode = mode === "edit" && state.editImage ? "edit" : "gen";
+  // con «Usar la imagen como referencia del personaje» la foto no es el punto de partida (no hay img2img)
+  const ref = typeof Ref !== "undefined" && Ref.on();
+  state.mode = mode === "edit" && state.editImage && !ref ? "edit" : "gen";
   const has = !!state.editImage;
+  $("editBox").classList.toggle("ref-on", ref);
   $("editClear").classList.toggle("hidden", !has);
   $("editBox").classList.toggle("on", has);
   if (has && typeof Acc !== "undefined") Acc.open("edit");
-  $("editHint").textContent = has ? `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).` : "Elige una foto para generar a partir de ella (imagen a imagen).";
+  $("editHint").textContent = !has ? "Elige una foto para generar a partir de ella (imagen a imagen), o márcala como referencia del personaje para copiar su aspecto."
+    : ref ? "Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño»."
+    : `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).`;
   if (!has) state.editMask = null;
   if (typeof Mask !== "undefined") { if (!has) Mask.paint = null; Mask.refresh(); }
   updateGenLabel();
@@ -560,6 +565,7 @@ $("editFile").onchange = async () => {
 $("useLast").onclick = () => { if (state.currentImage) setEditImage(state.currentImage); };
 $("editClear").onclick = () => {
   state.editImage = null;
+  if (typeof Ref !== "undefined") { $("refUse").checked = false; Ref.render(); }
   $("editPreview").classList.remove("on"); $("editPreview").removeAttribute("src"); $("editEmpty").classList.remove("off");
   setMode("gen");
 };
