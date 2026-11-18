@@ -20,7 +20,7 @@ PACKAGES = """_distutils_hack accelerate bitsandbytes certifi cffi charset_norma
 filelock fsspec ftfy google huggingface_hub idna jinja2 markupsafe mpmath numpy onnx packaging peft PIL psutil
 pynvml regex requests safetensors scipy sentencepiece socks sympy tokenizers torch torchdiffeq torchgen torchsde
 torchvision tqdm trampoline transformers typing_extensions urllib3 wcwidth yaml spandrel _cffi_backend""".split()
-SKIP = ["__pycache__", "*.pyc", "tests", "test"]
+SKIP = ["__pycache__", "*.pyc", "tests", "test", ".git"]
 
 
 def ignore(dirpath, names):
