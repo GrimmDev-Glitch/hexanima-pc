@@ -28,7 +28,7 @@ const Session = {
     $("pgTxt").textContent = this.list.length ? `${this.i + 1} / ${this.list.length}` : "0 / 0";
     $("pgPrev").disabled = this.i <= 0;
     $("pgNext").disabled = this.i >= this.list.length - 1;
-    for (const id of ["resVar", "resEdit", "upscaleBtn", "imgFav", "imgCopy", "imgFull", "imgClear"]) $(id).disabled = !c;
+    for (const id of ["resVar", "resEdit", "resFix", "upscaleBtn", "imgFav", "imgCopy", "imgFull", "imgClear"]) $(id).disabled = !c;
     if (!c) { $("resSeed").textContent = ""; $("resCompare").classList.add("hidden"); return; }
     if (!state.busy) showImage(c.src);
     $("imgFav").textContent = c.meta?.fav ? "★" : "☆";

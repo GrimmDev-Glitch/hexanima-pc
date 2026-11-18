@@ -28,7 +28,7 @@ async function copyText(text) {
 function openModal(id) { $(id).classList.remove("hidden"); }
 function closeModal(id) { $(id).classList.add("hidden"); }
 for (const m of document.querySelectorAll(".modal")) {
-  m.addEventListener("mousedown", (e) => { if (e.target === m && m.id !== "askDlg") closeModal(m.id); });
+  m.addEventListener("mousedown", (e) => { if (e.target === m && !m.dataset.sticky) closeModal(m.id); });
   for (const b of m.querySelectorAll("[data-close]")) b.addEventListener("click", () => closeModal(m.id));
 }
 document.addEventListener("keydown", (e) => {

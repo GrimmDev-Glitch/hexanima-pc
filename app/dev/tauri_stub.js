@@ -76,6 +76,7 @@
     upscaler_download: async () => 'ok',
     detector_status: () => [{ kind: 'face', installed: true }, { kind: 'hand', installed: false }],
     detector_install: async () => 'ok',
+    ad_detections: () => ({ seq: 0, items: [] }),
     store_get: ({ key }) => { try { return JSON.parse(localStorage.getItem("stub:" + key)); } catch { return null; } },
     store_set: ({ key, value }) => { localStorage.setItem("stub:" + key, JSON.stringify(value)); },
   };

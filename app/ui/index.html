@@ -64,6 +64,8 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v18M7 8l-4 4 4 4M17 8l4 4-4 4"/></svg></button>
             <button id="upscaleBtn" aria-label="Ampliar" class="ibtn" title="Ampliar ×2 / ×4 (Real-ESRGAN o UltraSharp)">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+            <button id="resFix" aria-label="Correcciones" class="ibtn" title="Correcciones: ruido, resolución, cara, manos, detalles…" disabled>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg></button>
             <span class="sep" aria-hidden="true"></span>
             <button id="imgFav" class="ibtn" title="Favorita" aria-label="Favorita">☆</button>
             <button id="imgCopy" class="ibtn" title="Copiar imagen (para pegar en otra app)" aria-label="Copiar imagen">
@@ -348,6 +350,7 @@
             <button id="hCopyPrompt" class="ghost sm">Copiar prompt</button>
             <button id="hCopyImg" class="ghost sm">Copiar imagen</button>
             <button id="hUpscale" class="ghost sm hidden">Ampliar</button>
+            <button id="hFix" class="ghost sm">Correcciones</button>
             <button id="hReveal" class="ghost sm">Mostrar en la carpeta</button>
             <button id="hTrash" class="ghost sm danger-txt">Mover a la papelera</button>
           </div>
@@ -449,7 +452,7 @@
 </div>
 
 <!-- Diálogo genérico (texto / elegir / confirmar) -->
-<div id="askDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+<div id="askDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="askTitle">
   <div class="dlg dlg-ask">
     <div class="dlg-head"><h2 id="askTitle"></h2></div>
     <div id="askMsg" class="lbl"></div>
@@ -483,6 +486,39 @@
 </div>
 
 <!-- Antes / después -->
+<!-- Correcciones (como la pantalla del teléfono) -->
+<div id="fixDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fixTitle">
+  <div class="dlg dlg-fix">
+    <div class="dlg-head"><h2 id="fixTitle">Correcciones</h2><span id="fixStatus" class="lbl"></span>
+      <button id="fixClose" class="x dlg-close" aria-label="Cerrar">×</button></div>
+    <div class="fix-body">
+      <div class="fix-left">
+        <div class="cmp-stage fix-stage">
+          <div id="fixBox" class="cmp-box">
+            <img id="fixAfter" alt="Alternativa"><div id="fixClip" class="cmp-clip"><img id="fixBefore" alt="Base"></div>
+            <div id="fixLine" class="cmp-line"></div><span id="fixTagL" class="cmp-tag l">Original</span><span id="fixTagR" class="cmp-tag r">Alt. 1</span>
+          </div>
+        </div>
+        <div class="lbl fix-cmp-hint">Arrastra sobre la imagen para comparar</div>
+        <div id="fixStrip" class="fix-strip"></div>
+      </div>
+      <div class="fix-side">
+        <div class="fix-row"><button id="fixUse" class="primary sm">Usar esta</button><button id="fixDrop" class="ghost sm">Descartar</button></div>
+        <div class="fix-row"><button id="fixUndo" class="ghost sm">↶ Deshacer</button><button id="fixRedo" class="ghost sm">Rehacer ↷</button></div>
+        <div class="chip-lbl">CORRECCIÓN</div>
+        <div id="fixCats" class="chips"></div>
+        <div id="fixPanel" class="fix-panel"></div>
+        <button id="fixGen" class="primary">Generar alternativa</button>
+        <button id="fixStop" class="ghost hidden">Detener</button>
+        <div class="fix-foot">
+          <button id="fixSave" class="ghost">Guardar en el Historial</button>
+          <div class="lbl">La imagen original no se modifica: se guarda una nueva con las correcciones aceptadas.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="cmpDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cmpTitle">
   <div class="dlg dlg-cmp">
     <div class="dlg-head"><h2 id="cmpTitle">Antes / después</h2><span class="lbl">Arrastra sobre la imagen para mover la línea.</span>
@@ -547,5 +583,6 @@
 <script src="session.js"></script>
 <script src="tools.js"></script>
 <script src="mask.js"></script>
+<script src="corrections.js"></script>
 </body>
 </html>
