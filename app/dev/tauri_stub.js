@@ -74,6 +74,8 @@
     lora_fetch_info: async () => ({ found: true }),
     upscaler_status: () => [{ kind: 'fast', stem: 'RealESRGAN_x4plus_anime_6B', installed: true }, { kind: 'detail', stem: '4x-UltraSharp', installed: false }],
     upscaler_download: async () => 'ok',
+    detector_status: () => [{ kind: 'face', installed: true }, { kind: 'hand', installed: false }],
+    detector_install: async () => 'ok',
     store_get: ({ key }) => { try { return JSON.parse(localStorage.getItem("stub:" + key)); } catch { return null; } },
     store_set: ({ key, value }) => { localStorage.setItem("stub:" + key, JSON.stringify(value)); },
   };

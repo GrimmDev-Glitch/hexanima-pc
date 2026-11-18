@@ -8,7 +8,7 @@ Fuente: el código de la app Android (`Hexanima/app/src/com/hexanima/npu/*.java`
 
 > **Avance (17 nov 2026):** fase 1 hecha — barra de la imagen (solo iconos, fuera del lienzo), visor, Otra vez / Variaciones, antes/después, Ampliar (Real-ESRGAN / UltraSharp ×2/×4), selector de modelo con tarjetas, Cargar / Liberar, menú ⋯, plantillas de configuración, ajustes desde PNG, # Etiquetas, autocompletar Danbooru, negativo (Predeterminado / Plantillas / Borrar), contador de tokens, ↺. Historial completo con filtros y selección múltiple; papelera = Papelera de reciclaje de Windows (en lugar de la de 30 días). Exportar ZIP desde el Historial ✅.
 >
-> **Fase 2 (en curso):** ✎ Zona a cambiar (editor de máscara: Pincel / Borrador / Mover, tamaño, Deshacer / Rehacer, Invertir, Limpiar, zoom con la rueda) ✅ probado con el motor real; Hires fix (escala / denoise / pasos / ampliador) ✅. Extra pedido: **Colecciones de Civitai** (☆ en las tarjetas y en la ficha, carpetas en LoRAs → COLECCIONES, «Descargar las que faltan», «♥ Traer mis favoritos de Civitai»). Siguiente: ADetailer (necesita detectores YOLOv8 convertidos), Correcciones, Comparar 2×2, hojas de contactos, ✦ Estilo ChatGPT.
+> **Fase 2 (en curso):** ✎ Zona a cambiar (editor de máscara: Pincel / Borrador / Mover, tamaño, Deshacer / Rehacer, Invertir, Limpiar, zoom con la rueda) ✅ probado con el motor real; Hires fix (escala / denoise / pasos / ampliador) ✅. Extra pedido: **Colecciones de Civitai** (☆ en las tarjetas y en la ficha, carpetas en LoRAs → COLECCIONES, «Descargar las que faltan», «♥ Traer mis favoritos de Civitai»). ADetailer Caras / Manos ✅ (detectores YOLOv8 de Bingsu/adetailer descargados y convertidos por la app, sin Python; un detector por motor, cambiarlo reinicia el motor). Siguiente: Correcciones, Comparar 2×2, hojas de contactos, ✦ Estilo ChatGPT.
 
 ---
 
@@ -38,7 +38,7 @@ En el teléfono es una sola columna con secciones plegables. En PC se reparte en
 | POSE (fuerza 0,5–2,5) | ⬜ | Fase 5. |
 | LORA: biblioteca / importar / Civitai / intensidad | ✅ | Igual que el teléfono, con `<lora:nombre:fuerza>` en el prompt. |
 | **✦ Estilo ChatGPT** (descarga el LoRA gpt-image-2) | ⬜ | Fase 2. |
-| EXTRAS: vista previa en vivo, **Hires fix** (escala/denoise/pasos), **ADetailer caras / manos**, **Detector…**, **Presets**, **+ Cola**, **⊞ Comparar 2×2**, **▶** cola | 🟡 | Vista previa ✅, + Cola ✅, Hires fix ✅ (Controles). Falta ADetailer (YOLOv8 convertido a safetensors, `--ad-model`). |
+| EXTRAS: vista previa en vivo, **Hires fix** (escala/denoise/pasos), **ADetailer caras / manos**, **Detector…**, **Presets**, **+ Cola**, **⊞ Comparar 2×2**, **▶** cola | 🟡 | Vista previa ✅, + Cola ✅, Hires fix ✅, ADetailer caras / manos ✅ (Controles; el detector se descarga y se convierte solo). |
 | IMAGEN: TAMAÑO (Vertical / Horizontal / Cuadrado / Personalizado, por familia), **⇄**, SEED + 🎲 | ✅ | Presets por familia: parcial. |
 | Barra inferior: progreso, estado "(i/N) Paso x/y · quedan ~", **×N** (1–999, cambia en marcha), **Generar · ~Ns** / **Detener** / **Obtener un modelo** | 🟡 | Falta "Obtener un modelo" sin modelos. |
 | Comodines `{a|b}`, **hojas de contacto** de 9, cuadrícula 2×2 rotulada | 🟡 | Comodines ✅. |

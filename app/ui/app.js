@@ -191,8 +191,11 @@ function engineFor(opt) {
 
 async function startEngine(engine) {
   setStatus("Iniciando motor…");
-  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null };
+  // ADetailer: el detector elegido se carga al arrancar el motor (uno a la vez).
+  const ad = typeof Ad !== "undefined" ? Ad.wanted() : null;
+  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad };
   const r = await invoke("start_server", { opts, engine: engine || null });
+  state.adLoaded = ad;
   state.api = `http://127.0.0.1:${r.port}`;
   state.engine = r.engine; state.device = r.device;
   if (state.hw) $("hwProfile").textContent = `Perfil: ${({ bajo: "Bajo", medio: "Medio", alto: "Alto" })[state.hw.profile] || state.hw.profile} · ${r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
@@ -384,6 +387,8 @@ async function runOne(opt, seed) {
     // «✎ Zona a cambiar»: blanco = se vuelve a generar, negro = se conserva.
     ...(editing && state.editMask ? { mask_image: state.editMask.src } : {}),
     ...(Hires.body(w, h) ? { hires: Hires.body(w, h) } : {}),
+    // Con un detector cargado, ADetailer corre siempre: si está en "No" se le pide una confianza imposible.
+    ...(state.adLoaded ? { extra_ad_args: Ad.args() } : {}),
     prompt: loraSpec.prompt,
     negative_prompt: $("neg").value.trim(),
     clip_skip: +$("clipskip").value,
@@ -422,7 +427,7 @@ async function runOne(opt, seed) {
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
         steps, cfg, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
-        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null,
+        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: Ad.active() ? { mode: Ad.mode, strength: Ad.den() } : null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
       };
@@ -537,8 +542,9 @@ $("upscaleBtn").onclick = () => Upscale.open();
 async function generate(opts = {}) {
   const opt = currentOption();
   if (!opt || state.busy) return;
-  if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
+  if (!(await Ad.ensure())) return;
+  if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   
   const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value, mask: state.editMask } : null;
   if (opts.init) { state.mode = "edit"; state.editImage = opts.init; state.editMask = opts.mask || null; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }

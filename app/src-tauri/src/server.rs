@@ -21,6 +21,8 @@ pub struct ServerOpts {
     pub weight_type: Option<String>,
     /// Opciones extra para el motor, como COMMANDLINE_ARGS de Forge.
     pub extra_args: Option<String>,
+    /// Detector de ADetailer cargado en el motor: "face" | "hand" (uno a la vez).
+    pub ad_model: Option<String>,
 }
 
 pub struct Server {
@@ -74,6 +76,11 @@ impl Server {
         if wt != "f16" && !wt.is_empty() {
             args.push("--type".into());
             args.push(wt);
+        }
+        // ADetailer: el motor solo admite un detector; cambiar de caras a manos reinicia el motor.
+        if let Some(det) = opts.ad_model.as_deref().and_then(|k| crate::yolo::path_for(root, k)) {
+            args.push("--ad-model".into());
+            args.push(det.display().to_string());
         }
         if let Some(extra) = &opts.extra_args {
             args.extend(extra.split_whitespace().map(String::from));

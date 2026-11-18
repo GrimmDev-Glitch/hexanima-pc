@@ -248,15 +248,21 @@ pub fn upscaler_download(app: &AppHandle, root: &Path, kind: &str) -> Result<Str
     let d = root.join("models").join("upscalers");
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     let part = d.join(format!("{file}.part"));
-    let id = format!("up-{kind}");
+    fetch_to(app, url, &part, &format!("up-{kind}"))?;
+    fs::rename(&part, d.join(file)).map_err(|e| e.to_string())?;
+    Ok(file.to_string())
+}
+
+/// Descarga un archivo público a `part` con progreso ("dl-progress" con ese `id`).
+pub fn fetch_to(app: &AppHandle, url: &str, part: &Path, id: &str) -> Result<(), String> {
     let mut resp = get(url, None)?;
     let total = resp.content_length().unwrap_or(0);
-    let mut out = File::create(&part).map_err(|e| e.to_string())?;
+    let mut out = File::create(part).map_err(|e| e.to_string())?;
     let mut buf = vec![0u8; 1 << 20];
     let mut done = 0u64;
     let mut last = Instant::now();
     loop {
-        let n = resp.read(&mut buf).map_err(|e| { let _ = fs::remove_file(&part); format!("Falló la descarga: {e}") })?;
+        let n = resp.read(&mut buf).map_err(|e| { let _ = fs::remove_file(part); format!("Falló la descarga: {e}") })?;
         if n == 0 { break; }
         out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
         done += n as u64;
@@ -267,12 +273,11 @@ pub fn upscaler_download(app: &AppHandle, root: &Path, kind: &str) -> Result<Str
     }
     drop(out);
     if total > 0 && done < total {
-        let _ = fs::remove_file(&part);
+        let _ = fs::remove_file(part);
         return Err("La descarga se cortó antes de terminar".into());
     }
-    fs::rename(&part, d.join(file)).map_err(|e| e.to_string())?;
     let _ = app.emit("dl-progress", json!({ "id": id, "done": done, "total": total, "state": "done" }));
-    Ok(file.to_string())
+    Ok(())
 }
 
 fn dest_dir(root: &Path, kind: &str) -> PathBuf {

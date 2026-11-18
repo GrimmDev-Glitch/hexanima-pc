@@ -204,6 +204,18 @@
             <button id="maskClear" class="link hidden" title="Quitar la zona pintada">✕ Quitar zona</button>
           </div>
         </div>
+        <div id="adBox" class="group divider hires-box ad-box">
+          <div class="row hires-head"><span class="hires-t">ADetailer</span><span id="adSum" class="lbl">Redibuja caras o manos con más detalle</span></div>
+          <div id="adSeg" class="seg">
+            <button class="ghost sm" data-ad="off">No</button>
+            <button class="ghost sm" data-ad="face" title="Encuentra las caras y las redibuja con más detalle (descarga de 6 MB la primera vez)">Caras</button>
+            <button class="ghost sm" data-ad="hand" title="Encuentra las manos y las redibuja con más detalle (descarga de 6 MB la primera vez)">Manos</button>
+          </div>
+          <div id="adOpts" class="row lbl edit-strength hidden" title="Cuánto se rehace cada cara o mano: 30 % conserva, 60 % inventa más">
+            <label for="adDen">Cuánto rehace</label>
+            <div class="num"><input id="adDen" class="field" type="number" min="10" max="90" step="5" value="40" inputmode="numeric"><span>%</span></div>
+          </div>
+        </div>
         <div id="hiresBox" class="group divider hires-box">
           <label class="row hires-head"><span class="hires-t"><input id="hiresOn" type="checkbox"> Hires fix</span><span id="hiresSum" class="lbl">Un segundo paso a mayor tamaño (más lento)</span></label>
           <div id="hiresOpts" class="hires-opts hidden">

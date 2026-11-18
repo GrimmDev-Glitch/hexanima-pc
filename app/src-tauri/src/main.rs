@@ -6,6 +6,7 @@ mod gallery;
 mod hw;
 mod lora;
 mod server;
+mod yolo;
 
 use base64::Engine as _;
 use serde_json::json;
@@ -248,6 +249,21 @@ async fn upscaler_download(app: tauri::AppHandle, kind: String) -> Result<String
         .map_err(|e| e.to_string())?
 }
 
+/// Detectores de ADetailer (caras / manos) instalados.
+#[tauri::command]
+fn detector_status(state: State<AppState>) -> serde_json::Value {
+    yolo::status(&state.root)
+}
+
+/// Descarga el detector YOLOv8 y lo convierte al formato del motor (unos 6 MB).
+#[tauri::command]
+async fn detector_install(app: tauri::AppHandle, kind: String) -> Result<String, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || yolo::install(&app, &root, &kind))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Muestra la imagen seleccionada en el Explorador.
 #[tauri::command]
 fn gallery_reveal(state: State<AppState>, name: String) -> Result<(), String> {
@@ -483,6 +499,8 @@ fn main() {
             model_import,
             upscaler_status,
             upscaler_download,
+            detector_status,
+            detector_install,
             lora_list,
             lora_set_meta,
             lora_trash,

@@ -267,3 +267,73 @@ const Hires = {
 for (const id of ["hiresOn", "hiresScale", "hiresDen", "hiresSteps", "hiresUp"]) $(id).addEventListener("change", () => Hires.save());
 $("hiresUp").addEventListener("pointerdown", () => Hires.fillUpscalers());
 Hires.load();
+
+// ---------- ADetailer (caras / manos), como EXTRAS del teléfono ----------
+// El motor carga un solo detector (--ad-model): elegir otro reinicia el motor y recarga el modelo.
+const Ad = {
+  mode: "off", installed: {},
+
+  async load() {
+    const s = store.get("adetailer", {});
+    this.mode = ["face", "hand"].includes(s.mode) ? s.mode : "off";
+    $("adDen").value = String(s.den ?? 40);
+    try { for (const d of await invoke("detector_status")) this.installed[d.kind] = d.installed; } catch { /* vista previa */ }
+    if (this.mode !== "off" && !this.installed[this.mode]) this.mode = "off";
+    this.refresh();
+  },
+  save() { store.set("adetailer", { mode: this.mode, den: this.den() }); this.refresh(); },
+  den() { return Math.min(90, Math.max(10, clampNum($("adDen"), 40))); },
+  active() { return this.mode !== "off" && state.adLoaded === this.mode; },
+  /** Detector con el que arrancar el motor: el elegido o, si está en "No", el que ya estaba cargado. */
+  wanted() { return this.mode !== "off" ? this.mode : null; },
+  args() {
+    return this.active() ? `confidence=0.3,denoising_strength=${(this.den() / 100).toFixed(2)},mask_blur=4,inpaint_padding=32` : "confidence=0.999";
+  },
+  refresh() {
+    for (const b of document.querySelectorAll("#adSeg button")) b.classList.toggle("on", b.dataset.ad === this.mode);
+    const on = this.mode !== "off";
+    $("adOpts").classList.toggle("hidden", !on);
+    $("adBox").classList.toggle("on", on);
+    $("adSum").textContent = on ? (this.mode === "face" ? "Caras: se redibujan al terminar cada imagen" : "Manos: se redibujan al terminar cada imagen") : "Redibuja caras o manos con más detalle";
+  },
+
+  async pick(mode) {
+    if (mode === this.mode) return;
+    if (mode !== "off" && !this.installed[mode]) {
+      const name = mode === "face" ? "caras" : "manos";
+      const ok = await ask({ title: `Detector de ${name}`, msg: `ADetailer necesita un detector de ${name} (YOLOv8, unos 6 MB, de huggingface.co/Bingsu/adetailer). Se descarga una sola vez y se guarda en models\\detectors.`,
+        buttons: [{ label: "Cancelar", value: false }, { label: "Descargar", value: true, primary: true }] });
+      if (!ok) return;
+      try {
+        this.dl = "det-" + mode;
+        toast(`Descargando el detector de ${name}…`, 60000);
+        await invoke("detector_install", { kind: mode });
+        this.installed[mode] = true;
+        toast(`✓ Detector de ${name} listo`, 3000);
+      } catch (e) { toast("No se pudo instalar el detector: " + (e.message || e), 6000); return; }
+      finally { this.dl = null; }
+    }
+    this.mode = mode;
+    this.save();
+    if (mode !== "off" && state.adLoaded !== mode) setStatus(`ADetailer (${mode === "face" ? "caras" : "manos"}): el motor se reinicia al generar para cargar el detector.`);
+  },
+
+  /** Antes de generar: si el detector cargado no es el elegido, reinicia el motor y recarga el modelo. */
+  async ensure() {
+    if (this.mode === "off" || state.adLoaded === this.mode) return true;
+    if (state.busy) return false;
+    setStatus("Reiniciando el motor para cargar el detector de ADetailer…");
+    state.loaded = null;
+    if (!(await startEngine(engineFor(currentOption())))) return false;
+    await refreshEngineMenus();
+    return true;
+  },
+};
+for (const b of document.querySelectorAll("#adSeg button")) b.onclick = () => Ad.pick(b.dataset.ad);
+$("adDen").addEventListener("change", () => Ad.save());
+window.__TAURI__?.event?.listen?.("dl-progress", (ev) => {
+  const p = ev.payload;
+  if (!Ad.dl || p.id !== Ad.dl || p.state !== "downloading") return;
+  toast(`Descargando el detector… ${(p.done / 1048576).toFixed(1)}${p.total ? " / " + (p.total / 1048576).toFixed(1) : ""} MB`, 60000);
+});
+Ad.load();
