@@ -183,9 +183,15 @@ async function refreshMemory() {
 // ---------- motor ----------
 /** Motor para una familia: Anima va mejor con CUDA en NVIDIA (su VAE tarda ~16 s en vez de
  *  ~67 s con Vulkan por mosaicos, medido en GTX 1650); SDXL va mejor con Vulkan en GTX. */
+/** Motor para el modelo. Automático: CUDA en cualquier NVIDIA si está instalado. En la GTX 1650 Vulkan
+ *  es algo más rápido por paso (~14 s frente a ~24 s en SDXL 832×1216) pero hace fallar la gráfica cada
+ *  2-3 imágenes (ErrorDeviceLost) y a ratos baja a 29 s/paso; CUDA hizo 3 de 3 sin fallos.
+ *  En Ajustes se puede forzar CUDA o Vulkan. */
 function engineFor(opt) {
   const engines = state.engines || [];
-  if (opt?.family === "anima" && state.hw?.gpu?.vendor === "nvidia" && engines.includes("cuda")) return "cuda";
+  const pref = store.get("enginePref", "auto");
+  if (pref !== "auto" && engines.includes(pref)) return pref;
+  if (state.hw?.gpu?.vendor === "nvidia" && engines.includes("cuda")) return "cuda";
   return state.hw?.engine;
 }
 
@@ -275,7 +281,7 @@ async function loadModel() {
   if (!opt || state.busy) return;
   const want = engineFor(opt);
   if (want && state.engine && want !== state.engine) {
-    setStatus(`Cambiando al motor ${want.toUpperCase()} (más rápido para este modelo)…`);
+    setStatus(`Cambiando al motor ${want.toUpperCase()}…`);
     state.loaded = null;
     if (!(await startEngine(want))) return;
     await refreshEngineMenus();
@@ -701,6 +707,8 @@ for (const n of document.querySelectorAll(".nav")) {
 }
 
 $("optOffload").checked = store.get("offload", true);
+$("optEngine").value = store.get("enginePref", "auto");
+$("optEngine").onchange = () => { store.set("enginePref", $("optEngine").value); toast("Se aplica al pulsar Reiniciar motor (o al cargar otro modelo)", 4000); };
 $("optExtra").value = store.get("extra", "");
 $("optHideConsole").checked = store.get("hideConsole", true);
 $("optHideConsole").onchange = async () => {
