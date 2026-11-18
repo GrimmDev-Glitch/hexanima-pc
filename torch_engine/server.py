@@ -95,6 +95,8 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, [{"name": s, "label": s} for s in SCHEDULERS])
             if p == "/sdapi/v1/upscalers":
                 return self.send(200, upscalers())
+            if p == "/hexanima/v1/reference/status":
+                return self.send(200, need_core().ref_status())
             if p == "/sdapi/v1/loras":
                 d = ARGS.lora_model_dir
                 return self.send(200, [{"name": os.path.splitext(n)[0], "path": os.path.join(d, n)} for n in sorted(os.listdir(d)) if n.lower().endswith(EXTS)])
@@ -134,6 +136,21 @@ class H(BaseHTTPRequestHandler):
                     boxes = c.detector(b.get("kind", "face")).detect(img, float(b.get("confidence") or 0.3))
                 return self.send(200, {"items": [{"x1": x1, "y1": y1, "x2": x2, "y2": y2, "confidence": c} for x1, y1, x2, y2, c in boxes],
                                        "width": img.width, "height": img.height})
+            if p == "/hexanima/v1/tag":
+                b = self.body()
+                img = decode_image(b["image"])
+                c = need_core()
+                t = time.time()
+                tags = c.tagger().tag(img, float(b.get("general") or 0.35), float(b.get("character") or 0.85))
+                return self.send(200, {"tags": [{"name": n, "score": round(sc, 3), "category": cat} for n, sc, cat in tags],
+                                       "seconds": round(time.time() - t, 2)})
+            if p == "/hexanima/v1/reference/encode":
+                b = self.body()
+                c = need_core()
+                t = time.time()
+                with RUN:
+                    c.ipa_embeds(b["image"])
+                return self.send(200, {"ok": True, "seconds": round(time.time() - t, 1)})
             if p == "/sdcpp/v1/upscale":
                 b = self.body()
                 c = need_core()

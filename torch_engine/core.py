@@ -143,6 +143,7 @@ def run_img_gen(job, body):
     loras = [(safe_join(ARGS.lora_model_dir, l["path"]), float(l.get("multiplier", 1.0))) for l in body.get("lora") or []]
     want_preview = bool(body.get("preview"))
     t0 = time.time()
+    ipa = ipa_for(body, lambda st: prog(st))
 
     def prog(stage, done=None, total=None):
         if job.get("cancel"):
@@ -165,7 +166,7 @@ def run_img_gen(job, body):
         return ENGINE.generate2(body.get("prompt", ""), body.get("negative_prompt", ""), pw, ph, steps_, cfg, seed,
                                 sampler=sampler, scheduler=scheduler, clip_skip=clip_skip, loras=loras,
                                 init_latent=init_latent, strength=strength, mask=mask_lat(mask, pw, ph) if mask is not None else None,
-                                step_cb=cb, stage_cb=lambda s: prog(s))
+                                step_cb=cb, stage_cb=lambda s: prog(s), ipa=ipa)
 
     def mask_lat(m, pw, ph):
         a = np.asarray(m.resize((pw // 8, ph // 8), Image.BILINEAR)).astype(np.float32) / 255.0
@@ -203,7 +204,7 @@ def run_img_gen(job, body):
     if ad.get("model") in ("face", "hand"):
         prog("adetailer")
         out = adetail(out, ad, body, w=out.width, h=out.height, steps=steps, cfg=cfg, seed=seed, sampler=sampler,
-                      scheduler=scheduler, clip_skip=clip_skip, loras=loras, prog=prog)
+                      scheduler=scheduler, clip_skip=clip_skip, loras=loras, prog=prog, ipa=ipa)
     if init is not None and body.get("mask_image"):
         # pegar solo la zona pintada: el resto queda idéntico a la foto
         m = decode_image(body["mask_image"]).convert("L").resize(out.size, Image.BILINEAR)
@@ -226,7 +227,7 @@ def detector(kind):
     return _DET[kind]
 
 
-def adetail(pil, ad, body, w, h, steps, cfg, seed, sampler, scheduler, clip_skip, loras, prog):
+def adetail(pil, ad, body, w, h, steps, cfg, seed, sampler, scheduler, clip_skip, loras, prog, ipa=None):
     from PIL import ImageDraw, ImageFilter
     det = detector(ad["model"])
     boxes = det.detect(pil, float(ad.get("confidence") or 0.3))
@@ -252,7 +253,7 @@ def adetail(pil, ad, body, w, h, steps, cfg, seed, sampler, scheduler, clip_skip
         lat = ENGINE.encode(to_tensor(crop, tw, th))
         mk = torch.from_numpy(np.asarray(m.resize((tw // 8, th // 8), Image.BILINEAR)).astype(np.float32) / 255.0)[None, None]
         res = ENGINE.generate2(prompt, neg, tw, th, steps, cfg, seed + i + 1, sampler=sampler, scheduler=scheduler,
-                               clip_skip=clip_skip, loras=loras, init_latent=lat, strength=strength, mask=mk)
+                               clip_skip=clip_skip, loras=loras, init_latent=lat, strength=strength, mask=mk, ipa=ipa)
         piece = to_pil(res).resize(crop.size, Image.LANCZOS)
         pil.paste(piece, (int(cx1), int(cy1)), m)
     return pil
@@ -311,3 +312,70 @@ def worker():
         finally:
             pass
             torch.cuda.empty_cache()
+
+
+# ---------- Leer rasgos (WD Tagger) y personaje de referencia (IP-Adapter) ----------
+_TAG = {}
+_IPA = {"path": None, "sd": None}
+_EMB = {}
+REF_FILES = {
+    "tagger": ("tagger", "wd-vit-tagger-v3.safetensors"),
+    "tagger_tags": ("tagger", "wd-vit-tagger-v3.csv"),
+    "ipadapter": ("ipadapter", "noobIPAMARK1_mark1.safetensors"),
+    "clip_vision": ("clip_vision", "clip_vision_g.safetensors"),
+}
+
+
+def ref_path(kind):
+    d, f = REF_FILES[kind]
+    return os.path.join(ARGS.model_dir, d, f)
+
+
+def ref_status():
+    return {k: os.path.isfile(ref_path(k)) for k in REF_FILES}
+
+
+def tagger():
+    if "m" not in _TAG:
+        if not (os.path.isfile(ref_path("tagger")) and os.path.isfile(ref_path("tagger_tags"))):
+            raise ValueError("Falta el lector de rasgos (WD Tagger): se descarga desde «Personaje de referencia»")
+        from tagger import WDTagger
+        _TAG["m"] = WDTagger(ref_path("tagger"), ref_path("tagger_tags"))
+    return _TAG["m"]
+
+
+def ipa_embeds(data_url, prog=None):
+    """Embedding de CLIP de la imagen de referencia, con caché en memoria y en cache/ipa (un archivo pequeño)."""
+    import hashlib
+    raw = data_url.split(",", 1)[1] if "," in data_url else data_url
+    key = hashlib.sha1(raw.encode()).hexdigest()[:20]
+    if key in _EMB:
+        return _EMB[key]
+    cdir = os.path.join(os.path.dirname(os.path.abspath(ARGS.model_dir)), "cache", "ipa")
+    cpath = os.path.join(cdir, key + ".pt")
+    if os.path.isfile(cpath):
+        _EMB[key] = torch.load(cpath, map_location="cpu", weights_only=True)
+        return _EMB[key]
+    if not os.path.isfile(ref_path("clip_vision")):
+        raise ValueError("Falta el codificador de imágenes (CLIP ViT-bigG): se descarga desde «Personaje de referencia»")
+    if prog: prog("reference")
+    t = time.time()
+    e = ht.encode_reference(decode_image(data_url), ref_path("clip_vision"))
+    log(f"referencia codificada en {time.time() - t:.1f} s")
+    os.makedirs(cdir, exist_ok=True)
+    torch.save(e, cpath)
+    _EMB[key] = e
+    return e
+
+
+def ipa_for(body, prog=None):
+    spec = body.get("ip_adapter") or {}
+    if not spec.get("image"):
+        return None
+    if not os.path.isfile(ref_path("ipadapter")):
+        raise ValueError("Falta el IP-Adapter: se descarga desde «Personaje de referencia»")
+    emb = ipa_embeds(spec["image"], prog)
+    if _IPA["path"] != ref_path("ipadapter"):
+        _IPA.update(path=ref_path("ipadapter"), sd=ht.load_ipadapter(ref_path("ipadapter")))
+    return {"adapter": _IPA["sd"], "embeds": emb, "weight": float(spec.get("weight", 0.7)),
+            "start": float(spec.get("start", 0.0)), "end": float(spec.get("end", 1.0))}

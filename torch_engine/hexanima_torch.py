@@ -23,6 +23,12 @@ _shared.opts = types.SimpleNamespace(sdxl_crop_left=0, sdxl_crop_top=0, sdxl_ref
                                      sdxl_refiner_high_aesthetic_score=6.0, emphasis="Original", sd3_enable_t5=False)
 _modules = types.ModuleType("modules"); _modules.shared = _shared; _modules.__path__ = []
 sys.modules.setdefault("modules", _modules); sys.modules["modules.shared"] = _shared
+_mf = types.ModuleType("modules_forge"); _mf.__path__ = []
+_mfs = types.ModuleType("modules_forge.shared"); _mfs.controlnet_dir = _mfs.models_path = _HERE
+sys.modules.setdefault("modules_forge", _mf); sys.modules.setdefault("modules_forge.shared", _mfs)
+_IPA_DIR = os.path.join(FORGE, "extensions-builtin", "sd_forge_ipadapter")
+if os.path.isdir(_IPA_DIR) and _IPA_DIR not in sys.path:
+    sys.path.insert(0, _IPA_DIR)
 _ARGV = sys.argv[:]
 sys.argv = [sys.argv[0]]  # backend.args lee la línea de órdenes: que use sus valores por defecto
 
@@ -317,7 +323,7 @@ class Engine:
 
     @torch.inference_mode()
     def generate2(self, prompt, negative, width, height, steps, cfg, seed, sampler="euler_a", scheduler="discrete",
-                  clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None):
+                  clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None, ipa=None):
         """Devuelve el tensor de imagen [1,3,H,W] en -1..1. img2img con init_latent + strength;
         zona a cambiar con mask [1,1,h/8,w/8] (1 = rehacer)."""
         if stage_cb: stage_cb("conditioning")
@@ -328,6 +334,8 @@ class Engine:
         uncond = sd.get_learned_conditioning(Prompts([negative], width, height, negative=True))
 
         unet = sd.forge_objects.unet
+        if ipa:  # personaje de referencia: {"adapter": state dict, "embeds": tensor, "weight", "start", "end"}
+            unet = apply_ipadapter(unet, ipa["adapter"], ipa["embeds"], ipa.get("weight", 0.7), ipa.get("start", 0.0), ipa.get("end", 1.0))
         g = torch.Generator(device="cpu").manual_seed(int(seed))
         noise = torch.randn([1, 4, height // 8, width // 8], generator=g, dtype=torch.float32)
         sigmas = self.sigmas(steps, scheduler)
@@ -410,3 +418,98 @@ if __name__ == "__main__":
                          progress=lambda i, n, dt: print(f"[hexanima] paso {i}/{n} · {dt:.2f}s", flush=True))
     Image.fromarray(img).save(a.out)
     print(f"[hexanima] listo en {time.time() - t:.1f}s · prompt {st['cond']:.1f}s · muestreo {st['sampling']:.1f}s ({st['per_step']:.2f} s/paso) · VAE {st['decode']:.1f}s", flush=True)
+
+
+
+# ---------- Personaje de referencia: IP-Adapter (Forge / cubiq, GPL-3.0) ----------
+@torch.inference_mode()
+def encode_reference(pil, clip_vision_path):
+    """image_embeds de CLIP ViT (bigG o H) de una imagen, para el IP-Adapter. Se calcula una vez por imagen:
+    el codificador (3,7 GB) se lee del archivo sin copiarlo (assign=True), va a la gráfica en fp16 por
+    partes si no cabe, y se libera al terminar. Devuelve un tensor [1, 1280] (o [1, 1024]) en CPU."""
+    import gc
+    import numpy as np
+    from backend.patcher import clipvision as cv
+    memory_management.unload_all_models()
+    _MMAP["on"] = True
+    try:
+        sd = _load_torch_file(clip_vision_path)
+    finally:
+        _MMAP["on"] = False
+    if "visual.transformer.resblocks.0.attn.in_proj_weight" in sd:
+        sd = cv.convert_to_transformers(sd, "visual.")
+    cfg = cv.CLIP_VISION_G if "vision_model.encoder.layers.47.layer_norm1.weight" in sd else cv.CLIP_VISION_H
+    real = memory_management.should_use_fp16
+    memory_management.should_use_fp16 = lambda *a, **k: True   # fp16 aunque la GTX no lo use para el UNet
+    try:
+        clip = cv.ClipVisionModel(cfg)
+    finally:
+        memory_management.should_use_fp16 = real
+    clip.model.load_state_dict({k: v.to(torch.float16) if v.is_floating_point() else v for k, v in sd.items()}, strict=False, assign=True)
+    _MMAP["ptrs"].clear()
+    del sd
+    try:
+        memory_management.load_model_gpu(clip.patcher)
+        img = torch.from_numpy(np.asarray(pil.convert("RGB")).astype(np.float32) / 255.0)[None]
+        px = cv.clip_preprocess(img.to(clip.load_device)).to(torch.float16)
+        out = clip.model(pixel_values=px).image_embeds.float().cpu()
+    finally:
+        memory_management.unload_all_models()
+        del clip
+        gc.collect()
+        memory_management.soft_empty_cache()
+    return out
+
+
+def load_ipadapter(path):
+    """Separa el archivo en image_proj / ip_adapter (algunos traen las dos copias de nombres)."""
+    sd = _forge_load_torch_file(path, safe_load=True)
+    out = {"image_proj": {}, "ip_adapter": {}}
+    for k, v in sd.items():
+        head, _, rest = k.partition(".")
+        if head in ("image_proj", "ip_adapter"):
+            out[head][rest] = v
+    if not out["image_proj"]:  # formato con image_proj_model / adapter_modules
+        for k, v in sd.items():
+            head, _, rest = k.partition(".")
+            if head == "image_proj_model": out["image_proj"][rest] = v
+            elif head == "adapter_modules": out["ip_adapter"][rest] = v
+    return out
+
+
+class _CachedKV(torch.nn.Module):
+    """Las k/v del IP-Adapter salen siempre de los mismos 4 tokens de la imagen: se calculan una vez (en CPU)
+    y solo esos resultados van a la gráfica; los pesos del adaptador no ocupan VRAM."""
+    def __init__(self, linear, inputs, device):
+        super().__init__()
+        self.cache = [(x, torch.nn.functional.linear(x, linear.weight.to(x.dtype)).to(device)) for x in inputs]
+
+    def forward(self, x):
+        for ref, out in self.cache:
+            if x.data_ptr() == ref.data_ptr() and x.shape == ref.shape:
+                return out
+        raise RuntimeError("IP-Adapter: entrada inesperada")
+
+
+def apply_ipadapter(unet, adapter_sd, embeds, weight=0.7, start=0.0, end=1.0):
+    """Devuelve una copia del UNet con el IP-Adapter aplicado (el original no cambia). Se prepara en CPU
+    en fp16 (sin ocupar VRAM) y solo las k/v ya calculadas pasan a la gráfica."""
+    from lib_ipadapter.IPAdapterPlus import IPAdapterApply
+    gpu = memory_management.get_torch_device()
+    real_dev, real_fp16 = memory_management.get_torch_device, memory_management.should_use_fp16
+    memory_management.get_torch_device = lambda *a, **k: torch.device("cpu")
+    memory_management.should_use_fp16 = lambda *a, **k: True
+    try:
+        op = IPAdapterApply()
+        e = embeds.float()
+        work, = op.apply_ipadapter(adapter_sd, unet, weight, embeds=torch.stack([e, torch.zeros_like(e)]),
+                                   weight_type="original", start_at=start, end_at=end)
+    finally:
+        memory_management.get_torch_device, memory_management.should_use_fp16 = real_dev, real_fp16
+    for patch in work.model_options["transformer_options"]["patches_replace"]["attn2"].values():
+        for i, a in enumerate(patch.ipadapters):
+            for key in (patch.k_key, patch.v_key):
+                lin = a.ip_layers.to_kvs[key]
+                if not isinstance(lin, _CachedKV):
+                    a.ip_layers.to_kvs[key] = _CachedKV(lin, [patch.conds[i], patch.unconds[i]], gpu)
+    return work

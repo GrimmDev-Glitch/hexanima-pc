@@ -240,11 +240,16 @@ pub const UPSCALERS: [(&str, &str, &str); 2] = [
 
 /// Descargas sueltas de models/: (clave, carpeta, archivo, url, MB).
 /// "@loras" = carpeta de LoRAs (loras/) en vez de models/.
-pub const ASSETS: [(&str, &str, &str, &str, u32); 3] = [
+pub const ASSETS: &[(&str, &str, &str, &str, u32)] = &[
     ("sdxl_vae", "vae", "sdxl_vae_fp16_fix.safetensors", "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors", 335),
     ("taesdxl", "vae_approx", "taesdxl_decoder.pth", "https://github.com/madebyollin/taesd/raw/main/taesdxl_decoder.pth", 5),
     // Modo rápido: LoRA DMD2 de 4 pasos (tianweiy, CC BY-NC 4.0)
     ("dmd2", "@loras", "dmd2_sdxl_4step_lora_fp16.safetensors", "https://huggingface.co/tianweiy/DMD2/resolve/main/dmd2_sdxl_4step_lora_fp16.safetensors", 394),
+    // Personaje de referencia: leer rasgos (WD Tagger v3, Apache-2.0) e IP-Adapter para NoobAI/Illustrious
+    ("tagger", "tagger", "wd-vit-tagger-v3.safetensors", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.safetensors", 378),
+    ("tagger_tags", "tagger", "wd-vit-tagger-v3.csv", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/selected_tags.csv", 1),
+    ("ipadapter", "ipadapter", "noobIPAMARK1_mark1.safetensors", "https://huggingface.co/subby2006/noob-ipa/resolve/main/noobIPAMARK1_mark1.safetensors", 1405),
+    ("clip_vision", "clip_vision", "clip_vision_g.safetensors", "https://huggingface.co/comfyanonymous/clip_vision_g/resolve/main/clip_vision_g.safetensors", 3690),
 ];
 
 fn asset_dir(root: &Path, dir: &str) -> PathBuf {
@@ -260,7 +265,16 @@ pub fn asset_download(app: &AppHandle, root: &Path, kind: &str) -> Result<String
     let d = asset_dir(root, dir);
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     let part = d.join(format!("{file}.part"));
-    fetch_to(app, url, &part, &format!("asset-{kind}"))?;
+    // reanudable: los del personaje de referencia pesan hasta 3,7 GB
+    crate::engine_dl::CANCEL.store(false, std::sync::atomic::Ordering::Relaxed);
+    let id = format!("asset-{kind}");
+    let mut last = Instant::now();
+    crate::engine_dl::download_resumable(url, &part, 0, &mut |done, total| {
+        if last.elapsed() > Duration::from_millis(250) || (total > 0 && done >= total) {
+            let _ = app.emit("dl-progress", json!({ "id": id, "done": done, "total": total, "state": "downloading" }));
+            last = Instant::now();
+        }
+    })?;
     fs::rename(&part, d.join(file)).map_err(|e| e.to_string())?;
     Ok(if *dir == "@loras" { file.to_string() } else { format!("{dir}/{file}") })
 }

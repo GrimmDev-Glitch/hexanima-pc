@@ -115,7 +115,10 @@ def main():
 
     # 3) Código: backend de Forge (AGPL-3.0) y el servidor de HexAnima
     print("Código…", flush=True)
-    for rel in ("backend", "k_diffusion", "packages_3rdparty", os.path.join("repositories", "huggingface_guess"), "LICENSE.txt"):
+    # + IP-Adapter de Forge (GPL-3.0, de cubiq/ComfyUI_IPAdapter_plus) para «Personaje de referencia»
+    for rel in ("backend", "k_diffusion", "packages_3rdparty", os.path.join("repositories", "huggingface_guess"), "LICENSE.txt",
+                os.path.join("extensions-builtin", "sd_forge_ipadapter", "lib_ipadapter"),
+                os.path.join("extensions-builtin", "sd_forge_ipadapter", "LICENSE")):
         src = os.path.join(a.forge, rel)
         if os.path.exists(src):
             copy(src, os.path.join(out, "forge", rel))

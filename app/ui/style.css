@@ -649,3 +649,12 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .fast-steps { width: auto; min-width: 104px; height: 34px; }
 .fast-info { flex-basis: 100%; font-size: 12px; }
 .fast-row.off-family { opacity: .55; }
+
+/* Personaje de referencia */
+.ref-actions { margin: 8px 0 4px; }
+.ref-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.ref-tag { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; }
+.ref-tag.on { border-color: var(--accent); background: rgba(163, 143, 253, .16); }
+.ref-tag.char { font-weight: 700; }
+.ref-weight { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.ref-weight input[type=range] { flex: 1; accent-color: var(--accent); }
