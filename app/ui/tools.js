@@ -119,6 +119,7 @@ $("menuBtn").onclick = (e) => {
     { label: "Plantillas de configuración", run: () => CfgTemplates.open() },
     { label: "Ampliar una imagen de la galería", run: () => pickImage().then((src) => src && Upscale.open(src)) },
     { label: "Prompt desde una imagen", run: () => PicPrompt.open() },
+    { label: "Descargar modelos (Anima, Mage)", run: () => Packs.open() },
     { label: "Cargar ajustes desde un PNG", run: loadPngSettings },
     { label: "Ajustes", run: () => document.querySelector('.nav[data-page="settings"]').click() },
   ]);

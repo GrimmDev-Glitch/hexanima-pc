@@ -94,6 +94,8 @@ function setStatus(text, kind = "") {
 
 // ---------- perfiles y tamaños ----------
 const FAMILY = {
+  // Mage Edit Turbo: 4 pasos y CFG 1 (el negativo no se usa); el prompt es una orden en frase
+  mage: { steps: 4, cfg: 1, sampler: "euler", scheduler: "discrete", neg: "", chips: ["the character from image 1", "keep the same face and outfit", "in a new pose", "high quality anime illustration"] },
   anima: { steps: 8, cfg: 1, sampler: "euler", scheduler: "discrete", neg: "", chips: ["masterpiece", "best quality", "highres", "detailed eyes"] },
   anima_base: { steps: 20, cfg: 4, sampler: "dpm++2m", scheduler: "sgm_uniform", neg: "worst quality, low quality, blurry", chips: ["masterpiece", "best quality", "highres"] },
   sdxl: {
@@ -104,12 +106,15 @@ const FAMILY = {
 };
 const ASPECT = { p: [832, 1216], s: [1024, 1024], l: [1216, 832] };
 const ASPECT_ANIMA = { p: [512, 768], s: [640, 640], l: [768, 512] };
+// Mage está entrenado a ~1024 px: a 512×768 sale tosco (caras y manos); 768×1152 a 4 pasos queda bien
+// (GTX 1650: 117 s frente a 58 s). 8 pasos apenas mejora y tarda el doble.
+const ASPECT_MAGE = { p: [768, 1152], s: [960, 960], l: [1152, 768] };
 
 function maxSide(family) {
   const p = state.hw?.profile || "medio";
   if (p === "bajo") return 768;
   if (p === "alto") return 1536;
-  return family === "sdxl" ? 1216 : 1024; // medio
+  return family === "sdxl" || family === "mage" ? 1216 : 1024; // medio
 }
 
 const align64 = (n) => Math.min(2048, Math.max(256, Math.round((+n || 0) / 64) * 64));
@@ -119,7 +124,7 @@ function currentSize() {
   if (state.aspect === "c") return [align64($("customW").value), align64($("customH").value)];
   const opt = currentOption();
   const fam = opt?.family || "sdxl";
-  let [w, h] = (fam === "anima" ? ASPECT_ANIMA : ASPECT)[state.aspect];
+  let [w, h] = (fam === "mage" ? ASPECT_MAGE : fam === "anima" ? ASPECT_ANIMA : ASPECT)[state.aspect];
   const ms = maxSide(fam);
   if (Math.max(w, h) > ms) { const k = ms / Math.max(w, h); w *= k; h *= k; }
   return [Math.max(256, Math.floor(w / 64) * 64), Math.max(256, Math.floor(h / 64) * 64)];
@@ -241,7 +246,7 @@ async function scanModels() {
   for (const f of by("checkpoints")) {
     opts.push({ id: "ckpt:" + f.id, label: f.name.replace(/\.(safetensors|gguf|ckpt)$/i, "") + " · SDXL", family: "sdxl", recipe: "sdxl-checkpoint", models: { model: f.id } });
   }
-  const llm = by("text_encoders", /qwen[_-]?3/i)[0];
+  const llm = files.filter((f) => f.category === "text_encoders" && /qwen[_-]?3/i.test(f.name) && !/vl|mmproj/i.test(f.name))[0];
   const vae = by("vae", /qwen[_-]?image/i)[0];
   for (const f of by("diffusion_models", /anima/i)) {
     if (!llm || !vae) continue;
@@ -250,6 +255,18 @@ async function scanModels() {
       id: "anima:" + f.id, label: f.name.replace(/\.(safetensors|gguf)$/i, "") + " · Anima",
       family: "anima", preset: turbo ? "anima" : "anima_base", recipe: "anima",
       models: { diffusion_model: f.id, llm: llm.id, vae: vae.id },
+    });
+  }
+  // Mage-Flow Edit Turbo (Microsoft, MIT): edita con una orden y hasta 3 imágenes de referencia, 4 pasos
+  const mllm = files.find((f) => f.category === "text_encoders" && /qwen[_-]?3[_-]?vl[_-]?4b/i.test(f.name) && !/mmproj/i.test(f.name));
+  const mvis = files.find((f) => /mmproj/i.test(f.name) && /qwen[_-]?3[_-]?vl[_-]?4b/i.test(f.name));
+  const mvae = by("vae", /mage/i)[0];
+  for (const f of by("diffusion_models", /mage/i)) {
+    if (!mllm || !mvae) continue;
+    opts.push({
+      id: "mage:" + f.id, label: (/edit/i.test(f.name) ? "Mage Edit" : "Mage") + (/turbo/i.test(f.name) ? " Turbo" : "") + " · Mage",
+      family: "mage", recipe: "mage-flow-edit",
+      models: { diffusion_model: f.id, llm: mllm.id, vae: mvae.id, ...(mvis ? { llm_vision: mvis.id } : {}) },
     });
   }
   state.options = opts;
@@ -391,7 +408,7 @@ async function waitIfHot() {
 }
 
 async function runOne(opt, seed) {
-  const editing = state.mode === "edit" && state.editImage;
+  const editing = state.mode === "edit" && state.editImage && opt.family !== "mage";
   // Al editar, el tamaño es el de la foto (ya ajustado a múltiplos de 64 al elegirla).
   const [w, h] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
   const steps = clampNum($("steps"), 20);
@@ -425,6 +442,7 @@ async function runOne(opt, seed) {
     output_format: "png", embed_image_metadata: true,
   };
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);
+  const mageRefs = typeof MageRefs !== "undefined" ? MageRefs.apply(body, opt) : 0;
   const usedRef = typeof Ref !== "undefined" && Ref.apply(body, opt);
   const usedSteps = body.sample_params.sample_steps, usedCfg = body.sample_params.guidance.txt_cfg;
   const sub = await api("/sdcpp/v1/img_gen", { method: "POST", body: JSON.stringify(body) });
@@ -450,7 +468,7 @@ async function runOne(opt, seed) {
       // .json con los ajustes completos junto al PNG (como la galería del teléfono).
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
-        steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
+        steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, references: mageRefs || null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
         seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: (state.engine === "torch" ? Ad.mode !== "off" : Ad.active()) ? { mode: Ad.mode, strength: Ad.den() } : null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.filter((l) => typeof Fast === "undefined" || !Fast.isOwn(l.path)).map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
@@ -515,7 +533,9 @@ async function setEditImage(src) {
 function setMode(mode) {
   // con «Usar la imagen como referencia del personaje» la foto no es el punto de partida (no hay img2img)
   const ref = typeof Ref !== "undefined" && Ref.on();
-  state.mode = mode === "edit" && state.editImage && !ref ? "edit" : "gen";
+  const mage = currentOption()?.family === "mage";
+  state.mode = mode === "edit" && state.editImage && !ref && !mage ? "edit" : "gen";
+  $("editBox").classList.toggle("mage-on", mage);
   const has = !!state.editImage;
   $("editBox").classList.toggle("ref-on", ref);
   $("editClear").classList.toggle("hidden", !has);

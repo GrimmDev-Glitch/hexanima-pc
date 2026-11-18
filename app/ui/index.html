@@ -210,6 +210,13 @@
             <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
           </div>
           <div id="editHint" class="lbl edit-hint">Elige una foto para generar a partir de ella (imagen a imagen).</div>
+          <div id="mageBox" class="mage-box">
+            <div class="lbl">Mage edita con una orden en frase y hasta 3 imágenes: la de arriba es la <b>imagen 1</b>.</div>
+            <div id="mageExtra" class="mage-extra"></div>
+            <div class="btnrow"><button id="mageAdd" class="ghost sm">＋ Otra imagen de referencia</button>
+              <button id="mageOutfit" class="ghost sm" title="Prompt para ponerle al personaje de la imagen 1 la ropa de la imagen 2">👗 Copiar ropa</button>
+              <button id="magePose" class="ghost sm" title="Prompt para poner al personaje de la imagen 1 en la pose de la imagen 2">🧍 Copiar pose</button></div>
+          </div>
           <label class="fast-toggle ref-toggle" title="En vez de partir de la foto, toma de ella el aspecto del personaje (pelo, ojos, ropa, colores) y lo pone en lo que pidas en el prompt"><input id="refUse" type="checkbox"> <b>Usar la imagen como referencia del personaje</b></label>
           <div id="refBox" class="hidden">
             <div class="row lbl ref-weight" title="Más: se parece más a la imagen. Menos: el prompt y los LoRAs mandan más.">
@@ -589,6 +596,13 @@
           <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
         <button class="primary pack-btn">Descargar</button>
       </div>
+      <div class="pack" data-pack="mage">
+        <div class="pack-info"><div class="pack-name">Mage Edit Turbo</div>
+          <div class="lbl">Edita tus imágenes con una orden («ponle un vestido rojo», «este personaje en la playa») y hasta 3 referencias · 4 pasos</div>
+          <div class="lbl pack-size"></div>
+          <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
+        <button class="primary pack-btn">Descargar</button>
+      </div>
       <div class="pack soon">
         <div class="pack-info"><div class="pack-name">Qwen-Image</div>
           <div class="lbl">Fotos realistas y editar fotos con referencias · necesita una gráfica potente</div></div>
@@ -755,5 +769,6 @@
 <script src="engine.js"></script>
 <script src="fast.js"></script>
 <script src="reference.js"></script>
+<script src="mage.js"></script>
 </body>
 </html>

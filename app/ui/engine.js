@@ -149,6 +149,7 @@ const Packs = {
   },
 
   async open() {
+    $("packTitle").textContent = (state.options || []).length ? "Descargar modelos" : "Elige un modelo para empezar";
     try { this.status = await invoke("pack_status"); } catch { this.status = {}; }
     for (const card of document.querySelectorAll("#packDlg .pack[data-pack]")) this.renderCard(card);
     $("packErr").classList.add("hidden");

@@ -194,6 +194,15 @@ pub const PACKS: &[(&str, &str, &str, &str, u64)] = &[
      "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors", 1_192_135_096),
     ("anima", "vae", "qwen_image_vae.safetensors",
      "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/vae/qwen_image_vae.safetensors", 253_806_246),
+    // Mage-Flow Edit Turbo (Microsoft, MIT): Q6_K (por debajo de 6 bits deja una trama visible), Qwen3-VL-4B + mmproj, VAE
+    ("mage", "diffusion_models", "mage-flow-edit-turbo-Q6_K.gguf",
+     "https://huggingface.co/johnsor/Mage-Flow-Edit-Turbo-GGUF/resolve/main/mage-flow-edit-turbo-Q6_K.gguf", 3_387_311_156),
+    ("mage", "text_encoders", "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+     "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/Qwen3VL-4B-Instruct-Q4_K_M.gguf", 2_497_281_664),
+    ("mage", "text_encoders", "mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf",
+     "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf", 453_974_304),
+    ("mage", "vae", "mage_flow_vae_bf16.safetensors",
+     "https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/vae/mage_flow_vae_bf16.safetensors", 345_053_056),
 ];
 
 pub fn pack_status(root: &Path) -> serde_json::Value {
@@ -201,7 +210,8 @@ pub fn pack_status(root: &Path) -> serde_json::Value {
     for (pack, dir, file, _, bytes) in PACKS {
         let e = out.entry(pack.to_string()).or_insert_with(|| serde_json::json!({ "bytes": 0u64, "have": 0u64, "installed": true }));
         let p = root.join("models").join(dir).join(file);
-        let have = if p.is_file() { *bytes } else { fs::metadata(p.with_extension("safetensors.part")).map(|m| m.len()).unwrap_or(0) };
+        let part = p.with_file_name(format!("{file}.part"));
+        let have = if p.is_file() { *bytes } else { fs::metadata(part).map(|m| m.len()).unwrap_or(0) };
         e["bytes"] = (e["bytes"].as_u64().unwrap() + bytes).into();
         e["have"] = (e["have"].as_u64().unwrap() + have).into();
         if !p.is_file() { e["installed"] = false.into(); }

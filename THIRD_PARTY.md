@@ -26,5 +26,7 @@
 | WD ViT Tagger v3 (Prompt desde una imagen) | [SmilingWolf/wd-vit-tagger-v3](https://huggingface.co/SmilingWolf/wd-vit-tagger-v3) | Apache-2.0 |
 | noobIPA Mark1 (personaje de referencia) | [subby2006/noob-ipa](https://huggingface.co/subby2006/noob-ipa) | FAIPL-1.0-SD |
 | CLIP ViT-bigG (codificador de imágenes) | [comfyanonymous/clip_vision_g](https://huggingface.co/comfyanonymous/clip_vision_g) (LAION) | MIT |
+| Mage-Flow Edit Turbo (Microsoft), Q6_K de johnsor | [johnsor/Mage-Flow-Edit-Turbo-GGUF](https://huggingface.co/johnsor/Mage-Flow-Edit-Turbo-GGUF) · VAE de [Comfy-Org/Mage-Flow](https://huggingface.co/Comfy-Org/Mage-Flow) | MIT |
+| Qwen3-VL-4B-Instruct (codificador de Mage) | [Qwen/Qwen3-VL-4B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF) | Apache-2.0 |
 | TAESD XL | [madebyollin/taesd](https://github.com/madebyollin/taesd) | MIT |
 | Modelos y LoRAs de Civitai | civitai.com | la de cada autor |
