@@ -40,6 +40,7 @@
           <select id="model" class="hidden" aria-hidden="true" tabindex="-1"></select>
           <button id="modelBtn" class="model-chip" title="Elegir modelo"><span id="modelDot" class="dot"></span><span id="modelName">Sin modelo</span><span class="caret">▾</span></button>
           <button id="loadBtn" class="ghost sm">Cargar modelo</button>
+          <button id="refreshBtn" class="ghost icon sm refresh-btn" title="Actualizar: vuelve a buscar modelos, LoRAs, ampliadores y detectores que copiaste a mano a las carpetas" aria-label="Actualizar modelos y LoRAs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg></button>
           <span id="modelStatus" class="status">Iniciando motor…</span>
           <button id="menuBtn" class="ibtn menu-btn" title="Más opciones" aria-label="Más opciones">⋯</button>
         </div>
@@ -254,6 +255,7 @@
         <label class="lbl" for="lpSort">Ordenar</label>
         <select id="lpSort" class="field"><option value="name">Nombre</option><option value="new">Más recientes</option><option value="size">Tamaño</option><option value="active">En uso primero</option></select>
         <button id="lpImport" class="ghost">Importar archivo .safetensors</button>
+        <button id="lpRefresh" class="ghost icon refresh-btn" title="Actualizar: vuelve a buscar modelos, LoRAs, ampliadores y detectores que copiaste a mano a las carpetas" aria-label="Actualizar LoRAs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg></button>
         <button class="ghost icon" data-open="loras" title="Abrir la carpeta loras" aria-label="Abrir la carpeta loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
       </div>
       <div id="lpFilters" class="filter-rows">
@@ -508,7 +510,7 @@
 
 <div id="maskDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="maskTitle">
   <div class="dlg dlg-mask">
-    <div class="dlg-head"><h2 id="maskTitle">✎ Zona a cambiar</h2><span class="lbl">Pinta lo que se debe volver a generar; el resto de la foto se conserva.</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="maskTitle">✎ Zona a cambiar</h2><span id="maskHint" class="lbl">Pinta lo que se debe volver a generar; el resto de la foto se conserva.</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
     <div id="maskTools" class="mask-tools">
       <div class="seg mask-seg">
         <button class="ghost sm" data-tool="brush" title="Pincel (B)">Pincel</button>

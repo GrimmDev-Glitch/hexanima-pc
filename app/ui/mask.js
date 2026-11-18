@@ -10,16 +10,21 @@ const Mask = {
   undo: [], redo: [],
   drawing: false, panning: null, last: null,
 
-  open() {
-    const im = state.editImage;
-    if (!im) return toast("Elige primero una foto");
+  /** t (opcional, p. ej. Correcciones): {img: {src, w, h}, paint, title, hint, done(paint|null)}.
+   *  Sin t: la foto de «Editar una foto». */
+  open(t) {
+    if (!t && !state.editImage) return toast("Elige primero una foto");
+    this.t = t || { img: state.editImage, paint: this.paint, title: "✎ Zona a cambiar", hint: "Pinta lo que se debe volver a generar; el resto de la foto se conserva.", done: (p) => this.editDone(p) };
+    const im = this.t.img;
+    $("maskTitle").textContent = this.t.title;
+    $("maskHint").textContent = this.t.hint;
     $("maskImg").src = im.src;
     const cv = $("maskCanvas");
     cv.width = im.w; cv.height = im.h;
     $("maskWrap").style.width = im.w + "px"; $("maskWrap").style.height = im.h + "px";
     const ctx = cv.getContext("2d");
     ctx.clearRect(0, 0, im.w, im.h);
-    if (this.paint && this.paint.width === im.w && this.paint.height === im.h) ctx.drawImage(this.paint, 0, 0);
+    if (this.t.paint) ctx.drawImage(this.t.paint, 0, 0, im.w, im.h);
     this.undo = []; this.redo = [];
     this.size = store.get("maskSize", Math.round(Math.max(im.w, im.h) / 18));
     $("maskSize").value = String(this.size);
@@ -29,7 +34,7 @@ const Mask = {
   },
 
   fitView() {
-    const st = $("maskStage").getBoundingClientRect(), im = state.editImage;
+    const st = $("maskStage").getBoundingClientRect(), im = this.t.img;
     this.fit = Math.min(st.width / im.w, st.height / im.h) * 0.96;
     this.zoom = 1;
     this.px = (st.width - im.w * this.fit) / 2; this.py = (st.height - im.h * this.fit) / 2;
@@ -50,7 +55,7 @@ const Mask = {
   },
 
   toImage(e) {
-    const r = $("maskCanvas").getBoundingClientRect(), im = state.editImage;
+    const r = $("maskCanvas").getBoundingClientRect(), im = this.t.img;
     return { x: ((e.clientX - r.left) / r.width) * im.w, y: ((e.clientY - r.top) / r.height) * im.h };
   },
 
@@ -147,24 +152,37 @@ const Mask = {
   /** Listo: máscara en blanco y negro (blanco = rehacer) con bordes suaves. */
   done() {
     const cv = $("maskCanvas");
-    if (this.isEmpty(cv)) { this.paint = null; state.editMask = null; }
+    let paint = null;
+    if (!this.isEmpty(cv)) {
+      paint = document.createElement("canvas"); paint.width = cv.width; paint.height = cv.height;
+      paint.getContext("2d").drawImage(cv, 0, 0);
+    }
+    closeModal("maskDlg");
+    this.t.done(paint);
+  },
+
+  /** Máscara en blanco y negro (blanco = rehacer) de W×H a partir de lo pintado, con bordes suaves. */
+  maskCanvas(paint, W, H) {
+    const white = document.createElement("canvas"); white.width = W; white.height = H;
+    const wc = white.getContext("2d");
+    wc.fillStyle = "#fff"; wc.fillRect(0, 0, W, H);
+    wc.globalCompositeOperation = "destination-in"; wc.drawImage(paint, 0, 0, W, H);
+    const out = document.createElement("canvas"); out.width = W; out.height = H;
+    const oc = out.getContext("2d");
+    oc.fillStyle = "#000"; oc.fillRect(0, 0, W, H);
+    oc.filter = `blur(${Math.max(2, Math.round(Math.max(W, H) / 160))}px)`;
+    oc.drawImage(white, 0, 0);
+    return out;
+  },
+
+  editDone(paint) {
+    this.paint = paint;
+    if (!paint) state.editMask = null;
     else {
-      this.paint = document.createElement("canvas"); this.paint.width = cv.width; this.paint.height = cv.height;
-      this.paint.getContext("2d").drawImage(cv, 0, 0);
-      const white = document.createElement("canvas"); white.width = cv.width; white.height = cv.height;
-      const wc = white.getContext("2d");
-      wc.fillStyle = "#fff"; wc.fillRect(0, 0, cv.width, cv.height);
-      wc.globalCompositeOperation = "destination-in"; wc.drawImage(cv, 0, 0);
-      const out = document.createElement("canvas"); out.width = cv.width; out.height = cv.height;
-      const oc = out.getContext("2d");
-      oc.fillStyle = "#000"; oc.fillRect(0, 0, cv.width, cv.height);
-      oc.filter = `blur(${Math.max(2, Math.round(Math.max(cv.width, cv.height) / 160))}px)`;
-      oc.drawImage(white, 0, 0);
-      state.editMask = { src: out.toDataURL("image/png") };
+      state.editMask = { src: this.maskCanvas(paint, paint.width, paint.height).toDataURL("image/png") };
       // Para rehacer una zona hace falta cambiar bastante: sube "Cuánto cambia" si está bajo.
       if (clampNum($("editStrength"), 45) < 60) { $("editStrength").value = "75"; toast("Zona pintada: «Cuánto cambia» sube a 75 % para que la zona cambie de verdad", 4500); }
     }
-    closeModal("maskDlg");
     this.refresh();
   },
 
@@ -285,7 +303,7 @@ const Ad = {
   den() { return Math.min(90, Math.max(10, clampNum($("adDen"), 40))); },
   active() { return this.mode !== "off" && state.adLoaded === this.mode; },
   /** Detector con el que arrancar el motor: el elegido o, si está en "No", el que ya estaba cargado. */
-  wanted() { return this.mode !== "off" ? this.mode : null; },
+  wanted() { return this.force || (this.mode !== "off" ? this.mode : null); },
   args() {
     return this.active() ? `confidence=0.3,denoising_strength=${(this.den() / 100).toFixed(2)},mask_blur=4,inpaint_padding=32` : "confidence=0.999";
   },
@@ -297,22 +315,43 @@ const Ad = {
     $("adSum").textContent = on ? (this.mode === "face" ? "Caras: se redibujan al terminar cada imagen" : "Manos: se redibujan al terminar cada imagen") : "Redibuja caras o manos con más detalle";
   },
 
-  async pick(mode) {
-    if (mode === this.mode) return;
-    if (mode !== "off" && !this.installed[mode]) {
+  /** Descarga y convierte el detector si falta (pregunta antes). */
+  async install(mode) {
+    if (this.installed[mode]) return true;
+    {
       const name = mode === "face" ? "caras" : "manos";
       const ok = await ask({ title: `Detector de ${name}`, msg: `ADetailer necesita un detector de ${name} (YOLOv8, unos 6 MB, de huggingface.co/Bingsu/adetailer). Se descarga una sola vez y se guarda en models\\detectors.`,
         buttons: [{ label: "Cancelar", value: false }, { label: "Descargar", value: true, primary: true }] });
-      if (!ok) return;
+      if (!ok) return false;
       try {
         this.dl = "det-" + mode;
         toast(`Descargando el detector de ${name}…`, 60000);
         await invoke("detector_install", { kind: mode });
         this.installed[mode] = true;
         toast(`✓ Detector de ${name} listo`, 3000);
-      } catch (e) { toast("No se pudo instalar el detector: " + (e.message || e), 6000); return; }
+        return true;
+      } catch (e) { toast("No se pudo instalar el detector: " + (e.message || e), 6000); return false; }
       finally { this.dl = null; }
     }
+  },
+
+  /** Correcciones: deja cargado el detector `kind` (reinicia el motor y recarga el modelo si hace falta). */
+  async ensureKind(kind) {
+    if (state.adLoaded === kind) return true;
+    if (!(await this.install(kind))) return false;
+    this.force = kind;
+    try {
+      state.loaded = null;
+      if (!(await startEngine(engineFor(currentOption())))) return false;
+      await refreshEngineMenus();
+      await loadModel();
+      return state.adLoaded === kind && !!state.loaded;
+    } finally { this.force = null; }
+  },
+
+  async pick(mode) {
+    if (mode === this.mode) return;
+    if (mode !== "off" && !(await this.install(mode))) return;
     this.mode = mode;
     this.save();
     if (mode !== "off" && state.adLoaded !== mode) setStatus(`ADetailer (${mode === "face" ? "caras" : "manos"}): el motor se reinicia al generar para cargar el detector.`);

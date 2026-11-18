@@ -239,6 +239,7 @@ async function scanModels() {
   }
   state.options = opts;
   const sel = $("model");
+  const prev = sel.value;
   sel.innerHTML = "";
   for (const o of opts) sel.add(new Option(o.label, o.id));
   if (!opts.length) {
@@ -246,7 +247,7 @@ async function scanModels() {
     setStatus("Copia un checkpoint SDXL a models\\checkpoints o descarga Anima.", "warn");
     return;
   }
-  const last = store.get("model", null);
+  const last = opts.some((o) => o.id === prev) ? prev : store.get("model", null);
   if (last && opts.some((o) => o.id === last)) sel.value = last;
 }
 
@@ -737,3 +738,32 @@ $("restartBtn").onclick = async () => {
     setStatus("Error al iniciar: " + (e.message || e), "err");
   }
 })();
+
+// ---------- ↻ Actualizar: modelos / LoRAs / ampliadores / detectores copiados a mano ----------
+async function refreshAll() {
+  if (state.busy) return toast("Espera a que termine la generación");
+  const btns = [$("refreshBtn"), $("lpRefresh")];
+  for (const b of btns) b?.classList.add("spinning");
+  try {
+    const before = { models: state.options.length, loras: Loras.lib.length };
+    await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
+    await scanModels();
+    await Loras.refresh();
+    await refreshEngineMenus().catch(() => {});
+    if (typeof Ad !== "undefined") await Ad.load();
+    if (LoraPage.visible()) await LoraPage.show();
+    if ($("page-history").classList.contains("on")) await History.show();
+    // El motor solo lee la carpeta de ampliadores al arrancar.
+    let upNote = "";
+    try {
+      const st = await invoke("upscaler_status");
+      if (st.some((u) => u.installed && !state.upscalers.includes(u.stem))) upNote = "\nAmpliador nuevo: aparecerá al reiniciar el motor (Ajustes → Reiniciar motor).";
+    } catch { /* vista previa */ }
+    const dm = state.options.length - before.models, dl = Loras.lib.length - before.loras;
+    const diff = (n, a, b) => (n > 0 ? ` (+${n} ${n === 1 ? a : b})` : n < 0 ? ` (${n})` : "");
+    toast(`Actualizado · ${state.options.length} modelos${diff(dm, "nuevo", "nuevos")} · ${Loras.lib.length} LoRAs${diff(dl, "nuevo", "nuevos")}${upNote}`, 4500);
+  } catch (e) { toast("No se pudo actualizar: " + (e.message || e), 5000); }
+  finally { for (const b of btns) b?.classList.remove("spinning"); }
+}
+$("refreshBtn").onclick = refreshAll;
+$("lpRefresh").onclick = refreshAll;

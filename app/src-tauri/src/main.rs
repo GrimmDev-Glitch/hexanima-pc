@@ -249,6 +249,32 @@ async fn upscaler_download(app: tauri::AppHandle, kind: String) -> Result<String
         .map_err(|e| e.to_string())?
 }
 
+/// Cajas que encontró el detector de ADetailer en el último trabajo (se leen del registro del motor).
+/// `seq` cuenta las detecciones del registro: si no cambia, el trabajo no detectó nada nuevo.
+#[tauri::command]
+fn ad_detections(state: State<AppState>) -> serde_json::Value {
+    let log = state.server.lock().unwrap().as_ref().map(|s| s.log_path.clone());
+    let text = log.and_then(|p| std::fs::read(p).ok()).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+    let lines: Vec<&str> = text.lines().collect();
+    let seq = lines.iter().filter(|l| l.contains("ADetailer detected")).count();
+    let start = lines.iter().rposition(|l| l.contains("ADetailer detected")).unwrap_or(lines.len());
+    let num = |l: &str, k: &str| -> Option<f64> {
+        let i = l.find(k)? + k.len();
+        let rest = &l[i..];
+        let end = rest.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).unwrap_or(rest.len());
+        rest[..end].parse().ok()
+    };
+    let items: Vec<serde_json::Value> = lines[start..]
+        .iter()
+        .filter(|l| l.contains("ADetailer detection "))
+        .filter_map(|l| {
+            let obj = l.split("object=").nth(1)?.split(',').next()?.to_string();
+            Some(json!({ "object": obj, "confidence": num(l, "confidence=")?, "x1": num(l, "x1=")?, "y1": num(l, "y1=")?, "x2": num(l, "x2=")?, "y2": num(l, "y2=")? }))
+        })
+        .collect();
+    json!({ "seq": seq, "items": items })
+}
+
 /// Detectores de ADetailer (caras / manos) instalados.
 #[tauri::command]
 fn detector_status(state: State<AppState>) -> serde_json::Value {
@@ -500,6 +526,7 @@ fn main() {
             upscaler_status,
             upscaler_download,
             detector_status,
+            ad_detections,
             detector_install,
             lora_list,
             lora_set_meta,
