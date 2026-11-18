@@ -1,97 +1,61 @@
 # HexAnima PC
 
-Versión para Windows de [HexAnima · Snapdragon 8 Gen 2](https://github.com/GrimmDev-Glitch/hexanima) (fork de [HexAnima de ayanoby](https://github.com/ayanoby/hexanima)). Genera imágenes en local con tu gráfica, sin nube ni cuenta, y está pensada para funcionar también en PCs modestos.
+Versión para Windows de [HexAnima · Snapdragon 8 Gen 2](https://github.com/GrimmDev-Glitch/hexanima) (fork de [HexAnima de ayanoby](https://github.com/ayanoby/hexanima)). Genera imágenes en local con tu gráfica, sin nube ni cuenta, y está pensada para funcionar también en PCs modestos (probada en una GTX 1650 de 4 GB con 16 GB de RAM).
 
-> Estado: **prototipo**. Ya funcionan el motor, la detección de hardware, la verificación de requisitos y un lanzador por línea de comandos. La interfaz está en diseño ([mockups](https://claude.ai/artifact/3hCLdFM6BFfVKXL4PT4UMM)).
+## Descargar e instalar
 
-## Cómo funciona
+1. Descarga **`HexAnima-PC-<versión>.zip`** desde [Releases](https://github.com/GrimmDev-Glitch/hexanima-pc/releases/latest).
+2. Descomprímelo donde quieras (por ejemplo en el Escritorio). No necesita instalación ni permisos de administrador.
+3. Abre **`HexAnima.exe`**. La bienvenida te guía:
+   - **Gráfica NVIDIA:** ofrece el **motor rápido** (PyTorch, 2,5 GB), hasta 3 veces más rápido en SDXL / Illustrious / Pony.
+   - **Primer modelo:** descarga **Anima Turbo** (5,6 GB) con un botón, o pulsa *Omitir* y busca modelos en la pestaña **Civitai**.
 
-- **Motor:** [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (C++/ggml) con CUDA, Vulkan o CPU. Sin Python ni PyTorch en el equipo del usuario.
-- **Portable:** una carpeta con `HexAnima.exe`; modelos, LoRAs e imágenes viven en las carpetas de al lado.
-- **Perfiles por hardware:** al abrir, detecta la gráfica y la RAM y recomienda un perfil (el usuario puede elegir otro).
+Requisitos: Windows 10/11 de 64 bits, 8 GB de RAM como mínimo (16 GB recomendado) y una gráfica NVIDIA, AMD o Intel. Sin gráfica compatible usa el procesador (muy lento).
 
-| Perfil | Cuándo | Ajustes |
-|---|---|---|
-| Bajo | ≤ 2 GB de VRAM o sin GPU | q8, offload a RAM, VAE por mosaicos, hasta 768 px |
-| Medio | 3–7 GB | q8, offload a RAM, hasta 1024 px (SDXL hasta 1216) |
-| Alto | ≥ 8 GB | f16 en GPU, hasta 1536 px |
+## Qué hace
+
+- **Generar** con SDXL, Illustrious, Pony y Anima, LoRAs (también desde Civitai), Hires fix, ADetailer (caras y manos), zona a cambiar (inpainting), ampliar ×2/×4 y correcciones.
+- **Civitai** integrado: buscar y descargar modelos y LoRAs, guardar colecciones como carpetas.
+- **Historial** con favoritas, ajustes guardados en cada PNG y exportar a ZIP.
+- **Portable:** todo vive en la carpeta de `HexAnima.exe` (modelos, LoRAs, imágenes). Para llevártela a otro PC, copia la carpeta.
 
 ## Carpeta
 
 ```
-HexAnima.exe        (pendiente)
-config.json         ajustes, perfil y resultado de la verificación (se genera)
-engine/             motor: cuda/, vulkan/, cpu/   (ver engine/README.md)
-models/             checkpoints/, text_encoders/, vae/, upscalers/, detectors/
-loras/              LoRAs
-outputs/            imágenes generadas
-cache/ logs/ lang/
-tools/              scripts del prototipo
+HexAnima.exe
+engine/      motores: vulkan/ y cuda/ (stable-diffusion.cpp), torch/ (motor rápido, se descarga)
+models/      checkpoints/, diffusion_models/, text_encoders/, vae/, upscalers/, detectors/
+loras/       LoRAs
+outputs/     imágenes generadas
+config/      tus ajustes (se crean al usarla)
 ```
 
-## Prototipo
-
-Requiere Python 3.10+ (solo para estos scripts; la app final no lo necesitará).
-
-```bash
-python tools/check_setup.py --write         # verificación de bienvenida + perfil recomendado
-python tools/generate.py anima "1girl, silver hair, cherry blossoms" --seed 42
-python tools/generate.py sdxl "masterpiece, 1girl" --model "ruta/a/checkpoint_illustrious.safetensors"
-```
-
-Opciones extra para el motor (como `COMMANDLINE_ARGS` de Forge): `config.json` → `manual.extra_args`.
-
-### Modo adaptativo
-
-Antes de cada imagen, `tools/adaptive.py` mide la VRAM y RAM **libres** y elige el primer escalón que entra. Nunca rechaza; en equipos chicos solo tarda más.
-
-1. Pesos en VRAM (f16 o q8) → 2. q8 en RAM con offload → 3. VAE por mosaicos y ~0,45 MP → 4. RAM justa (se pasa hasta 1 GB, con aviso) → 5. pesos leídos del disco (mmap).
-
-q4/q5 quedan fuera de la escalera automática: en GTX sin tensor cores son ~3,6× más lentos que q8 (`manual.allow_low_quant: true` los habilita).
-
-| SDXL 832×1216 en GTX 1650, offload | s/paso |
-|---|---|
-| q8 + flash attention on | ~17 |
-| q8 + flash attention auto | 20,7 |
-| q8 sin flash attention | 22,1 |
-| f16 | 37 |
-| q4_K | 61,5 |
-
-Protecciones: deja 0,5 GB de VRAM y 1,5 GB de RAM para Windows, corre el motor con prioridad baja, en CPU deja 2 núcleos libres y en lotes pausa si la GPU llega a 83 °C (sigue al bajar de 72 °C). El tiempo estimado aprende de las generaciones anteriores (`cache/bench.json`).
-
-```bash
-python tools/generate.py sdxl "1girl" --model ruta.safetensors --count 4      # lote con pausas por temperatura
-python tools/generate.py sdxl "1girl" --model ruta.safetensors --sim-vram 2 --sim-ram 8 --dry   # ver qué haría en otro equipo
-python tools/generate.py anima "1girl" --no-adaptive                          # perfil fijo, sin medir
-```
+Para añadir modelos a mano, cópialos en su carpeta de `models/` y pulsa **↻** en la app.
 
 ## Motores
 
-La app elige el motor según la gráfica y usa siempre la tarjeta dedicada (en laptops con Intel integrada + NVIDIA, Vulkan numera primero la integrada).
-
-| Gráfica | Orden de preferencia |
+| Gráfica | Motor |
 |---|---|
-| NVIDIA GTX (9xx/10xx/16xx) | Vulkan → CUDA → CPU |
-| NVIDIA RTX | CUDA → Vulkan → CPU |
-| AMD / Intel | Vulkan → CPU |
+| NVIDIA | **PyTorch** (motor rápido, como Forge) para SDXL; CUDA para Anima |
+| AMD / Intel | Vulkan |
+| Sin gráfica compatible | CPU |
 
-Comparación en GTX 1650 (Nova3DCG IL v9, SDXL 832×1216, q8, 6 pasos):
+En una GTX 1650, SDXL 832×1216: PyTorch 8,5 s/paso, Forge ~15 s/paso, CUDA (sd.cpp) 24 s/paso.
 
-| Motor | Descarga | s/paso | VAE |
-|---|---|---|---|
-| **Vulkan oficial** | **28 MB** | **16,9** | **29 s** |
-| CUDA oficial | ~0,9 GB | 20,9 | 49 s |
-| CUDA compilado para GTX (`tools/build_engine_gtx.ps1`, sm_61 + FORCE_MMQ) | ~0,9 GB | 24,9 | 110 s — descartado |
+## Desarrollo
 
-Con Anima Turbo el muestreo es igual en Vulkan y CUDA (98,6 s, 8 pasos); el VAE es más rápido en CUDA.
+La interfaz es Tauri v2 (Rust + HTML/JS en `app/`). Compilar: `cd app/src-tauri && cargo build --release` y copiar `target/release/hexanima.exe` como `HexAnima.exe`.
 
-## Modelos probados (GTX 1650 4 GB, 16 GB RAM)
+- `tools/package_release.py --version X`: zip para Releases.
+- `tools/build_torch_engine.py` y `tools/package_torch_engine.py`: arman y empaquetan el motor PyTorch, que se publica en [Hugging Face](https://huggingface.co/GrimmDev-Glitch/hexanima-packs/tree/main/pc_torch).
+- `app/dev/preview_server.py`: vista previa de la interfaz en el navegador.
 
-| Modelo | Ajustes | Tiempo |
-|---|---|---|
-| Anima Turbo v1.1 | 640×1024, 8 pasos, CFG 1, q8 + offload | ~120 s |
-| Nova3DCG IL v9 (SDXL / Illustrious) | 832×1216, 28 pasos, CFG 5,5, q8 + offload | ~620 s |
+## Licencias
+
+- La app (`app/`, `tools/`): **MIT** (ver [LICENSE](LICENSE)).
+- El motor PyTorch (`torch_engine/`, descargado en `engine/torch`): **AGPL-3.0**, porque usa el backend de Stable Diffusion WebUI Forge. Se ejecuta como un programa aparte.
+- Motores, modelos y demás componentes: ver [THIRD_PARTY.md](THIRD_PARTY.md). Cada modelo conserva su propia licencia.
 
 ## Créditos
 
-HexAnima es obra de [ayanoby](https://github.com/ayanoby). Motor: stable-diffusion.cpp de leejet (MIT). Cada modelo conserva su propia licencia.
+HexAnima es obra de [ayanoby](https://github.com/ayanoby). Motores: [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) de leejet y el backend de [Forge](https://github.com/lllyasviel/stable-diffusion-webui-forge) de lllyasviel.

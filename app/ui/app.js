@@ -764,6 +764,8 @@ $("restartBtn").onclick = async () => {
     if (!(await startEngine(engineFor({ family: lastFamily })))) return;
     await refreshEngineMenus();
     await scanModels();
+    // sin modelos: la bienvenida ofrece descargar uno (después del paso del motor rápido)
+    if (typeof Packs !== "undefined") { Packs.modelsKnown = true; Packs.next(); }
     await Loras.refresh();
     const opt = currentOption();
     if (opt) { applyPreset(opt); await loadModel(); }

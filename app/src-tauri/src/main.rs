@@ -316,6 +316,25 @@ async fn engine_download(app: tauri::AppHandle) -> Result<serde_json::Value, Str
 }
 
 #[tauri::command]
+fn pack_status(state: State<AppState>) -> serde_json::Value {
+    engine_dl::pack_status(&state.root)
+}
+
+#[tauri::command]
+async fn pack_download(app: tauri::AppHandle, pack: String) -> Result<(), String> {
+    use tauri::Emitter;
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = format!("pack-{pack}");
+        engine_dl::pack_download(&root, &pack, &mut |done, total| {
+            let _ = app.emit("dl-progress", json!({ "id": id, "stage": "download", "done": done, "total": total }));
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn engine_dl_cancel() {
     engine_dl::CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
 }
@@ -634,6 +653,8 @@ fn main() {
             engine_dl_info,
             engine_download,
             engine_dl_cancel,
+            pack_status,
+            pack_download,
             upscaler_download,
             detector_status,
             ad_detections,

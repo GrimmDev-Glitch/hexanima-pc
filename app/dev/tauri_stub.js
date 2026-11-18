@@ -86,6 +86,14 @@
         if (++i > st.length) { clearInterval(t); ok({ version: 1 }); }
       }, 700);
     }),
+    pack_status: () => ({ anima: { bytes: 5628171998, have: 0, installed: false } }),
+    pack_download: () => new Promise((ok) => {
+      let i = 0;
+      const t = setInterval(() => {
+        (listeners["dl-progress"] || []).forEach((f) => f({ payload: { id: "pack-anima", stage: "download", done: i * 7e8, total: 5628171998 } }));
+        if (++i > 8) { clearInterval(t); ok(null); }
+      }, 600);
+    }),
     engine_dl_cancel: () => null,
     asset_status: () => [{ kind: 'sdxl_vae', file: 'vae/sdxl_vae_fp16_fix.safetensors', mb: 335, installed: false }, { kind: 'taesdxl', file: 'vae_approx/taesdxl_decoder.pth', mb: 5, installed: false }],
     asset_download: async ({ kind }) => kind,

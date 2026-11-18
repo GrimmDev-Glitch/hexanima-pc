@@ -104,33 +104,7 @@ pub fn install(root: &Path, m: &Manifest, progress: &mut dyn FnMut(&str, u64, u6
     }
 
     // 1) descargar (reanudando)
-    let mut done = if have > m.bytes { let _ = fs::remove_file(&part); 0 } else { have };
-    if done < m.bytes {
-        let mut resp = get(&format!("{}/{}", base(), m.file), done)?;
-        if done > 0 && resp.status().as_u16() != 206 {
-            done = 0; // el servidor no admite reanudar: empezar de cero
-        }
-        let mut out = OpenOptions::new().create(true).write(true).truncate(done == 0).open(&part).map_err(|e| e.to_string())?;
-        out.seek(SeekFrom::Start(done)).map_err(|e| e.to_string())?;
-        let mut buf = vec![0u8; 1 << 20];
-        let mut last = Instant::now();
-        loop {
-            cancelled()?;
-            let n = resp.read(&mut buf).map_err(|e| format!("Se cortó la descarga ({e}). Vuelve a intentarlo: seguirá donde se quedó."))?;
-            if n == 0 { break; }
-            out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-            done += n as u64;
-            if last.elapsed() > Duration::from_millis(250) {
-                progress("download", done, m.bytes);
-                last = Instant::now();
-            }
-        }
-        out.flush().map_err(|e| e.to_string())?;
-    }
-    progress("download", done, m.bytes);
-    if done != m.bytes {
-        return Err("La descarga se cortó antes de terminar. Vuelve a intentarlo: seguirá donde se quedó.".into());
-    }
+    download_resumable(&format!("{}/{}", base(), m.file), &part, m.bytes, &mut |d, t| progress("download", d, t))?;
 
     // 2) comprobar
     let mut h = Sha256::new();
@@ -172,6 +146,95 @@ pub fn install(root: &Path, m: &Manifest, progress: &mut dyn FnMut(&str, u64, u6
     }
     if old.exists() { let _ = fs::remove_dir_all(&old); }
     let _ = fs::remove_file(&part);
+    Ok(())
+}
+
+/// Descarga `url` en `part` reanudando lo que ya haya. `total` = tamaño esperado (0 si no se sabe).
+pub fn download_resumable(url: &str, part: &Path, total: u64, progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
+    let have = fs::metadata(part).map(|x| x.len()).unwrap_or(0);
+    let mut done = if total > 0 && have > total { let _ = fs::remove_file(part); 0 } else { have };
+    if total == 0 || done < total {
+        let mut resp = get(url, done)?;
+        if done > 0 && resp.status().as_u16() != 206 {
+            done = 0; // el servidor no admite reanudar: empezar de cero
+        }
+        let total = if total > 0 { total } else { done + resp.content_length().unwrap_or(0) };
+        let mut out = OpenOptions::new().create(true).write(true).truncate(done == 0).open(part).map_err(|e| e.to_string())?;
+        out.seek(SeekFrom::Start(done)).map_err(|e| e.to_string())?;
+        let mut buf = vec![0u8; 1 << 20];
+        let mut last = Instant::now();
+        loop {
+            cancelled()?;
+            let n = resp.read(&mut buf).map_err(|e| format!("Se cortó la descarga ({e}). Vuelve a intentarlo: seguirá donde se quedó."))?;
+            if n == 0 { break; }
+            out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+            done += n as u64;
+            if last.elapsed() > Duration::from_millis(250) {
+                progress(done, total);
+                last = Instant::now();
+            }
+        }
+        out.flush().map_err(|e| e.to_string())?;
+        progress(done, total);
+        if total > 0 && done != total {
+            return Err("La descarga se cortó antes de terminar. Vuelve a intentarlo: seguirá donde se quedó.".into());
+        }
+    } else {
+        progress(done, total);
+    }
+    Ok(())
+}
+
+// ---------- Paquetes de modelos para la bienvenida ----------
+/// (paquete, carpeta en models/, archivo, url, bytes). Solo enlaces oficiales fijos.
+pub const PACKS: &[(&str, &str, &str, &str, u64)] = &[
+    ("anima", "diffusion_models", "anima-turbo-v1.1.safetensors",
+     "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/diffusion_models/anima-turbo-v1.1.safetensors", 4_182_230_656),
+    ("anima", "text_encoders", "qwen_3_06b_base.safetensors",
+     "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors", 1_192_135_096),
+    ("anima", "vae", "qwen_image_vae.safetensors",
+     "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/vae/qwen_image_vae.safetensors", 253_806_246),
+];
+
+pub fn pack_status(root: &Path) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for (pack, dir, file, _, bytes) in PACKS {
+        let e = out.entry(pack.to_string()).or_insert_with(|| serde_json::json!({ "bytes": 0u64, "have": 0u64, "installed": true }));
+        let p = root.join("models").join(dir).join(file);
+        let have = if p.is_file() { *bytes } else { fs::metadata(p.with_extension("safetensors.part")).map(|m| m.len()).unwrap_or(0) };
+        e["bytes"] = (e["bytes"].as_u64().unwrap() + bytes).into();
+        e["have"] = (e["have"].as_u64().unwrap() + have).into();
+        if !p.is_file() { e["installed"] = false.into(); }
+    }
+    serde_json::Value::Object(out)
+}
+
+/// Descarga los archivos que falten del paquete. progress(hecho, total) del paquete entero.
+pub fn pack_download(root: &Path, pack: &str, progress: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
+    CANCEL.store(false, Ordering::Relaxed);
+    let files: Vec<_> = PACKS.iter().filter(|p| p.0 == pack).collect();
+    if files.is_empty() { return Err("Paquete desconocido".into()); }
+    let total: u64 = files.iter().map(|f| f.4).sum();
+    let models = root.join("models");
+    let missing: u64 = files.iter().filter(|f| !models.join(f.1).join(f.2).is_file()).map(|f| f.4).sum();
+    if let Some(free) = free_bytes(&models) {
+        if free < missing + (200 << 20) {
+            return Err(format!("Falta espacio en el disco: hacen falta {:.1} GB libres y hay {:.1} GB", missing as f64 / 1e9, free as f64 / 1e9));
+        }
+    }
+    let mut base = 0u64;
+    for (_, dir, file, url, bytes) in files {
+        let d = models.join(dir);
+        fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+        let dest = d.join(file);
+        if !dest.is_file() {
+            let part = d.join(format!("{file}.part"));
+            download_resumable(url, &part, *bytes, &mut |n, _| progress(base + n, total))?;
+            fs::rename(&part, &dest).map_err(|e| e.to_string())?;
+        }
+        base += bytes;
+        progress(base, total);
+    }
     Ok(())
 }
 
@@ -235,5 +298,24 @@ mod tests {
         }, &mut || println!("cambiando la carpeta del motor")).expect("install");
         assert!(crate::server::engine_installed(&root, "torch"));
         assert_eq!(installed(&root), Some(m.version));
+    }
+
+    /// Descarga real desde Hugging Face con reanudación: HEXANIMA_TEST_OUT=archivo
+    #[test]
+    #[ignore]
+    fn resume_from_huggingface() {
+        let out = PathBuf::from(std::env::var("HEXANIMA_TEST_OUT").expect("HEXANIMA_TEST_OUT"));
+        let (_, _, _, url, bytes) = PACKS.iter().find(|p| p.2 == "qwen_image_vae.safetensors").unwrap();
+        let _ = fs::remove_file(&out);
+        download_resumable(url, &out, *bytes, &mut |_, _| {}).expect("descarga");
+        assert_eq!(fs::metadata(&out).unwrap().len(), *bytes);
+        // cortar a la mitad y reanudar
+        let f = OpenOptions::new().write(true).open(&out).unwrap();
+        f.set_len(bytes / 2).unwrap();
+        drop(f);
+        let mut first = None;
+        download_resumable(url, &out, *bytes, &mut |d, _| { first.get_or_insert(d); }).expect("reanudar");
+        assert_eq!(fs::metadata(&out).unwrap().len(), *bytes);
+        println!("reanudó desde {} bytes", first.unwrap_or(0));
     }
 }

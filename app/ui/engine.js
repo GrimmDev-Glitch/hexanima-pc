@@ -49,7 +49,7 @@ const EngineDl = {
     $("engineDlg").classList.remove("hidden");
   },
 
-  close() { $("engineDlg").classList.add("hidden"); },
+  close() { $("engineDlg").classList.add("hidden"); if (typeof Packs !== "undefined") Packs.next(); },
 
   showProgress(on) {
     $("engProg").classList.toggle("hidden", !on);
@@ -132,3 +132,80 @@ $("engLater").onclick = () => { if (!EngineDl.busy) store.set("engineWelcomeLate
 $("engCancel").onclick = () => invoke("engine_dl_cancel");
 $("engSetBtn").onclick = async () => { if (!EngineDl.busy) await EngineDl.refresh(); EngineDl.open(); };
 EngineDl.maybeWelcome();
+
+// ---------- Bienvenida, paso 2: modelo para empezar (Anima; Qwen y MOSS próximamente) ----------
+const Packs = {
+  status: {},
+  busy: null,
+  modelsKnown: false,
+  t0: 0, d0: 0,
+
+  /** Lo llama el arranque tras leer los modelos, y al cerrar el paso del motor. */
+  async next() {
+    if (!this.modelsKnown || !$("engineDlg").classList.contains("hidden") || this.shown) return;
+    if ((state.options || []).length || store.get("packsSkip", false)) return;
+    this.shown = true;
+    await this.open();
+  },
+
+  async open() {
+    try { this.status = await invoke("pack_status"); } catch { this.status = {}; }
+    for (const card of document.querySelectorAll("#packDlg .pack[data-pack]")) this.renderCard(card);
+    $("packErr").classList.add("hidden");
+    $("packDlg").classList.remove("hidden");
+  },
+
+  renderCard(card) {
+    const st = this.status[card.dataset.pack] || {}, btn = card.querySelector(".pack-btn");
+    const left = (st.bytes || 0) - (st.have || 0);
+    card.querySelector(".pack-size").textContent = st.installed ? "✓ Instalado" : st.have ? `Descarga a medias: quedan ${EngineDl.gb(left)} GB` : `Descarga de ${EngineDl.gb(st.bytes || 0)} GB`;
+    btn.textContent = st.installed ? "Usar" : st.have ? "Continuar" : "Descargar";
+    btn.disabled = !!this.busy;
+    card.querySelector(".pack-prog").classList.toggle("hidden", this.busy !== card.dataset.pack);
+    $("packCancel").classList.toggle("hidden", !this.busy);
+    $("packSkip").textContent = this.busy ? "Seguir usando la app" : "Omitir";
+  },
+
+  onProgress(card, p) {
+    const now = performance.now();
+    if (!this.t0 || p.done < this.d0) { this.t0 = now; this.d0 = p.done; }
+    const secs = (now - this.t0) / 1000, speed = secs > 2 ? (p.done - this.d0) / secs : 0;
+    const eta = speed > 0 ? Math.round((p.total - p.done) / speed) : null;
+    const pct = p.total ? (100 * p.done) / p.total : 0;
+    card.querySelector(".bar > i").style.width = pct + "%";
+    const txt = `${pct.toFixed(0)} % · ${EngineDl.gb(p.done)} de ${EngineDl.gb(p.total)} GB`
+      + (speed ? ` · ${(speed / 1e6).toFixed(1)} MB/s` : "") + (eta != null ? ` · quedan ${eta >= 90 ? Math.round(eta / 60) + " min" : eta + " s"}` : "");
+    card.querySelector(".pack-txt").textContent = txt;
+    setStatus(`Descargando ${card.querySelector(".pack-name").textContent}… ${txt}`);
+  },
+
+  async download(card) {
+    const pack = card.dataset.pack;
+    if (this.busy) return;
+    if (!this.status[pack]?.installed) {
+      this.busy = pack; this.t0 = 0; this.renderCard(card);
+      const off = await window.__TAURI__.event.listen("dl-progress", (ev) => { if (ev.payload.id === "pack-" + pack) this.onProgress(card, ev.payload); });
+      try {
+        await invoke("pack_download", { pack });
+        toast("✓ " + card.querySelector(".pack-name").textContent + " descargado", 4000);
+      } catch (e) {
+        const msg = String(e.message || e);
+        $("packErr").textContent = msg; $("packErr").classList.remove("hidden");
+        this.busy = null; off();
+        try { this.status = await invoke("pack_status"); } catch { /* sigue */ }
+        return this.renderCard(card);
+      }
+      off(); this.busy = null;
+    }
+    // usarlo: leer los modelos, elegir el nuevo y cargarlo (Anima arranca el motor CUDA solo)
+    $("packDlg").classList.add("hidden");
+    await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
+    await scanModels();
+    const opt = state.options.find((o) => o.family === pack);
+    if (opt) { $("model").value = opt.id; $("model").dispatchEvent(new Event("change")); await loadModel(); }
+  },
+};
+
+for (const card of document.querySelectorAll("#packDlg .pack[data-pack]")) card.querySelector(".pack-btn").onclick = () => Packs.download(card);
+$("packSkip").onclick = () => { if (!Packs.busy) store.set("packsSkip", true); $("packDlg").classList.add("hidden"); };
+$("packCancel").onclick = () => invoke("engine_dl_cancel");

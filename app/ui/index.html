@@ -552,6 +552,39 @@
   </div>
 </div>
 
+<!-- Bienvenida, paso 2: elegir un modelo para empezar -->
+<div id="packDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="packTitle">
+  <div class="dlg dlg-pack">
+    <div class="dlg-head"><h2 id="packTitle">Elige un modelo para empezar</h2></div>
+    <p class="eng-txt">HexAnima necesita al menos un modelo para generar. Descarga uno de estos o pulsa <b>Omitir</b>
+      si prefieres buscar otros en la pestaña <b>Civitai</b> (SDXL, Illustrious, Pony…).</p>
+    <div class="pack-list">
+      <div class="pack" data-pack="anima">
+        <div class="pack-info"><div class="pack-name">Anima Turbo</div>
+          <div class="lbl">Anime e ilustración · rápido (8 pasos) · funciona en gráficas de 4 GB</div>
+          <div class="lbl pack-size"></div>
+          <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
+        <button class="primary pack-btn">Descargar</button>
+      </div>
+      <div class="pack soon">
+        <div class="pack-info"><div class="pack-name">Qwen-Image</div>
+          <div class="lbl">Fotos realistas y editar fotos con referencias · necesita una gráfica potente</div></div>
+        <button class="ghost" disabled>Próximamente</button>
+      </div>
+      <div class="pack soon">
+        <div class="pack-info"><div class="pack-name">MOSS-Image</div>
+          <div class="lbl">Retratos realistas (RealSkin) · necesita una gráfica potente</div></div>
+        <button class="ghost" disabled>Próximamente</button>
+      </div>
+    </div>
+    <div id="packErr" class="eng-err hidden"></div>
+    <div class="dlg-foot">
+      <button id="packCancel" class="ghost hidden">Cancelar descarga</button>
+      <button id="packSkip" class="ghost">Omitir</button>
+    </div>
+  </div>
+</div>
+
 <!-- Visor a pantalla completa -->
 <div id="viewer" class="viewer hidden" role="dialog" aria-modal="true" aria-label="Visor">
   <div class="v-top">
