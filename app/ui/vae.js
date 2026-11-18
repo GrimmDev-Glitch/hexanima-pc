@@ -95,4 +95,4 @@ $("taesdBtn").onclick = async () => {
 
 $("vaePick").onchange = () => Vae.pick();
 $("model").addEventListener("change", () => Vae.render());
-setTimeout(() => { Vae.refresh(); renderPreviewOpt(); }, 1500);
+setTimeout(() => renderPreviewOpt(), 1500);  // la lista de VAEs se llena al leer los modelos (scanModels)
