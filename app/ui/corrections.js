@@ -236,7 +236,7 @@ const Fix = {
       width: tw, height: th, seed: Math.floor(Math.random() * 2 ** 31), batch_count: 1, clip_skip: +$("clipskip").value,
       sample_params: { scheduler: $("scheduler").value, sample_method: $("sampler").value, sample_steps: clampNum($("steps"), 20), guidance: { txt_cfg: clampNum($("cfg"), 5) } },
       lora: spec.lora,
-      vae_tiling_params: { enabled: (state.engine || state.hw.engine) !== "cuda" || state.hw.profile === "bajo" },
+      vae_tiling_params: { enabled: vaeTiling() },
       output_format: "png",
     };
     const out = await loadImg(await this.job(body, label));

@@ -400,7 +400,7 @@ async function runOne(opt, seed) {
     },
     lora: loraSpec.lora,
     // Vulkan y el perfil bajo: VAE por mosaicos (sin ellos el primer intento puede fallar por memoria)
-    vae_tiling_params: { enabled: (state.engine || state.hw.engine) !== "cuda" || state.hw.profile === "bajo" },
+    vae_tiling_params: { enabled: vaeTiling() },
     preview: "proj", preview_interval: 1,
     output_format: "png", embed_image_metadata: true,
   };
@@ -441,6 +441,10 @@ async function runOne(opt, seed) {
     if (j.status === "cancelled") return null;
   }
 }
+
+/** VAE por mosaicos: en Vulkan hace fallar la gráfica (ErrorDeviceLost en la GTX 1650), así que
+ *  solo se usa con CUDA en el perfil bajo. Sin mosaicos, Vulkan decodifica 832×1216 en ~23 s. */
+function vaeTiling() { return (state.engine || state.hw.engine) === "cuda" && state.hw.profile === "bajo"; }
 
 function showImage(src, final = true) {
   $("result").src = src;
@@ -490,7 +494,7 @@ function setMode(mode) {
   const has = !!state.editImage;
   $("editClear").classList.toggle("hidden", !has);
   $("editBox").classList.toggle("on", has);
-  if (has) { $("editBox").classList.add("open"); $("editToggle").setAttribute("aria-expanded", "true"); }
+  if (has && typeof Acc !== "undefined") Acc.open("edit");
   $("editHint").textContent = has ? `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).` : "Elige una foto para generar a partir de ella (imagen a imagen).";
   if (!has) state.editMask = null;
   if (typeof Mask !== "undefined") { if (!has) Mask.paint = null; Mask.refresh(); }
@@ -546,6 +550,11 @@ async function generate(opts = {}) {
   if (!opt || state.busy) return;
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
   if (!(await Ad.ensure())) return;
+  // Con la RAM casi llena el motor tiene que esperar al disco y cada paso tarda el doble o más.
+  try {
+    const m = await invoke("memory");
+    if (m.ram_free_gb != null && m.ram_free_gb < 2.5) toast(`Queda poca RAM libre (${m.ram_free_gb.toFixed(1)} GB): cierra programas como el navegador o Discord para que no vaya más lento.`, 7000);
+  } catch { /* vista previa */ }
   if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   
   const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value, mask: state.editMask } : null;
@@ -574,6 +583,8 @@ async function generate(opts = {}) {
     setStatus("Error: " + e.message, "err");
   } finally {
     if (saved) { state.mode = saved.mode; state.editImage = saved.img; state.editMask = saved.mask; $("editStrength").value = saved.str; }
+    // Detenido o fallido: no dejar en pantalla la vista previa a medio hacer.
+    if ($("canvas").classList.contains("previewing")) { const c = Session.cur(); if (c) showImage(c.src); else Session.clear(); }
     state.busy = false; state.job = null;
     $("progress").classList.remove("on");
     $("extendBatch").disabled = true;
@@ -769,11 +780,3 @@ async function refreshAll() {
 $("refreshBtn").onclick = refreshAll;
 $("lpRefresh").onclick = refreshAll;
 
-// «Editar una foto» se pliega para dejar sitio (se abre sola al elegir una foto).
-$("editToggle").onclick = () => {
-  const open = !$("editBox").classList.contains("open");
-  $("editBox").classList.toggle("open", open);
-  $("editToggle").setAttribute("aria-expanded", String(open));
-  store.set("editOpen", open);
-};
-if (store.get("editOpen", false)) { $("editBox").classList.add("open"); $("editToggle").setAttribute("aria-expanded", "true"); }

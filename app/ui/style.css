@@ -553,7 +553,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 /* Editar una foto plegable */
 .sect-toggle { background: none; border: 0; padding: 0; cursor: pointer; color: var(--text); font-weight: 600; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
 .sect-toggle .caret { color: var(--accent); width: 12px; display: inline-block; transition: transform .15s; }
-.edit-box:not(.open) > :not(.row:first-child) { display: none; }
 .edit-box.open .sect-toggle .caret { transform: rotate(90deg); }
 
 /* ===== Botones más visibles ===== */
@@ -571,3 +570,49 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .mini svg { width: 16px; height: 16px; }
 .ghost.icon svg { width: 18px; height: 18px; }
 .menu-btn { width: 40px; height: 40px; font-size: 24px; }
+
+/* ===== Generar v3: columna de edición + imagen ===== */
+#page-gen.on { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; overflow: hidden; min-height: 0; }
+.g-split { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(380px, 470px) minmax(0, 1fr); gap: 14px; }
+.g-left { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.g-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.g-card { display: flex; flex-direction: column; gap: 6px; }
+.g-card .prompt-head { gap: 6px; }
+.g-card .prompt-tools { flex-wrap: wrap; justify-content: flex-end; }
+.g-card .prompt-tools .mini-select { max-width: 112px; }
+#prompt { resize: vertical; min-height: 110px; max-height: 60vh; line-height: 1.4; }
+#neg { resize: vertical; min-height: 58px; max-height: 40vh; line-height: 1.4; padding: 9px 12px 20px; }
+.neg-box .neg-meta { position: absolute; right: 12px; bottom: 5px; font-size: 11px; color: #6E6990; pointer-events: none; }
+.g-actions { flex: none; display: flex; gap: 6px; align-items: stretch; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--card); }
+.g-actions #genBtn { flex: 1; min-height: 46px; font-size: 18px; border-radius: 10px; }
+.g-actions #stopBtn, .g-actions #extendBatch { padding: 0 10px; }
+.g-actions .batch { padding-left: 8px; }
+.g-out { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+.g-out .canvas { min-height: 0; }
+.g-out .imgbar { justify-content: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px 6px; }
+.g-out .imgbar-actions { margin-left: 0; }
+.g-out .res-seed { margin-right: auto; }
+@media (max-width: 1150px) { .g-split { grid-template-columns: 360px minmax(0, 1fr); } }
+
+/* Secciones plegables */
+.acc { border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.acc-head { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; background: none; border: 0; cursor: pointer; color: var(--text); text-align: left; }
+.acc-head:hover { background: rgba(163, 143, 253, .06); border-radius: 10px; }
+.acc-caret { color: var(--accent); width: 12px; transition: transform .15s; flex: none; }
+.acc.open .acc-caret { transform: rotate(90deg); }
+.acc-title { font-weight: 700; font-size: 14px; letter-spacing: .02em; flex: none; }
+.acc-sum { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.acc-sum.on { color: var(--accent); }
+.acc-body { display: none; flex-direction: column; gap: 10px; padding: 2px 12px 12px; }
+.acc.open .acc-body { display: flex; }
+.acc-tools { display: flex; justify-content: flex-end; margin-bottom: -4px; }
+.acc-body .hires-box.on, .acc-body .edit-box.on { background: none; border: 0; padding: 0; margin: 0; }
+.acc-body #adBox > .hires-head .hires-t { display: none; }
+.acc-body #loraList { max-height: 230px; overflow-y: auto; padding-right: 2px; }
+.acc-body .lora-open { width: 100%; justify-content: center; }
+.g-left .ctrl-like input[type=number].field, .acc-body input[type=number].field { min-width: 0; width: 100%; }
+.g-card:first-child .prompt-head { flex-direction: column; align-items: stretch; gap: 6px; }
+.g-card:first-child .prompt-tools { flex-wrap: nowrap; justify-content: space-between; gap: 4px; }
+.g-card:first-child .prompt-tools .mini-select { max-width: 96px; flex: 1 1 0; min-width: 0; }
+.g-card:first-child .prompt-tools #deleteTemplate:disabled { display: none; }
+.g-card:first-child .prompt-lbl { align-self: flex-start; }
