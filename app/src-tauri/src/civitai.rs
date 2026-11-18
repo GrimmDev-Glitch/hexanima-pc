@@ -245,6 +245,8 @@ pub const ASSETS: &[(&str, &str, &str, &str, u32)] = &[
     ("taesdxl", "vae_approx", "taesdxl_decoder.pth", "https://github.com/madebyollin/taesd/raw/main/taesdxl_decoder.pth", 5),
     // Modo rápido: LoRA DMD2 de 4 pasos (tianweiy, CC BY-NC 4.0)
     ("dmd2", "@loras", "dmd2_sdxl_4step_lora_fp16.safetensors", "https://huggingface.co/tianweiy/DMD2/resolve/main/dmd2_sdxl_4step_lora_fp16.safetensors", 394),
+    // Modo rápido para modelos Anima normales (como las versiones «turbo11» del teléfono): LoRA Anima Turbo v1.1
+    ("anima_turbo", "@loras", "anima-turbo-v11-rank32-bias.safetensors", "https://civitai.com/api/download/models/3309664?fileId=3196967", 142),
     // Personaje de referencia: leer rasgos (WD Tagger v3, Apache-2.0) e IP-Adapter para NoobAI/Illustrious
     ("tagger", "tagger", "wd-vit-tagger-v3.safetensors", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.safetensors", 378),
     ("tagger_tags", "tagger", "wd-vit-tagger-v3.csv", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/selected_tags.csv", 1),

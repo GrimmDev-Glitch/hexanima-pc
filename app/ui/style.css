@@ -681,3 +681,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .mage-ref img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
 .mage-ref span { position: absolute; left: 4px; bottom: 3px; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000; }
 .mage-ref button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 11px; cursor: pointer; }
+
+/* Catálogo (modelos del teléfono) */
+.cat-head { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+.cat-head h3 { margin: 0; font-size: 16px; }
+.dlg-pack { max-height: 100%; overflow: auto; }
+.pack .pack-tag { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--accent); }

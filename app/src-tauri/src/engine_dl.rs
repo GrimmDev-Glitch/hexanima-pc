@@ -194,6 +194,11 @@ pub const PACKS: &[(&str, &str, &str, &str, u64)] = &[
      "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors", 1_192_135_096),
     ("anima", "vae", "qwen_image_vae.safetensors",
      "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/vae/qwen_image_vae.safetensors", 253_806_246),
+    // Codificador y VAE de Anima solos: los usan los modelos del catálogo (MiaoMiao…), que solo traen el transformador
+    ("anima_base", "text_encoders", "qwen_3_06b_base.safetensors",
+     "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/text_encoders/qwen_3_06b_base.safetensors", 1_192_135_096),
+    ("anima_base", "vae", "qwen_image_vae.safetensors",
+     "https://huggingface.co/circlestone-labs/Anima/resolve/main/split_files/vae/qwen_image_vae.safetensors", 253_806_246),
     // Mage-Flow Edit Turbo (Microsoft, MIT): Q6_K (por debajo de 6 bits deja una trama visible), Qwen3-VL-4B + mmproj, VAE
     ("mage", "diffusion_models", "mage-flow-edit-turbo-Q6_K.gguf",
      "https://huggingface.co/johnsor/Mage-Flow-Edit-Turbo-GGUF/resolve/main/mage-flow-edit-turbo-Q6_K.gguf", 3_387_311_156),
