@@ -125,6 +125,15 @@ const History = {
     if (!m.sampler && m.sampler_label) pick($("sampler"), null, m.sampler_label);
     if (m.seed != null) $("seed").value = String(m.seed);
     if (m.clip_skip != null) $("clipskip").value = String(m.clip_skip);
+    // Hires fix: se restaura tal como se usó (o se apaga si la imagen no lo usó).
+    $("hiresOn").checked = !!m.hires;
+    if (m.hires) {
+      if (m.width) $("hiresScale").value = String(Math.round((m.hires.target_width / m.width) * 10) / 10);
+      $("hiresDen").value = String(m.hires.denoising_strength ?? 0.45);
+      $("hiresSteps").value = String(m.hires.steps ?? 4);
+      Hires.fillUpscalers(m.hires.upscaler);
+    }
+    Hires.save();
     if (m.width && m.height) {
       $("customW").value = m.width; $("customH").value = m.height;
       document.querySelector('#aspect button[data-a="c"]').click();
@@ -183,6 +192,14 @@ $("hBulkFav").onclick = async () => {
   const fav = !items.every((i) => i.meta?.fav);
   for (const i of items) await invoke("gallery_fav", { name: i.name, fav });
   await History.show();
+};
+$("hBulkZip").onclick = async () => {
+  if (!History.sel.size) return toast("Selecciona primero las imágenes");
+  try {
+    toast(`Creando ZIP con ${History.sel.size} imágenes…`, 60000);
+    const path = await invoke("gallery_zip", { names: [...History.sel] });
+    toast(path ? "ZIP guardado: " + path : "Exportación cancelada", 5000);
+  } catch (e) { toast("No se pudo exportar: " + (e.message || e), 5000); }
 };
 $("hBulkTrash").onclick = () => { if (History.sel.size) History.trash([...History.sel]); };
 $("hFav").onclick = async () => { const it = History.item(); if (!it) return; await invoke("gallery_fav", { name: it.name, fav: !it.meta?.fav }); await History.show(); };

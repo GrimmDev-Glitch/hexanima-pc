@@ -361,6 +361,7 @@ const Civitai = {
     $("civNsfw").checked = !!this.key() && store.get("civitaiNsfw", false);
     $("civSort").value = this.sort;
     this.renderChips();
+    Collections.load().then(() => Collections.renderCivSide());
     if (!this.items.length) this.search();
   },
 
@@ -408,6 +409,8 @@ const Civitai = {
     } catch (e) { $("civInfo").textContent = "Error: " + (e.message || e); }
   },
 
+  redraw() { $("civGrid").innerHTML = ""; for (const it of this.items) $("civGrid").appendChild(this.card(it)); },
+
   isDownloaded(m, v) {
     const ids = new Set(this.index.ids);
     if (ids.has("model_id:" + m.id)) return true;
@@ -442,7 +445,8 @@ const Civitai = {
     const src = this.thumb(m);
     const done = this.isDownloaded(m);
     c.innerHTML = `<div class="cthumb">${src ? '<img loading="lazy" alt="">' : '<span class="lbl">sin vista previa</span>'}
-        ${done ? '<span class="cok">✓ Descargada</span>' : ""}${m.nsfw ? '<span class="c18">18+</span>' : ""}</div>
+        ${done ? '<span class="cok">✓ Descargada</span>' : ""}${m.nsfw ? '<span class="c18">18+</span>' : ""}
+        <button class="csave" title="Guardar en una colección" aria-label="Guardar en una colección"></button></div>
       <div class="cbody"><div class="cname"></div>
         <div class="lmeta"><span class="cbase"></span><span class="csize"></span></div>
         <div class="lbl cby"></div><div class="lbl ctrig"></div>
@@ -458,6 +462,10 @@ const Civitai = {
     const words = v.trainedWords || [];
     c.querySelector(".ctrig").textContent = words.length ? "Activador: " + words[0] + (words.length > 1 ? "…" : "") : "";
     c.querySelector(".cbtn").textContent = done ? "Ver · ya la tienes" : "Ver y descargar";
+    const save = c.querySelector(".csave");
+    const mark = () => { const on = Collections.inAny(m.id); save.textContent = on ? "★" : "☆"; save.classList.toggle("on", on); };
+    mark();
+    save.onclick = (e) => { e.stopPropagation(); const r = save.getBoundingClientRect(); Collections.menu(m, null, r.left, r.bottom + 4, mark); };
     c.onclick = () => this.openModel(m.id, null, m);
     return c;
   },
@@ -501,13 +509,10 @@ const Civitai = {
     $("sheetProgress").classList.toggle("hidden", !busy);
   },
 
-  async download() {
-    const m = this.model, v = this.version(), f = this.mainFile(v);
-    if (!f || this.dl) return;
-    if (m.nsfw && !this.key()) {
-      toast("Este modelo es +18: añade tu clave API de Civitai en Ajustes", 4500);
-      return;
-    }
+  /** Petición de descarga de una versión (también la usan las colecciones). */
+  request(m, v) {
+    const f = this.mainFile(v);
+    if (!f || !f.downloadUrl) return null;
     const isLora = /^(LORA|LoCon|DoRA|LyCORIS)$/i.test(m.type);
     const anima = /anima/i.test(v.baseModel || "");
     const kind = isLora ? "lora" : anima ? "diffusion_model" : "checkpoint";
@@ -516,11 +521,22 @@ const Civitai = {
       name: m.name, version: v.name, model_id: m.id, version_id: v.id, type: m.type, base: v.baseModel || null,
       words: v.trainedWords || [], preview: img ? img.url : null, nsfw: !!m.nsfw, tags: m.tags || [],
     };
-    this.dl = String(v.id);
+    return { isLora, meta, req: { id: String(v.id), url: f.downloadUrl, kind, file_name: f.name, meta } };
+  },
+
+  async download() {
+    const m = this.model, v = this.version(), r = v && this.request(m, v);
+    if (!r || this.dl || Collections.dl) return;
+    if (m.nsfw && !this.key()) {
+      toast("Este modelo es +18: añade tu clave API de Civitai en Ajustes", 4500);
+      return;
+    }
+    const { isLora, meta } = r;
+    this.dl = r.req.id;
     this.renderSheet();
     $("sheetProgTxt").textContent = "Descargando…";
     try {
-      const file = await invoke("civitai_download", { req: { id: this.dl, url: f.downloadUrl, kind, file_name: f.name, meta }, key: this.key() });
+      const file = await invoke("civitai_download", { req: r.req, key: this.key() });
       this.index = await invoke("downloaded_index");
       if (isLora) {
         await Loras.refresh();
@@ -532,7 +548,8 @@ const Civitai = {
         toast(`✓ ${m.name}: ya aparece en Modelo`, 5000);
       }
       // Volver a dibujar las tarjetas para marcar "✓ Descargada".
-      $("civGrid").innerHTML = ""; for (const it of this.items) $("civGrid").appendChild(this.card(it));
+      this.redraw();
+      if (LoraPage.visible()) LoraPage.render();
     } catch (e) {
       if (!/cancelada/i.test(String(e))) toast("Falló la descarga: " + (e.message || e), 5000);
     } finally {
@@ -564,6 +581,11 @@ $("civNsfw").onchange = () => {
 $("sheetVersion").onchange = () => Civitai.renderSheet();
 $("sheetDl").onclick = () => Civitai.download();
 $("sheetCancel").onclick = () => { if (Civitai.dl) invoke("civitai_cancel", { id: Civitai.dl }); };
+$("sheetSave").onclick = (e) => {
+  const m = Civitai.model; if (!m) return;
+  const r = e.currentTarget.getBoundingClientRect();
+  Collections.menu(m, Civitai.version(), r.left, r.top - 8, () => Civitai.redraw());
+};
 $("sheetWeb").onclick = () => {
   const m = Civitai.model, v = Civitai.version();
   if (m) invoke("open_url", { url: `https://civitai.com/models/${m.id}${v ? "?modelVersionId=" + v.id : ""}` });

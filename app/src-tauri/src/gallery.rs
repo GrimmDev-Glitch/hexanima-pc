@@ -182,3 +182,29 @@ pub fn trash(root: &Path, names: &[String]) -> Result<usize, String> {
     trash::delete_all(&targets).map_err(|e| format!("No se pudo enviar a la papelera: {e}"))?;
     Ok(names.len())
 }
+
+/// ZIP sin compresión (los PNG ya vienen comprimidos): cada imagen con su .json si existe.
+pub fn zip(root: &Path, names: &[String], dest: &Path) -> Result<usize, String> {
+    use std::io::Write;
+    let file = std::fs::File::create(dest).map_err(|e| format!("No se pudo crear el ZIP: {e}"))?;
+    let mut z = zip::ZipWriter::new(std::io::BufWriter::new(file));
+    let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored).large_file(false);
+    let mut n = 0;
+    for name in names {
+        let Ok(png) = resolve(root, name) else { continue };
+        let mut add = |p: &Path| -> Result<(), String> {
+            let bytes = std::fs::read(p).map_err(|e| e.to_string())?;
+            let fname = p.file_name().and_then(|x| x.to_str()).unwrap_or("imagen");
+            z.start_file(fname, opts).map_err(|e| e.to_string())?;
+            z.write_all(&bytes).map_err(|e| e.to_string())
+        };
+        add(&png)?;
+        let js = png.with_extension("json");
+        if js.is_file() {
+            add(&js)?;
+        }
+        n += 1;
+    }
+    z.finish().map_err(|e| e.to_string())?;
+    Ok(n)
+}

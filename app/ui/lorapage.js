@@ -41,8 +41,17 @@ const LoraPage = {
   sel: new Set(),
   folders: [],
   presets: [],
+  coll: null,         // id de la colección de Civitai abierta (o null)
+
+  visible() { return getComputedStyle($("page-loras")).display !== "none"; },
+
+  openCollection(id) {
+    this.coll = id;
+    document.querySelector('.nav[data-page="loras"]')?.click();
+  },
 
   async show() {
+    await Collections.load();
     await Loras.refresh();
     try { this.folders = await invoke("lora_folders"); } catch { this.folders = []; }
     try { this.presets = await invoke("lora_presets_get"); } catch { this.presets = []; }
@@ -82,15 +91,17 @@ const LoraPage = {
 
   render() {
     const lib = Loras.lib;
+    this.renderColls();
     // Carpetas + favoritas
     const fl = $("lpFolders"); fl.innerHTML = "";
     const count = (f) => lib.filter((l) => (l.folder || "") === f).length;
-    fl.appendChild(flistItem("all", "Todas", lib.length, this.folder === "*" && !this.favOnly, () => { this.folder = "*"; this.favOnly = false; this.render(); }));
-    fl.appendChild(flistItem("star", "Favoritas", lib.filter((l) => l.fav).length, this.favOnly, () => { this.favOnly = true; this.folder = "*"; this.render(); }));
-    if (this.folders.length) fl.appendChild(flistItem("folder", "Sin carpeta", count(""), this.folder === "" && !this.favOnly, () => { this.folder = ""; this.favOnly = false; this.render(); }));
+    const lc = !this.coll;
+    fl.appendChild(flistItem("all", "Todas", lib.length, lc && this.folder === "*" && !this.favOnly, () => { this.coll = null; this.folder = "*"; this.favOnly = false; this.render(); }));
+    fl.appendChild(flistItem("star", "Favoritas", lib.filter((l) => l.fav).length, lc && this.favOnly, () => { this.coll = null; this.favOnly = true; this.folder = "*"; this.render(); }));
+    if (this.folders.length) fl.appendChild(flistItem("folder", "Sin carpeta", count(""), lc && this.folder === "" && !this.favOnly, () => { this.coll = null; this.folder = ""; this.favOnly = false; this.render(); }));
     for (const f of this.folders) {
       const depth = f.split("/").length - 1;
-      const it = flistItem("folder", f.split("/").pop(), count(f), this.folder === f && !this.favOnly, () => { this.folder = f; this.favOnly = false; this.render(); });
+      const it = flistItem("folder", f.split("/").pop(), count(f), lc && this.folder === f && !this.favOnly, () => { this.coll = null; this.folder = f; this.favOnly = false; this.render(); });
       it.style.paddingLeft = 10 + depth * 14 + "px";
       fl.appendChild(it);
     }
@@ -124,6 +135,14 @@ const LoraPage = {
       { key: "none", label: `Sin categoría  ${none}`, icon: "none" },
     ], this.cat, (k) => (this.cat = k));
 
+    const c = this.coll && Collections.byId(this.coll);
+    if (this.coll && !c) this.coll = null;
+    $("lpFilters").classList.toggle("hidden", !!c);
+    $("lpLibActions").classList.toggle("hidden", !!c);
+    $("lpCollActions").classList.toggle("hidden", !c);
+    $("lpGrid").classList.toggle("civ-grid", !!c);
+    if (c) { this.selecting = false; return this.renderCollection(c); }
+
     const shown = this.filtered();
     const active = Loras.tags();
     $("lpCount").textContent = `${shown.length} de ${lib.length} LoRAs${active.size ? ` · activos en el prompt: ${active.size}` : ""}`;
@@ -135,6 +154,38 @@ const LoraPage = {
     if (!lib.length) grid.innerHTML = '<div class="lbl empty-lib">Vacía: importa un archivo .safetensors o descarga LoRAs desde la sección Civitai.</div>';
     else if (!shown.length) grid.innerHTML = '<div class="lbl empty-lib">Ningún LoRA coincide con los filtros.</div>';
     for (const l of shown) grid.appendChild(this.card(l, active.get(l.stem.toLowerCase())));
+  },
+
+  /** Barra lateral: colecciones de Civitai, como carpetas. */
+  renderColls() {
+    const el = $("lpColls"); el.innerHTML = "";
+    if (!Collections.list.length) el.innerHTML = '<div class="lbl fempty">Guarda modelos de Civitai con ☆ para tenerlos a mano y descargarlos cuando quieras.</div>';
+    for (const c of Collections.list) {
+      const it = flistItem("folder", c.name, c.items.length, this.coll === c.id, () => { this.coll = c.id; this.render(); },
+        (e) => { e.preventDefault(); Collections.sideMenu(c, e.clientX, e.clientY); });
+      it.title = "Clic: abrir · clic derecho: descargar las que faltan, cambiar nombre, eliminar";
+      el.appendChild(it);
+    }
+  },
+
+  /** Contenido de una colección: tarjetas de Civitai (descarga con un clic). */
+  renderCollection(c) {
+    const have = c.items.filter((s) => Civitai.isDownloaded(s, s.modelVersions?.[0])).length;
+    $("lpCount").textContent = `Colección «${c.name}» · ${c.items.length} modelos · ${have} descargados`;
+    $("lpBulk").classList.add("hidden");
+    const q = $("lpSearch").value.trim().toLowerCase();
+    const shown = c.items.filter((s) => !q || `${s.name} ${(s.modelVersions?.[0]?.trainedWords || []).join(" ")} ${s.creator?.username || ""}`.toLowerCase().includes(q));
+    const grid = $("lpGrid"); grid.innerHTML = "";
+    if (!c.items.length) grid.innerHTML = '<div class="lbl empty-lib">Colección vacía. En la sección Civitai pulsa ☆ en una tarjeta y elige esta colección.</div>';
+    else if (!shown.length) grid.innerHTML = '<div class="lbl empty-lib">Nada coincide con la búsqueda.</div>';
+    for (const s of shown) {
+      const card = Civitai.card(s);
+      const save = card.querySelector(".csave");
+      save.textContent = "✕"; save.title = "Quitar de la colección"; save.classList.remove("on");
+      save.onclick = async (e) => { e.stopPropagation(); await Collections.toggle(c, s); };
+      card.onclick = () => Civitai.openModel(s.id, s.modelVersions?.[0]?.id || null, null);
+      grid.appendChild(card);
+    }
   },
 
   card(l, t) {
@@ -314,6 +365,11 @@ const LoraPage = {
 };
 
 $("lpSearch").oninput = () => LoraPage.render();
+$("lpNewColl").onclick = async () => { const c = await Collections.create(); if (c) { LoraPage.coll = c.id; LoraPage.render(); } };
+$("lpFavs").onclick = async () => { const c = await Collections.importFavorites(); if (c) { LoraPage.coll = c.id; LoraPage.render(); } };
+$("lpCollDl").onclick = () => { const c = Collections.byId(LoraPage.coll); if (c) Collections.downloadMissing(c); };
+$("lpCollMenu").onclick = (e) => { const c = Collections.byId(LoraPage.coll); const r = e.currentTarget.getBoundingClientRect(); if (c) Collections.sideMenu(c, r.left, r.bottom + 4); };
+$("lpCollCiv").onclick = () => document.querySelector('.nav[data-page="civitai"]')?.click();
 $("lpSort").onchange = () => LoraPage.render();
 $("lpImport").onclick = async () => { await Loras.import(); await LoraPage.show(); };
 $("lpNewFolder").onclick = () => LoraPage.newFolder();

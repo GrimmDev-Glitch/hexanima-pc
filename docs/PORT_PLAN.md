@@ -6,7 +6,9 @@ Fuente: el código de la app Android (`Hexanima/app/src/com/hexanima/npu/*.java`
 
 **Estado:** ✅ hecho · 🟡 parcial · ⬜ falta · ➖ no aplica en PC
 
-> **Avance (17 nov 2026):** fase 1 hecha — barra de la imagen (solo iconos, fuera del lienzo), visor, Otra vez / Variaciones, antes/después, Ampliar (Real-ESRGAN / UltraSharp ×2/×4), selector de modelo con tarjetas, Cargar / Liberar, menú ⋯, plantillas de configuración, ajustes desde PNG, # Etiquetas, autocompletar Danbooru, negativo (Predeterminado / Plantillas / Borrar), contador de tokens, ↺. Historial completo con filtros y selección múltiple; papelera = Papelera de reciclaje de Windows (en lugar de la de 30 días). Pendiente de la fase 1: exportar ZIP desde el Historial.
+> **Avance (17 nov 2026):** fase 1 hecha — barra de la imagen (solo iconos, fuera del lienzo), visor, Otra vez / Variaciones, antes/después, Ampliar (Real-ESRGAN / UltraSharp ×2/×4), selector de modelo con tarjetas, Cargar / Liberar, menú ⋯, plantillas de configuración, ajustes desde PNG, # Etiquetas, autocompletar Danbooru, negativo (Predeterminado / Plantillas / Borrar), contador de tokens, ↺. Historial completo con filtros y selección múltiple; papelera = Papelera de reciclaje de Windows (en lugar de la de 30 días). Exportar ZIP desde el Historial ✅.
+>
+> **Fase 2 (en curso):** ✎ Zona a cambiar (editor de máscara: Pincel / Borrador / Mover, tamaño, Deshacer / Rehacer, Invertir, Limpiar, zoom con la rueda) ✅ probado con el motor real; Hires fix (escala / denoise / pasos / ampliador) ✅. Extra pedido: **Colecciones de Civitai** (☆ en las tarjetas y en la ficha, carpetas en LoRAs → COLECCIONES, «Descargar las que faltan», «♥ Traer mis favoritos de Civitai»). Siguiente: ADetailer (necesita detectores YOLOv8 convertidos), Correcciones, Comparar 2×2, hojas de contactos, ✦ Estilo ChatGPT.
 
 ---
 
@@ -31,12 +33,12 @@ En el teléfono es una sola columna con secciones plegables. En PC se reparte en
 | PROMPT NEGATIVO: **Predeterminado**, **Plantillas**, **Borrar**, contador | 🟡 | Campo con negativo por familia. |
 | MUESTREO: PASOS, CFG, Sampler, Scheduler, **↺**, ⓘ ayuda, **CFG solo al principio** (100/80/70 %) | 🟡 | Pasos/CFG/sampler/scheduler ✅ (22 samplers y 19 schedulers del motor). Faltan ↺, ayudas y "CFG solo al principio" (por confirmar en el motor). |
 | Modo RealSkin (4 pasos / 8 pasos DMD) | ⬜ | Requiere MOSS (fase 4). |
-| EDITAR UNA FOTO (Anima): miniatura, **Elegir**, **↳ Última imagen**, **✎ Zona a cambiar** (máscara), **Cuánto cambia** | 🟡 | Elegir, última, % ✅ (sistema de trabajos con progreso). Falta la máscara / inpainting. |
+| EDITAR UNA FOTO (Anima): miniatura, **Elegir**, **↳ Última imagen**, **✎ Zona a cambiar** (máscara), **Cuánto cambia** | ✅ | Elegir, última, %, ✎ Zona a cambiar (máscara con bordes suaves → `mask_image`). |
 | EDITAR UNA FOTO (Qwen/Mage): referencias 2–3, *solo pose*, 👗 Copiar ropa, 🧍 Copiar pose, **Área a cambiar**, Forma de la foto, Alta fidelidad, Guardar comparación | ⬜ | Fase 4. El motor soporta `ref_images` y `mask_image`. |
 | POSE (fuerza 0,5–2,5) | ⬜ | Fase 5. |
 | LORA: biblioteca / importar / Civitai / intensidad | ✅ | Igual que el teléfono, con `<lora:nombre:fuerza>` en el prompt. |
 | **✦ Estilo ChatGPT** (descarga el LoRA gpt-image-2) | ⬜ | Fase 2. |
-| EXTRAS: vista previa en vivo, **Hires fix** (escala/denoise/pasos), **ADetailer caras / manos**, **Detector…**, **Presets**, **+ Cola**, **⊞ Comparar 2×2**, **▶** cola | 🟡 | Vista previa ✅, + Cola ✅. El motor soporta hires fix y ADetailer (YOLOv8 convertido a safetensors). |
+| EXTRAS: vista previa en vivo, **Hires fix** (escala/denoise/pasos), **ADetailer caras / manos**, **Detector…**, **Presets**, **+ Cola**, **⊞ Comparar 2×2**, **▶** cola | 🟡 | Vista previa ✅, + Cola ✅, Hires fix ✅ (Controles). Falta ADetailer (YOLOv8 convertido a safetensors, `--ad-model`). |
 | IMAGEN: TAMAÑO (Vertical / Horizontal / Cuadrado / Personalizado, por familia), **⇄**, SEED + 🎲 | ✅ | Presets por familia: parcial. |
 | Barra inferior: progreso, estado "(i/N) Paso x/y · quedan ~", **×N** (1–999, cambia en marcha), **Generar · ~Ns** / **Detener** / **Obtener un modelo** | 🟡 | Falta "Obtener un modelo" sin modelos. |
 | Comodines `{a|b}`, **hojas de contacto** de 9, cuadrícula 2×2 rotulada | 🟡 | Comodines ✅. |
@@ -72,7 +74,7 @@ En el teléfono es una sola columna con secciones plegables. En PC se reparte en
 | Pestañas **Todas / ★ Favoritas / Papelera** con contador | 🟡 (lista + favoritas) |
 | Filtros **Todos los modelos ▾**, **Todas las LoRA ▾**, "Buscar en los prompts…" | 🟡 (filtro por nombre de archivo) |
 | Cuadrícula de 3 columnas con miniaturas, insignias ★ / ⇆ | ⬜ |
-| Selección múltiple: favorita, exportar, **ZIP**, papelera; en papelera: restaurar / eliminar | ⬜ |
+| Selección múltiple: favorita, exportar, **ZIP**, papelera; en papelera: restaurar / eliminar | ✅ | Papelera = Papelera de reciclaje de Windows. |
 | Papelera que se vacía a los 30 días, **Vaciar** | ⬜ |
 
 ## 5. Correcciones

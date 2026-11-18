@@ -49,6 +49,7 @@
       for (const b of p.base_models) q.append("baseModels", b);
       q.append("nsfw", p.nsfw ? "true" : "false");
       if (p.cursor) q.append("cursor", p.cursor);
+      if (p.favorites) throw new Error("vista previa: favoritos requiere la app");
       return civ("/models?" + q);
     },
     civitai_model: ({ id }) => civ("/models/" + id),
@@ -63,6 +64,7 @@
     gallery_list: async () => (await fetch("/__gallery")).json(),
     gallery_fav: () => null,
     gallery_trash: () => null,
+    gallery_zip: ({ names }) => "C:\Users\demo\Downloads\HexAnima-" + names.length + ".zip",
     gallery_reveal: () => null,
     lora_folders: () => ["Personajes", "Estilos"],
     lora_make_folder: ({ name }) => name,
@@ -72,6 +74,8 @@
     lora_fetch_info: async () => ({ found: true }),
     upscaler_status: () => [{ kind: 'fast', stem: 'RealESRGAN_x4plus_anime_6B', installed: true }, { kind: 'detail', stem: '4x-UltraSharp', installed: false }],
     upscaler_download: async () => 'ok',
+    store_get: ({ key }) => { try { return JSON.parse(localStorage.getItem("stub:" + key)); } catch { return null; } },
+    store_set: ({ key, value }) => { localStorage.setItem("stub:" + key, JSON.stringify(value)); },
   };
   const presets = [{ name: "Frieren 3D", loras: [{ stem: "FrierenK112", w: 0.8 }, { stem: "watercolor_v2", w: 0.4 }] }];
   window.__TAURI__ = {

@@ -139,6 +139,24 @@ fn gallery_trash(state: State<AppState>, names: Vec<String>) -> Result<usize, St
     gallery::trash(&state.root, &names)
 }
 
+/// Exportar imágenes del historial a un .zip (PNG + su .json de ajustes). Devuelve la ruta o None si se cancela.
+#[tauri::command]
+async fn gallery_zip(app: tauri::AppHandle, state: State<'_, AppState>, names: Vec<String>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    if names.is_empty() {
+        return Err("No hay imágenes seleccionadas".into());
+    }
+    let default = format!("HexAnima-{}.zip", chrono::Local::now().format("%Y%m%d-%H%M"));
+    let Some(f) = app.dialog().file().set_title("Exportar imágenes en ZIP").set_file_name(&default).add_filter("ZIP", &["zip"]).blocking_save_file() else {
+        return Ok(None);
+    };
+    let dest = f.into_path().map_err(|e| e.to_string())?;
+    let root = state.root.clone();
+    tauri::async_runtime::spawn_blocking(move || gallery::zip(&root, &names, &dest).map(|_| Some(dest.to_string_lossy().into_owned())))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// "Cargar ajustes desde un PNG": selector de archivos y lectura de sus metadatos.
 #[tauri::command]
 async fn png_pick_settings(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
@@ -152,7 +170,7 @@ async fn png_pick_settings(app: tauri::AppHandle) -> Result<Option<serde_json::V
 
 /// Pequeños almacenes JSON de la app en config/ (plantillas, etc.). Solo nombres conocidos.
 fn store_path(root: &Path, key: &str) -> Result<PathBuf, String> {
-    const KEYS: [&str; 4] = ["config-templates", "negatives", "model-names", "settings"];
+    const KEYS: [&str; 5] = ["config-templates", "negatives", "model-names", "settings", "civitai-collections"];
     if !KEYS.contains(&key) {
         return Err("Clave no permitida".into());
     }
@@ -456,6 +474,7 @@ fn main() {
             gallery_list,
             gallery_fav,
             gallery_trash,
+            gallery_zip,
             gallery_reveal,
             png_pick_settings,
             store_get,

@@ -83,6 +83,9 @@ pub struct SearchParams {
     pub sort: Option<String>,
     pub nsfw: bool,
     pub cursor: Option<String>,
+    /// Favoritos de la cuenta del usuario (requiere la clave API).
+    #[serde(default)]
+    pub favorites: bool,
 }
 
 pub fn search(p: &SearchParams, key: Option<&str>) -> Result<Value, String> {
@@ -109,6 +112,9 @@ pub fn search(p: &SearchParams, key: Option<&str>) -> Result<Value, String> {
         q.append_pair("nsfw", if p.nsfw { "true" } else { "false" });
         if let Some(c) = p.cursor.as_deref().filter(|c| !c.is_empty()) {
             q.append_pair("cursor", c);
+        }
+        if p.favorites {
+            q.append_pair("favorites", "true");
         }
     }
     get(url.as_str(), key)?.json::<Value>().map_err(|e| format!("Respuesta no válida: {e}"))

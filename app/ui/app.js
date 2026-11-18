@@ -134,6 +134,7 @@ function updateSizeTxt() {
   $("sizeTxt").textContent = over
     ? `${w} × ${h} · supera el máximo recomendado (${ms} px): tardará más y puede quedarse sin memoria`
     : `${w} × ${h}${state.aspect === "c" ? " · múltiplos de 64" : ""} · máximo del perfil ${ms} px`;
+  if (typeof Hires !== "undefined") Hires.refresh();
 }
 
 function onCustomSize(commit) {
@@ -380,6 +381,9 @@ async function runOne(opt, seed) {
   if (loraSpec.missing.length) setStatus(`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
   const body = {
     ...(editing ? { init_image: state.editImage.src, strength: clampNum($("editStrength"), 45) / 100 } : {}),
+    // «✎ Zona a cambiar»: blanco = se vuelve a generar, negro = se conserva.
+    ...(editing && state.editMask ? { mask_image: state.editMask.src } : {}),
+    ...(Hires.body(w, h) ? { hires: Hires.body(w, h) } : {}),
     prompt: loraSpec.prompt,
     negative_prompt: $("neg").value.trim(),
     clip_skip: +$("clipskip").value,
@@ -418,7 +422,7 @@ async function runOne(opt, seed) {
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
         steps, cfg, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
-        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? "edit" : "gen",
+        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
       };
@@ -465,6 +469,8 @@ async function prepareEditImage(src) {
 async function setEditImage(src) {
   try {
     state.editImage = await prepareEditImage(src);
+    if (typeof Mask !== "undefined") Mask.paint = null;
+    state.editMask = null;
     $("editPreview").src = state.editImage.src;
     $("editPreview").classList.add("on"); $("editEmpty").classList.add("off");
     $("editPreview").title = `${state.editImage.w} × ${state.editImage.h}`;
@@ -479,13 +485,15 @@ function setMode(mode) {
   $("editClear").classList.toggle("hidden", !has);
   $("editBox").classList.toggle("on", has);
   $("editHint").textContent = has ? `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).` : "Elige una foto para generar a partir de ella (imagen a imagen).";
+  if (!has) state.editMask = null;
+  if (typeof Mask !== "undefined") { if (!has) Mask.paint = null; Mask.refresh(); }
   updateGenLabel();
 }
 
 function updateGenLabel() {
   $("genBtn").textContent = state.mode === "edit" ? "Generar desde la foto" : "Generar";
   const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
-  if (state.mode === "edit" && state.editImage) $("sizeTxt").textContent = `Editando a ${w} × ${h}: el tamaño de la foto`;
+  if (state.mode === "edit" && state.editImage) { $("sizeTxt").textContent = `Editando a ${w} × ${h}: el tamaño de la foto`; if (typeof Hires !== "undefined") Hires.refresh(); }
   else updateSizeTxt();
 }
 
@@ -532,8 +540,8 @@ async function generate(opts = {}) {
   if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
   
-  const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value } : null;
-  if (opts.init) { state.mode = "edit"; state.editImage = opts.init; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
+  const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value, mask: state.editMask } : null;
+  if (opts.init) { state.mode = "edit"; state.editImage = opts.init; state.editMask = opts.mask || null; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
   state.busy = true; state.stop = false;
   $("genBtn").disabled = true; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
   $("progress").classList.add("on");
@@ -557,7 +565,7 @@ async function generate(opts = {}) {
     $("serverLog").textContent = s.log || "";
     setStatus("Error: " + e.message, "err");
   } finally {
-    if (saved) { state.mode = saved.mode; state.editImage = saved.img; $("editStrength").value = saved.str; }
+    if (saved) { state.mode = saved.mode; state.editImage = saved.img; state.editMask = saved.mask; $("editStrength").value = saved.str; }
     state.busy = false; state.job = null;
     $("progress").classList.remove("on");
     $("extendBatch").disabled = true;

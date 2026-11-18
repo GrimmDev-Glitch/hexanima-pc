@@ -199,6 +199,19 @@
             <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
           </div>
           <div id="editHint" class="lbl edit-hint">Elige una foto para generar a partir de ella (imagen a imagen).</div>
+          <div id="maskRow" class="row edit-mask hidden">
+            <button id="maskBtn" class="ghost sm" title="Pinta la parte de la foto que se debe volver a generar">✎ Zona a cambiar</button>
+            <button id="maskClear" class="link hidden" title="Quitar la zona pintada">✕ Quitar zona</button>
+          </div>
+        </div>
+        <div id="hiresBox" class="group divider hires-box">
+          <label class="row hires-head"><span class="hires-t"><input id="hiresOn" type="checkbox"> Hires fix</span><span id="hiresSum" class="lbl">Un segundo paso a mayor tamaño (más lento)</span></label>
+          <div id="hiresOpts" class="hires-opts hidden">
+            <div class="group"><label class="lbl" for="hiresScale">Escala</label><input id="hiresScale" class="field" type="number" min="1.1" max="2.5" step="0.1" value="1.5" inputmode="decimal"></div>
+            <div class="group"><label class="lbl" for="hiresDen" title="Cuánto se rehace en el segundo paso: 0.3 conserva, 0.6 inventa más detalle">Denoise</label><input id="hiresDen" class="field" type="number" min="0.05" max="0.95" step="0.05" value="0.45" inputmode="decimal"></div>
+            <div class="group"><label class="lbl" for="hiresSteps" title="0 = los mismos pasos que la imagen">Pasos</label><input id="hiresSteps" class="field" type="number" min="0" max="60" step="1" value="4" inputmode="numeric"></div>
+            <div class="group hires-up"><label class="lbl" for="hiresUp">Ampliador</label><select id="hiresUp" class="field"></select></div>
+          </div>
         </div>
       </div>
     </section>
@@ -216,6 +229,11 @@
           <div id="lpPresets" class="flist"></div>
           <div class="fhead"><button id="lpExport" class="link">Exportar</button><button id="lpImportPresets" class="link">Importar</button></div>
         </div>
+        <div class="fgroup">
+          <div class="fhead"><span class="chip-lbl">COLECCIONES · CIVITAI</span><button id="lpNewColl" class="link">+ Nueva</button></div>
+          <div id="lpColls" class="flist"></div>
+          <div class="fhead"><button id="lpFavs" class="link" title="Trae los modelos que marcaste con ♥ en tu cuenta de Civitai (necesita la clave API)">♥ Traer mis favoritos de Civitai</button></div>
+        </div>
       </aside>
       <div class="civ-main">
       <div class="page-top">
@@ -226,13 +244,18 @@
         <button id="lpImport" class="ghost">Importar archivo .safetensors</button>
         <button class="ghost icon" data-open="loras" title="Abrir la carpeta loras" aria-label="Abrir la carpeta loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
       </div>
-      <div class="filter-rows">
+      <div id="lpFilters" class="filter-rows">
         <div class="frow"><span class="chip-lbl">BASE</span><div id="lpBase" class="chips"></div></div>
         <div class="frow"><span class="chip-lbl">CATEGORÍA</span><div id="lpCats" class="chips"></div></div>
       </div>
       <div class="page-meta">
         <span id="lpCount" class="lbl"></span>
-        <span class="meta-actions">
+        <span id="lpCollActions" class="meta-actions hidden">
+          <button id="lpCollCiv" class="link">Buscar más en Civitai</button>
+          <button id="lpCollDl" class="ghost sm">Descargar las que faltan</button>
+          <button id="lpCollMenu" class="ghost sm" title="Más opciones de la colección">⋯</button>
+        </span>
+        <span id="lpLibActions" class="meta-actions">
           <button id="lpFetchAll" class="link" title="Busca en Civitai (por huella SHA256) los LoRAs sin datos">Buscar datos en Civitai</button>
           <button id="lpSelect" class="ghost sm">Seleccionar</button>
         </span>
@@ -260,6 +283,7 @@
           <div class="fgroup"><div class="chip-lbl">TIPO</div><div id="civType" class="flist"></div></div>
           <div class="fgroup"><div class="chip-lbl">FAMILIA</div><div id="civFamily" class="flist"></div></div>
           <div class="fgroup"><div class="chip-lbl">CATEGORÍA</div><div id="civCat" class="flist"></div></div>
+          <div class="fgroup"><div class="chip-lbl">MIS COLECCIONES</div><div id="civColls" class="flist"></div></div>
           <label class="lbl civ-nsfw"><input id="civNsfw" type="checkbox"> Mostrar +18</label>
         </aside>
         <div class="civ-main">
@@ -294,6 +318,7 @@
         <span id="hSelCount" class="lbl"></span>
         <button id="hSelAll" class="ghost sm">Seleccionar todo</button>
         <button id="hBulkFav" class="ghost sm">★ Favorita</button>
+        <button id="hBulkZip" class="ghost sm" title="Guarda las seleccionadas (con sus ajustes .json) en un archivo .zip">Exportar ZIP</button>
         <button id="hBulkTrash" class="ghost sm danger-txt">Mover a la papelera</button>
       </div>
       <div class="history-layout">
@@ -366,6 +391,7 @@
       </div>
     </div>
     <div class="dlg-foot">
+      <button id="sheetSave" class="ghost">☆ Guardar en colección</button>
       <button id="sheetWeb" class="ghost">Abrir en el sitio web</button>
       <button id="sheetCancel" class="ghost hidden">Cancelar descarga</button>
       <button id="sheetDl" class="primary sm">Descargar</button>
@@ -468,14 +494,44 @@
   </div>
 </div>
 
+<div id="maskDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="maskTitle">
+  <div class="dlg dlg-mask">
+    <div class="dlg-head"><h2 id="maskTitle">✎ Zona a cambiar</h2><span class="lbl">Pinta lo que se debe volver a generar; el resto de la foto se conserva.</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div id="maskTools" class="mask-tools">
+      <div class="seg mask-seg">
+        <button class="ghost sm" data-tool="brush" title="Pincel (B)">Pincel</button>
+        <button class="ghost sm" data-tool="erase" title="Borrador (E)">Borrador</button>
+        <button class="ghost sm" data-tool="move" title="Mover (M o espacio) · también con clic derecho o central">Mover</button>
+      </div>
+      <div class="mask-size" title="Tamaño del pincel ([ y ])">
+        <button id="maskMinus" class="ghost icon sm" aria-label="Pincel más pequeño">−</button>
+        <div class="num"><input id="maskSize" class="field" type="number" min="2" max="600" step="1" value="40" inputmode="numeric" aria-label="Tamaño del pincel"><span>px</span></div>
+        <button id="maskPlus" class="ghost icon sm" aria-label="Pincel más grande">＋</button>
+      </div>
+      <button id="maskUndo" class="ghost sm" title="Deshacer (Ctrl+Z)">Deshacer</button>
+      <button id="maskRedo" class="ghost sm" title="Rehacer (Ctrl+Y)">Rehacer</button>
+      <button id="maskInvert" class="ghost sm" title="Pintar todo lo que no está pintado">Invertir</button>
+      <button id="maskClearAll" class="ghost sm">Limpiar</button>
+      <span class="mask-zoom"><button id="maskFit" class="link" title="Ajustar a la ventana">Ajustar</button><span id="maskZoom" class="lbl">100 %</span></span>
+    </div>
+    <div id="maskStage" class="mask-stage">
+      <div id="maskWrap" class="mask-wrap"><img id="maskImg" alt="Foto de partida" draggable="false"><canvas id="maskCanvas"></canvas></div>
+      <div id="maskRing" class="mask-ring hidden"></div>
+    </div>
+    <div class="dlg-foot"><span class="lbl">Rueda: zoom · clic derecho y arrastrar: mover</span><button class="ghost" data-close>Cancelar</button><button id="maskDone" class="primary">Listo</button></div>
+  </div>
+</div>
+
 <div id="ctxMenu" class="ctx hidden" role="menu"></div>
 <div id="toast" class="toast hidden" role="status"></div>
 
 <script src="app.js"></script>
 <script src="loras.js"></script>
 <script src="lorapage.js"></script>
+<script src="collections.js"></script>
 <script src="history.js"></script>
 <script src="session.js"></script>
 <script src="tools.js"></script>
+<script src="mask.js"></script>
 </body>
 </html>

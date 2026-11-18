@@ -460,3 +460,32 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .ctx-item:hover { background: var(--raised); }
 .ctx-item.danger { color: var(--err); }
 .toast { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); max-width: 560px; background: var(--raised); border: 1px solid var(--accent); border-radius: 10px; padding: 10px 16px; white-space: pre-line; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+
+/* Colecciones de Civitai */
+.csave { position: absolute; right: 8px; bottom: 8px; width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--line); background: rgba(27, 23, 47, .82); color: var(--muted); font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
+.csave:hover { color: var(--text); border-color: var(--accent); }
+.csave.on { color: var(--accent); }
+
+/* Zona a cambiar (máscara) */
+.edit-mask { gap: 8px; }
+.edit-mask #maskBtn.on { border-color: var(--accent); color: var(--accent); }
+.dlg-mask { max-width: 1100px; width: 100%; height: 100%; }
+.mask-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mask-seg { flex: 0 0 auto; }
+.mask-seg button { padding: 0 12px; }
+.mask-size { display: flex; align-items: center; gap: 4px; }
+.mask-size .num .field { width: 74px; }
+.mask-zoom { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.mask-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; border-radius: 10px; background: repeating-conic-gradient(#221d3b 0 25%, #1b172f 0 50%) 0 0 / 22px 22px; cursor: none; touch-action: none; }
+.mask-stage.moving { cursor: grab; }
+.mask-wrap { position: absolute; left: 0; top: 0; transform-origin: 0 0; user-select: none; }
+.mask-wrap img, .mask-wrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mask-wrap canvas { opacity: .55; }
+.mask-ring { position: absolute; border: 1.5px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); pointer-events: none; }
+/* Hires fix */
+.hires-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+.hires-t { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.hires-head .lbl { font-size: 12px; text-align: right; }
+.hires-opts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 6px; }
+.hires-opts .hires-up { grid-column: 1 / -1; }
+.hires-box.on { background: var(--card); border: 1px solid var(--accent); border-radius: 10px; padding: 10px; margin-top: 4px; }
