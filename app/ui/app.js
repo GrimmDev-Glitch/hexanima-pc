@@ -756,6 +756,7 @@ $("restartBtn").onclick = async () => {
       invoke("set_console_visible", { visible: !store.get("hideConsole", true) }).catch(() => {});
     }
     renderHw(state.hw);
+    if (typeof EngineDl !== "undefined") EngineDl.maybeWelcome();  // NVIDIA sin motor rápido: ofrecerlo
     refreshMemory();
     setInterval(refreshMemory, 3000);
     // el motor del último modelo usado (Anima → CUDA) para no arrancarlo dos veces

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod civitai;
+mod engine_dl;
 mod gallery;
 mod hw;
 mod lora;
@@ -275,6 +276,48 @@ async fn asset_download(app: tauri::AppHandle, kind: String) -> Result<String, S
     tauri::async_runtime::spawn_blocking(move || civitai::asset_download(&app, &root, &kind))
         .await
         .map_err(|e| e.to_string())?
+}
+
+// ---------- Motor PyTorch: descarga desde Hugging Face (bienvenida / Ajustes) ----------
+#[tauri::command]
+async fn engine_dl_info(app: tauri::AppHandle) -> serde_json::Value {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let remote = engine_dl::remote();
+        json!({
+            "installed": engine_dl::installed(&root),
+            "remote": remote.as_ref().ok(),
+            "error": remote.as_ref().err(),
+            "free_bytes": engine_dl::free_bytes(&root),
+            "partial_bytes": std::fs::metadata(root.join("engine").join("torch-download.zip.part")).map(|m| m.len()).unwrap_or(0),
+        })
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "error": e.to_string() }))
+}
+
+#[tauri::command]
+async fn engine_download(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    use tauri::Emitter;
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let m = engine_dl::remote()?;
+        let a2 = app.clone();
+        engine_dl::install(&root, &m, &mut |stage, done, total| {
+            let _ = app.emit("dl-progress", json!({ "id": "engine-torch", "stage": stage, "done": done, "total": total }));
+        }, &mut || {
+            // el motor PyTorch abierto tiene sus archivos en uso: pararlo antes de cambiar la carpeta
+            if let Some(mut s) = a2.state::<AppState>().server.lock().unwrap().take() { s.stop(); }
+        })?;
+        Ok(json!({ "version": m.version }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn engine_dl_cancel() {
+    engine_dl::CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -588,6 +631,9 @@ fn main() {
             vae_import,
             asset_status,
             asset_download,
+            engine_dl_info,
+            engine_download,
+            engine_dl_cancel,
             upscaler_download,
             detector_status,
             ad_detections,

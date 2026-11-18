@@ -50,3 +50,6 @@ app/target*/
 
 # datos del usuario (plantillas, negativos, colecciones…)
 config/*.json
+
+# paquetes para Hugging Face (tools/package_torch_engine.py)
+dist/

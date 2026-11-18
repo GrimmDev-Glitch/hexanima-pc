@@ -16,7 +16,7 @@
   const civ = async (path) => (await fetch("https://civitai.com/api/v1" + path)).json();
   const handlers = {
     app_info: () => ({
-      root: "C:\\HexAnima", version: "0.1.0-preview", engines: ["torch", "vulkan", "cuda"], debug: false,
+      root: "C:\\HexAnima", version: "0.1.0-preview", engines: new URLSearchParams(location.search).has("notorch") ? ["vulkan", "cuda"] : ["torch", "vulkan", "cuda"], debug: false,
       hardware: {
         gpu: { name: "NVIDIA GeForce GTX 1650", vendor: "nvidia", vram_gb: 4, driver: "616.56" },
         ram_gb: 15.6, engine: "vulkan", engine_candidates: ["vulkan", "cuda", "cpu"], backend_device: "vulkan1", profile: "medio",
@@ -76,6 +76,17 @@
     upscaler_status: () => [{ kind: 'fast', stem: 'RealESRGAN_x4plus_anime_6B', installed: true }, { kind: 'detail', stem: '4x-UltraSharp', installed: false }],
     upscaler_download: async () => 'ok',
     vae_import: async () => null,
+    engine_dl_info: () => ({ installed: null, free_bytes: 120e9, partial_bytes: 0,
+      remote: { version: 1, file: "hexanima-motor-pytorch-1.zip", bytes: 2.6e9, sha256: "x", unpacked_bytes: 4.6e9, files: 22000 } }),
+    engine_download: () => new Promise((ok) => {
+      let i = 0; const st = ["download", "download", "download", "download", "verify", "extract", "extract"];
+      const t = setInterval(() => {
+        const s = st[Math.min(i, st.length - 1)];
+        (listeners["dl-progress"] || []).forEach((f) => f({ payload: { id: "engine-torch", stage: s, done: (i % 4 + 1) * 6.5e8, total: 2.6e9 } }));
+        if (++i > st.length) { clearInterval(t); ok({ version: 1 }); }
+      }, 700);
+    }),
+    engine_dl_cancel: () => null,
     asset_status: () => [{ kind: 'sdxl_vae', file: 'vae/sdxl_vae_fp16_fix.safetensors', mb: 335, installed: false }, { kind: 'taesdxl', file: 'vae_approx/taesdxl_decoder.pth', mb: 5, installed: false }],
     asset_download: async ({ kind }) => kind,
     detector_status: () => [{ kind: 'face', installed: true }, { kind: 'hand', installed: false }],

@@ -415,6 +415,10 @@
           <option value="cuda">CUDA</option>
           <option value="vulkan">Vulkan (más rápido en GTX, pero puede fallar cada 2-3 imágenes)</option>
         </select>
+        <div id="engSetRow" class="hidden">
+          <label class="lbl">Motor rápido (PyTorch)</label>
+          <div class="btnrow"><span id="engSet" class="lbl" style="flex:1">…</span><button id="engSetBtn" class="ghost sm">Descargar</button></div>
+        </div>
         <label class="lbl">Vista previa al generar</label>
         <div class="btnrow"><button id="taesdBtn" class="ghost">Mejorar la vista previa (TAESD, 5 MB)</button></div>
         <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload): recomendado con 8 GB de VRAM o menos</label>
@@ -526,6 +530,25 @@
     <input id="askInput" class="field hidden">
     <div id="askList" class="ask-list hidden"></div>
     <div id="askBtns" class="dlg-foot"></div>
+  </div>
+</div>
+
+<!-- Bienvenida: motor rápido (PyTorch) desde Hugging Face -->
+<div id="engineDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="engTitle">
+  <div class="dlg dlg-eng">
+    <div class="dlg-head"><h2 id="engTitle">Bienvenido a HexAnima PC</h2></div>
+    <div class="eng-gpu"><span class="lbl">Gráfica detectada</span> <b id="engGpu"></b></div>
+    <p class="eng-txt">Tu gráfica NVIDIA puede usar el <b>motor rápido</b> (PyTorch, el mismo tipo de motor que Forge):
+      genera imágenes SDXL, Illustrious y Pony <b>hasta 3 veces más rápido</b> y usa menos memoria.
+      Se descarga una sola vez; mientras tanto puedes seguir usando la app.</p>
+    <div id="engSize" class="lbl"></div>
+    <div id="engProg" class="eng-prog hidden"><div class="bar"><i id="engBar"></i></div><div id="engTxt" class="lbl">Preparando…</div></div>
+    <div id="engErr" class="eng-err hidden"></div>
+    <div class="dlg-foot">
+      <button id="engCancel" class="ghost hidden">Cancelar descarga</button>
+      <button id="engLater" class="ghost">Más tarde</button>
+      <button id="engGo" class="primary">Descargar</button>
+    </div>
   </div>
 </div>
 
@@ -653,5 +676,6 @@
 <script src="corrections.js"></script>
 <script src="layout.js"></script>
 <script src="vae.js"></script>
+<script src="engine.js"></script>
 </body>
 </html>

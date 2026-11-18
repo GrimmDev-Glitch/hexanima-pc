@@ -616,3 +616,13 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .g-card:first-child .prompt-tools .mini-select { max-width: 96px; flex: 1 1 0; min-width: 0; }
 .g-card:first-child .prompt-tools #deleteTemplate:disabled { display: none; }
 .g-card:first-child .prompt-lbl { align-self: flex-start; }
+
+/* Bienvenida: motor rápido */
+.dlg-eng { max-width: 560px; }
+.eng-gpu { font-size: 15px; }
+.eng-txt { margin: 0; line-height: 1.55; color: var(--text); }
+.eng-prog { display: flex; flex-direction: column; gap: 6px; }
+.eng-prog .bar { height: 10px; border-radius: 5px; }
+.eng-prog .bar > i { border-radius: 5px; transition: width .25s; }
+.eng-err { color: var(--err, #ff8a8a); font-size: 14px; }
+#engineDlg .dlg-foot button { min-height: 42px; padding: 0 18px; font-size: 15px; }

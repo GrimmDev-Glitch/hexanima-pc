@@ -17,7 +17,7 @@ use crate::lora;
 const API: &str = "https://civitai.com/api/v1";
 static CANCEL: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
-fn client() -> Result<reqwest::blocking::Client, String> {
+pub(crate) fn client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .user_agent("HexAnima")
         .redirect(reqwest::redirect::Policy::none())
