@@ -47,3 +47,6 @@ app/target*/
 
 # Ejecutable compilado (se publica en Releases)
 /HexAnima.exe
+
+# datos del usuario (plantillas, negativos, colecciones…)
+config/*.json
