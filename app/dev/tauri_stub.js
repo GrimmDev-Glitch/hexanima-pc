@@ -29,6 +29,7 @@
     output_files: () => fakeOutputs,
     read_output: async ({ name }) => { const b = await (await fetch("/__outputs/" + name)).arrayBuffer(); let s = ""; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(s); },
     open_folder: () => null,
+    reveal_file: () => null,
     set_console_visible: () => null,
     open_url: ({ url }) => { window.open(url, "_blank"); },
     lora_list: () => loras.map((l) => ({ ...l, title: title(l) })),

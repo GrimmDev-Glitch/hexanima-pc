@@ -255,6 +255,7 @@ const LoraPage = {
       { label: "Cambiar nombre…", run: () => Loras.rename(l).then(after) },
       { label: l.note ? "Editar nota…" : "Añadir nota…", run: () => this.note(l) },
       { label: "Mover a carpeta…", run: () => this.moveTo([l.file]) },
+      { label: "Mostrar en la carpeta", run: () => invoke("reveal_file", { path: "loras/" + l.file }).catch((e) => toast(String(e))) },
       { label: l.civitai_checked === "ok" || l.model_id ? "Actualizar datos de Civitai" : "Buscar datos en Civitai", run: () => this.fetchInfo([l.file]) },
       ...(l.model_id ? [{ label: "Abrir en Civitai", run: () => invoke("open_url", { url: `https://civitai.com/models/${l.model_id}${l.version_id ? "?modelVersionId=" + l.version_id : ""}` }) }] : []),
       { label: "Eliminar", danger: true, run: () => Loras.remove(l).then(after) },
@@ -365,6 +366,11 @@ const LoraPage = {
 };
 
 $("lpSearch").oninput = () => LoraPage.render();
+// Abre la carpeta de LoRAs, o la subcarpeta que estás viendo.
+$("lpOpenFolder").onclick = () => {
+  const f = !LoraPage.coll && LoraPage.folder !== "*" && LoraPage.folder ? "loras/" + LoraPage.folder : "loras";
+  invoke("open_folder", { which: f }).catch((e) => toast(String(e)));
+};
 $("lpNewColl").onclick = async () => { const c = await Collections.create(); if (c) { LoraPage.coll = c.id; LoraPage.render(); } };
 $("lpFavs").onclick = async () => { const c = await Collections.importFavorites(); if (c) { LoraPage.coll = c.id; LoraPage.render(); } };
 $("lpCollDl").onclick = () => { const c = Collections.byId(LoraPage.coll); if (c) Collections.downloadMissing(c); };

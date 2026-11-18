@@ -51,7 +51,7 @@ const ModelPicker = {
       const est = Object.entries(localStorageSafe()).filter(([k]) => k.startsWith("hx.bench:" + o.id + ":")).map(([, v]) => { try { const b = JSON.parse(v); return b.fixed + b.step * p.steps; } catch { return null; } }).filter(Boolean)[0];
       const c = document.createElement("div");
       c.className = "mcard" + (sel ? " on" : "");
-      c.innerHTML = `<div class="mtop"><span class="mname"></span>${sel ? '<span class="mcheck">✓</span>' : ""}<button class="mini medit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button></div>
+      c.innerHTML = `<div class="mtop"><span class="mname"></span>${sel ? '<span class="mcheck">✓</span>' : ""}<button class="mini mreveal" title="Mostrar el archivo en la carpeta" aria-label="Mostrar en la carpeta">⌕</button><button class="mini medit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button></div>
         <div class="mbadges"></div><div class="lbl mfile"></div>`;
       c.querySelector(".mname").textContent = modelTitle(o);
       const badges = [o.family === "anima" ? "Anima" : "SDXL", o.preset === "anima" ? `Turbo · ${p.steps}` : `CFG ${p.cfg} · ${p.steps} pasos`];
@@ -61,10 +61,11 @@ const ModelPicker = {
       for (const b of badges) { const s = document.createElement("span"); s.className = "badge" + (b === "En memoria" ? " ok" : ""); s.textContent = b; c.querySelector(".mbadges").appendChild(s); }
       c.querySelector(".mfile").textContent = Object.values(o.models)[0];
       c.onclick = (e) => {
-        if (e.target.closest(".medit")) return;
+        if (e.target.closest(".medit, .mreveal")) return;
         $("model").value = o.id; $("model").dispatchEvent(new Event("change"));
         closeModal("modelDlg"); syncModelUi();
       };
+      c.querySelector(".mreveal").onclick = () => invoke("reveal_file", { path: "models/" + Object.values(o.models)[0] }).catch((e) => toast(String(e)));
       c.querySelector(".medit").onclick = async () => {
         const r = await ask({ title: "Cambiar nombre", input: { value: modelTitle(o) },
           buttons: [{ label: "Cancelar", value: null }, { label: "Restablecer", value: "reset" }, { label: "OK", value: "@input", primary: true }] });
@@ -79,6 +80,19 @@ const ModelPicker = {
 };
 function localStorageSafe() { try { return { ...localStorage }; } catch { return {}; } }
 $("modelBtn").onclick = () => ModelPicker.open();
+$("mdFolders").onclick = (e) => {
+  const r = e.currentTarget.getBoundingClientRect();
+  const open = (w) => invoke("open_folder", { which: w }).catch((er) => toast(String(er)));
+  showMenu(r.left, r.top - 8, "Abrir carpeta", [
+    { label: "Checkpoints (SDXL / Illustrious / Pony)", run: () => open("models/checkpoints") },
+    { label: "Anima (diffusion_models)", run: () => open("models/diffusion_models") },
+    { label: "Codificadores de texto", run: () => open("models/text_encoders") },
+    { label: "VAE", run: () => open("models/vae") },
+    { label: "Ampliadores", run: () => open("models/upscalers") },
+    { label: "Detectores (ADetailer)", run: () => open("models/detectors") },
+    { label: "Toda la carpeta models", run: () => open("models") },
+  ]);
+};
 $("mdCatalog").onclick = () => toast("El catálogo de modelos para PC llega en la fase 3; por ahora usa ＋ Civitai o ＋ Importar", 4500);
 $("mdCivitai").onclick = () => {
   closeModal("modelDlg");

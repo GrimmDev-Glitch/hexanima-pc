@@ -256,9 +256,9 @@
           <input id="lpSearch" class="field" placeholder="Buscar en tus LoRAs: nombre o palabra activadora…" aria-label="Buscar LoRAs"></div>
         <label class="lbl" for="lpSort">Ordenar</label>
         <select id="lpSort" class="field"><option value="name">Nombre</option><option value="new">Más recientes</option><option value="size">Tamaño</option><option value="active">En uso primero</option></select>
-        <button id="lpImport" class="ghost">Importar archivo .safetensors</button>
+        <button id="lpImport" class="ghost" title="Importar un archivo .safetensors">Importar</button>
         <button id="lpRefresh" class="ghost icon refresh-btn" title="Actualizar: vuelve a buscar modelos, LoRAs, ampliadores y detectores que copiaste a mano a las carpetas" aria-label="Actualizar LoRAs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg></button>
-        <button class="ghost icon" data-open="loras" title="Abrir la carpeta loras" aria-label="Abrir la carpeta loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></button>
+        <button id="lpOpenFolder" class="ghost" title="Abre en el Explorador la carpeta de LoRAs (o la subcarpeta elegida)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Abrir carpeta</button>
       </div>
       <div id="lpFilters" class="filter-rows">
         <div class="frow"><span class="chip-lbl">BASE</span><div id="lpBase" class="chips"></div></div>
@@ -370,7 +370,19 @@
         <div class="seed-controls"><input id="optCivitaiKey" class="field" type="password" autocomplete="off" placeholder="Pega aquí tu clave"><button id="openCivitaiAccount" class="ghost sm">Abrir civitai.com/user/account</button></div>
         <label class="lbl" for="optExtra">Opciones extra del motor</label>
         <input id="optExtra" class="field" placeholder="--max-vram 3">
-        <div class="btnrow"><button id="restartBtn" class="ghost">Reiniciar motor</button><button class="ghost" data-open="models">Abrir models</button><button class="ghost" data-open="logs">Abrir logs</button></div>
+        <div class="btnrow"><button id="restartBtn" class="ghost">Reiniciar motor</button></div>
+        <div class="lbl" style="margin-top:10px">Carpetas (copia aquí tus archivos y pulsa ↻ Actualizar)</div>
+        <div class="btnrow folder-row">
+          <button class="ghost sm" data-open="models/checkpoints" title="Modelos SDXL / Illustrious / Pony (.safetensors)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Checkpoints</button>
+          <button class="ghost sm" data-open="models/diffusion_models" title="Modelos Anima"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Anima</button>
+          <button class="ghost sm" data-open="loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> LoRAs</button>
+          <button class="ghost sm" data-open="models/text_encoders"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Codificadores</button>
+          <button class="ghost sm" data-open="models/vae"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> VAE</button>
+          <button class="ghost sm" data-open="models/upscalers"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Ampliadores</button>
+          <button class="ghost sm" data-open="models/detectors"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Detectores</button>
+          <button class="ghost sm" data-open="outputs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Imágenes</button>
+          <button class="ghost sm" data-open="logs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Registros</button>
+        </div>
         <div class="lbl" style="margin-top:10px">Registro del motor</div>
         <div id="serverLog" class="log"></div>
       </div>
@@ -388,6 +400,7 @@
     <div id="loraRows" class="lora-rows"></div>
     <div class="dlg-foot">
       <span id="loraHint" class="lbl"></span>
+      <button class="ghost" data-open="loras" title="Abrir la carpeta loras"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Carpeta</button>
       <button id="loraImport" class="ghost">Importar</button>
       <button class="primary sm" data-close>Hecho</button>
     </div>
@@ -424,6 +437,7 @@
     <div id="modelCards" class="model-cards"></div>
     <div class="dlg-foot">
       <span class="lbl">Clic para elegir · ✎ cambia el nombre</span>
+      <button id="mdFolders" class="ghost" title="Abrir las carpetas de modelos"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Carpetas ▾</button>
       <button id="mdCatalog" class="ghost">＋ Catálogo</button>
       <button id="mdCivitai" class="ghost">＋ Civitai</button>
       <button id="mdImport" class="ghost">＋ Importar</button>

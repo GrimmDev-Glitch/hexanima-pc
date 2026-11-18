@@ -487,13 +487,33 @@ fn open_url(url: String) -> Result<(), String> {
 /// Abre una carpeta de la app en el Explorador (outputs, models, loras, logs).
 #[tauri::command]
 fn open_folder(state: State<AppState>, which: String) -> Result<(), String> {
-    let allowed = ["outputs", "models", "loras", "logs"];
-    if !allowed.contains(&which.as_str()) {
-        return Err("Carpeta no permitida".into());
-    }
-    let p = state.root.join(&which);
+    let p = safe_path(&state.root, &which)?;
     let _ = std::fs::create_dir_all(&p);
     std::process::Command::new("explorer").arg(p).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Ruta dentro de las carpetas de la app ("loras/Personajes", "models/checkpoints"…), sin salirse de ellas.
+fn safe_path(root: &std::path::Path, rel: &str) -> Result<std::path::PathBuf, String> {
+    let parts: Vec<&str> = rel.split(['/', '\\']).filter(|s| !s.is_empty()).collect();
+    let ok_root = ["outputs", "models", "loras", "logs", "config"];
+    if parts.is_empty() || !ok_root.contains(&parts[0]) {
+        return Err("Carpeta no permitida".into());
+    }
+    if parts.iter().any(|s| *s == ".." || *s == "." || s.contains(':')) {
+        return Err("Ruta no válida".into());
+    }
+    Ok(parts.iter().fold(root.to_path_buf(), |p, s| p.join(s)))
+}
+
+/// Muestra un archivo de models/ o loras/ seleccionado en el Explorador.
+#[tauri::command]
+fn reveal_file(state: State<AppState>, path: String) -> Result<(), String> {
+    let p = safe_path(&state.root, &path)?;
+    if !p.is_file() {
+        return Err("El archivo no existe".into());
+    }
+    std::process::Command::new("explorer").arg(format!("/select,{}", p.display())).spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -552,7 +572,8 @@ fn main() {
             output_files,
             read_output,
             set_console_visible,
-            open_folder
+            open_folder,
+            reveal_file
         ])
         .build(tauri::generate_context!())
         .expect("no se pudo iniciar HexAnima");

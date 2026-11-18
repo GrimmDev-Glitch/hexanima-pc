@@ -519,3 +519,9 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .fix-up button { padding: 0 6px; }
 .fix-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
 .fix-foot .lbl { font-size: 11px; }
+
+/* Botones de carpeta */
+#lpOpenFolder, #mdFolders, [data-open] { gap: 6px; }
+.folder-row { flex-wrap: wrap; }
+.mcard .mreveal { margin-left: auto; }
+.mcard .mreveal + .medit { margin-left: 0; }
