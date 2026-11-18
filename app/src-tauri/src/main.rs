@@ -44,9 +44,9 @@ fn app_info(state: State<AppState>) -> serde_json::Value {
         *hw = Some(hw::detect(&state.root));
     }
     // Motores instalados (la app usa CUDA para Anima si está, y el de la gráfica para el resto).
-    let engines: Vec<&str> = ["vulkan", "cuda", "cpu"]
+    let engines: Vec<&str> = ["torch", "vulkan", "cuda", "cpu"]
         .into_iter()
-        .filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file())
+        .filter(|e| server::engine_installed(&state.root, e))
         .collect();
     json!({
         "root": state.root.display().to_string(),
@@ -74,8 +74,9 @@ fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine
     };
     // Motor pedido (p. ej. CUDA para Anima: su VAE es mucho más rápido ahí) si está instalado;
     // si no, el detectado para la gráfica.
-    let wanted = engine.filter(|e| state.root.join("engine").join(e).join("sd-server.exe").is_file());
+    let wanted = engine.filter(|e| server::engine_installed(&state.root, e));
     let (eng, device) = match wanted {
+        Some(e) if e == "torch" => (e, None),
         Some(e) if e != hw.engine => {
             let d = hw::engine_device(&state.root, &e, hw.gpu.as_ref());
             (e, d)

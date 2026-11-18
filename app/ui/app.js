@@ -189,9 +189,17 @@ async function refreshMemory() {
  *  En Ajustes se puede forzar CUDA o Vulkan. */
 function engineFor(opt) {
   const engines = state.engines || [];
+  const nvidia = state.hw?.gpu?.vendor === "nvidia";
+  // ADetailer y la detección de Correcciones usan el detector del motor clásico (sd.cpp)
+  const needDetector = typeof Ad !== "undefined" && (Ad.force || Ad.mode !== "off");
+  const torchOk = opt?.family === "sdxl" && engines.includes("torch") && !needDetector;
   const pref = store.get("enginePref", "auto");
+  if (pref === "torch") return torchOk ? "torch" : (nvidia && engines.includes("cuda") ? "cuda" : state.hw?.engine);
   if (pref !== "auto" && engines.includes(pref)) return pref;
-  if (state.hw?.gpu?.vendor === "nvidia" && engines.includes("cuda")) return "cuda";
+  // Automático: PyTorch (backend de Forge) para SDXL/Illustrious/Pony en NVIDIA: ~8,5 s/paso frente a
+  // ~24 s/paso de sd.cpp CUDA en la GTX 1650. Anima y el resto: CUDA (estable) o el de la gráfica.
+  if (nvidia && torchOk) return "torch";
+  if (nvidia && engines.includes("cuda")) return "cuda";
   return state.hw?.engine;
 }
 
@@ -204,7 +212,7 @@ async function startEngine(engine) {
   state.adLoaded = ad;
   state.api = `http://127.0.0.1:${r.port}`;
   state.engine = r.engine; state.device = r.device;
-  if (state.hw) $("hwProfile").textContent = `Perfil: ${({ bajo: "Bajo", medio: "Medio", alto: "Alto" })[state.hw.profile] || state.hw.profile} · ${r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
+  if (state.hw) $("hwProfile").textContent = `Perfil: ${({ bajo: "Bajo", medio: "Medio", alto: "Alto" })[state.hw.profile] || state.hw.profile} · ${r.engine === "torch" ? "PYTORCH" : r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
     try { await api("/sdcpp/v1/models/status"); return true; } catch { /* aun arrancando */ }

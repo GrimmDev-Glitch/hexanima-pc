@@ -16,7 +16,7 @@
   const civ = async (path) => (await fetch("https://civitai.com/api/v1" + path)).json();
   const handlers = {
     app_info: () => ({
-      root: "C:\\HexAnima", version: "0.1.0-preview", engines: ["vulkan", "cuda"], debug: false,
+      root: "C:\\HexAnima", version: "0.1.0-preview", engines: ["torch", "vulkan", "cuda"], debug: false,
       hardware: {
         gpu: { name: "NVIDIA GeForce GTX 1650", vendor: "nvidia", vram_gb: 4, driver: "616.56" },
         ram_gb: 15.6, engine: "vulkan", engine_candidates: ["vulkan", "cuda", "cpu"], backend_device: "vulkan1", profile: "medio",

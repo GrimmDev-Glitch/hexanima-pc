@@ -8,7 +8,10 @@ import sys
 import time
 import types
 
-FORGE = os.environ.get("HEXANIMA_FORGE_ROOT", os.path.join(os.path.dirname(os.path.abspath(__file__)), "forge"))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+FORGE = os.environ.get("HEXANIMA_FORGE_ROOT") or next(
+    (p for p in (os.path.join(_HERE, "forge"), os.path.join(_HERE, "..", "forge")) if os.path.isdir(os.path.join(p, "backend"))),
+    os.path.join(_HERE, "forge"))
 for p in (FORGE, os.path.join(FORGE, "packages_3rdparty"), os.path.join(FORGE, "repositories", "huggingface_guess")):
     if p not in sys.path:
         sys.path.insert(0, p)
@@ -102,54 +105,87 @@ class Engine:
         s = torch.stack([pred.sigma(x) for x in t])
         return torch.cat([s, s.new_zeros([1])])
 
+    def unload(self):
+        self.sd = None; self.path = None; self.lora_key = None
+        memory_management.unload_all_models()
+        memory_management.soft_empty_cache()
+
     @torch.inference_mode()
-    def generate(self, prompt, negative, width, height, steps, cfg, seed, sampler="euler_a", scheduler="normal",
-                 clip_skip=2, loras=(), progress=None):
+    def encode(self, pixels):
+        """pixels: tensor [1,3,H,W] en -1..1 -> latente del modelo (ya escalado)."""
+        return self.sd.encode_first_stage(pixels).float().cpu()
+
+    @torch.inference_mode()
+    def generate2(self, prompt, negative, width, height, steps, cfg, seed, sampler="euler_a", scheduler="discrete",
+                  clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None):
+        """Devuelve el tensor de imagen [1,3,H,W] en -1..1. img2img con init_latent + strength;
+        zona a cambiar con mask [1,1,h/8,w/8] (1 = rehacer)."""
         sd = self.sd
+        if stage_cb: stage_cb("conditioning")
         self.set_loras(list(loras))
         sd.set_clip_skip(clip_skip)
-        t0 = time.time()
         cond = sd.get_learned_conditioning(Prompts([prompt], width, height))
         uncond = sd.get_learned_conditioning(Prompts([negative], width, height, negative=True))
-        t_cond = time.time() - t0
 
         unet = sd.forge_objects.unet
         g = torch.Generator(device="cpu").manual_seed(int(seed))
-        x = torch.randn([1, 4, height // 8, width // 8], generator=g, dtype=torch.float32)
+        noise = torch.randn([1, 4, height // 8, width // 8], generator=g, dtype=torch.float32)
         sigmas = self.sigmas(steps, scheduler)
-        sampling_prepare(unet, x)
+        if init_latent is not None and strength < 1.0:
+            start = max(0, min(steps - 1, steps - int(round(steps * strength))))
+            sigmas = sigmas[start:]
+        if stage_cb: stage_cb("sampling")
+        sampling_prepare(unet, noise)
         dev = unet.current_device if hasattr(unet, "current_device") else memory_management.get_torch_device()
-        x = x.to(dev) * sigmas[0]
         sigmas = sigmas.to(dev)
+        if init_latent is not None:
+            lat0 = init_latent.to(dev)
+            x = lat0 + noise.to(dev) * sigmas[0]
+        else:
+            lat0 = None
+            x = noise.to(dev) * sigmas[0]
+        m = mask.to(dev) if (mask is not None and lat0 is not None) else None
         c, u = compile_conditions(cond), compile_conditions(uncond)
         model = unet.model
 
         class Denoiser:  # los samplers de Forge miran denoiser.inner_model.predictor
             inner_model = model
             def __call__(self, xx, sigma, **_):
-                return sampling_function_inner(model, xx, sigma, u, c, cfg, unet.model_options, seed)
-        denoiser = Denoiser()
+                d = sampling_function_inner(model, xx, sigma, u, c, cfg, unet.model_options, seed)
+                if m is not None:  # fuera de la zona pintada se mantiene la foto
+                    d = d * m + lat0 * (1 - m)
+                return d
 
-        ts = time.time(); last = [ts]
+        n = len(sigmas) - 1
         def cb(d):
-            now = time.time()
-            if progress: progress(d["i"] + 1, steps, now - last[0])
-            last[0] = now
+            if step_cb: step_cb(d["i"] + 1, n, d.get("denoised"))
         names = {"euler_a": "sample_euler_ancestral", "euler": "sample_euler", "dpm++2m": "sample_dpmpp_2m",
-                 "dpm++2s_a": "sample_dpmpp_2s_ancestral", "lcm": "sample_lcm"}
+                 "dpm++2s_a": "sample_dpmpp_2s_ancestral", "dpm++2m_sde": "sample_dpmpp_2m_sde", "heun": "sample_heun",
+                 "dpm2": "sample_dpm_2", "lms": "sample_lms", "lcm": "sample_lcm"}
         fn = getattr(ks, names.get(sampler, ""), None) or ks.sample_euler_ancestral
-        ns = None
-        if sampler in ("euler_a", "dpm++2s_a"):
-            ns = lambda s, sn: torch.randn(x.shape, generator=g, dtype=torch.float32).to(dev)
-        samples = fn(denoiser, x, sigmas, callback=cb, disable=True, **({"noise_sampler": ns} if ns else {}))
-        sampling_cleanup(unet)
-        t_samp = time.time() - ts
+        kw = {}
+        if sampler in ("euler_a", "dpm++2s_a", "dpm++2m_sde"):
+            kw["noise_sampler"] = lambda s, sn: torch.randn(x.shape, generator=g, dtype=torch.float32).to(dev)
+        try:
+            samples = fn(Denoiser(), x, sigmas, callback=cb, disable=True, **kw)
+        finally:
+            sampling_cleanup(unet)
+        if m is not None:
+            samples = samples * m + lat0 * (1 - m)
+        if stage_cb: stage_cb("vae_decode")
+        return sd.decode_first_stage(samples.to(torch.float32)).float().cpu()
 
-        td = time.time()
-        img = sd.decode_first_stage(samples.to(torch.float32))
-        t_dec = time.time() - td
-        img = ((img[0].float().clamp(-1, 1) + 1) * 127.5).round().byte().permute(1, 2, 0).cpu().numpy()
-        return img, dict(cond=t_cond, sampling=t_samp, decode=t_dec, per_step=t_samp / max(1, steps))
+    def generate(self, prompt, negative, width, height, steps, cfg, seed, sampler="euler_a", scheduler="discrete",
+                 clip_skip=2, loras=(), progress=None):
+        t0 = time.time(); last = [t0]
+        def cb(i, n, _):
+            now = time.time()
+            if progress: progress(i, n, now - last[0])
+            last[0] = now
+        img = self.generate2(prompt, negative, width, height, steps, cfg, seed, sampler, scheduler, clip_skip, loras, step_cb=cb)
+        arr = ((img[0].clamp(-1, 1) + 1) * 127.5).round().byte().permute(1, 2, 0).numpy()
+        tot = time.time() - t0
+        return arr, dict(cond=0.0, sampling=tot, decode=0.0, per_step=tot / max(1, steps))
 
 
 if __name__ == "__main__":

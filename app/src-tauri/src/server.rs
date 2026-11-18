@@ -33,10 +33,25 @@ pub struct Server {
     _job: Job,
 }
 
+/// ¿Está instalado el motor? "torch" = motor PyTorch portátil (engine/torch); el resto = sd-server.exe.
+pub fn engine_installed(root: &Path, engine: &str) -> bool {
+    let d = root.join("engine").join(engine);
+    if engine == "torch" {
+        d.join("python").join("python.exe").is_file() && d.join("hexanima").join("server.py").is_file()
+    } else {
+        d.join("sd-server.exe").is_file()
+    }
+}
+
 impl Server {
     pub fn start(root: &Path, engine: &str, device: Option<&str>, opts: &ServerOpts) -> Result<Server, String> {
-        let exe = root.join("engine").join(engine).join("sd-server.exe");
-        if !exe.exists() {
+        let torch = engine == "torch";
+        let exe = if torch {
+            root.join("engine").join("torch").join("python").join("python.exe")
+        } else {
+            root.join("engine").join(engine).join("sd-server.exe")
+        };
+        if !engine_installed(root, engine) {
             return Err(format!("Falta el motor: {}", exe.display()));
         }
         let port = TcpListener::bind("127.0.0.1:0")
@@ -86,6 +101,18 @@ impl Server {
             args.extend(extra.split_whitespace().map(String::from));
         }
 
+        if torch {
+            // Motor PyTorch (backend de Forge): Python portátil aislado (-s -E) con su servidor.
+            // Gestiona solo la VRAM/RAM como Forge; no usa --backend, --type ni el detector de ADetailer.
+            let server = root.join("engine").join("torch").join("hexanima").join("server.py");
+            args = vec![
+                "-s".into(), "-E".into(), "-u".into(), server.display().to_string(),
+                "--listen-port".into(), port.to_string(),
+                "--model-dir".into(), models.display().to_string(),
+                "--lora-model-dir".into(), loras.display().to_string(),
+                "--hires-upscalers-dir".into(), upscalers.display().to_string(),
+            ];
+        }
         let mut cmd = Command::new(&exe);
         cmd.args(&args)
             .current_dir(exe.parent().unwrap())
