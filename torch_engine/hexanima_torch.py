@@ -115,8 +115,9 @@ _MMAP = {"on": False, "ptrs": set()}  # solo durante Engine.load; ptrs = memoria
 
 
 def load_safetensors_mmap(path):
-    # solo lectura: no reserva memoria (copy-on-write reservaría el tamaño del archivo). Nada escribe en
-    # estos tensores: Forge los copia al modelo y los que usa tal cual se copian en _unalias().
+    # Solo lectura (no reserva memoria). Los pesos que Forge usa tal cual se copian en _unalias() y el
+    # mapeo se cierra: dejarlos leyéndose del archivo hacía que, con poca RAM libre, Windows soltara
+    # esas páginas y cada paso volviera a leerlas del disco (3 veces más lento).
     with open(path, "rb") as f:
         n = int.from_bytes(f.read(8), "little")
         header = _json.loads(f.read(n))
@@ -142,20 +143,36 @@ def load_safetensors_mmap(path):
 
 
 def _unalias(sd):
-    """Copia los pesos que Forge dejó apuntando al archivo mapeado para poder cerrarlo."""
+    """Copia los pesos que Forge dejó apuntando al archivo mapeado para poder cerrarlo. Devuelve bytes."""
     ptrs, n = _MMAP["ptrs"], 0
     fo = sd.forge_objects
     for root in (fo.unet.model, fo.clip.cond_stage_model, fo.vae.first_stage_model):
         for mod in root.modules():
             for name, p in list(mod._parameters.items()):
                 if p is not None and p.device.type == "cpu" and p.untyped_storage().data_ptr() in ptrs:
-                    mod._parameters[name] = torch.nn.Parameter(p.data.clone(), requires_grad=False); n += 1
+                    mod._parameters[name] = torch.nn.Parameter(p.data.clone(), requires_grad=False)
+                    n += p.numel() * p.element_size()
             for name, b in list(mod._buffers.items()):
                 if b is not None and b.device.type == "cpu" and b.untyped_storage().data_ptr() in ptrs:
-                    mod._buffers[name] = b.clone(); n += 1
+                    mod._buffers[name] = b.clone()
+                    n += b.numel() * b.element_size()
     ptrs.clear()
     import gc; gc.collect()
     return n
+
+
+def _unet_storage_like_file(path):
+    """Tipo de dato en el que se guarda el UNet. Por defecto, el que elige Forge (bf16 en GTX): medido en
+    una GTX 1650 con SDXL, fp16 fue 3 veces más lento y fp8 7 veces más lento, aunque ocupen igual o menos.
+    HEXANIMA_UNET_DTYPE=fp8|fp16|bf16 lo fuerza para probar."""
+    from backend.args import args as fargs
+    fargs.unet_in_fp16 = fargs.unet_in_bf16 = fargs.unet_in_fp8_e4m3fn = False
+    want = (os.environ.get("HEXANIMA_UNET_DTYPE") or "auto").lower()
+    if want == "fp8":
+        fargs.unet_in_fp8_e4m3fn = True
+    elif want in ("fp16", "bf16"):
+        setattr(fargs, f"unet_in_{want}", True)
+    return want
 
 
 _forge_load_torch_file = _futils.load_torch_file
@@ -199,6 +216,7 @@ class Engine:
         memory_management.soft_empty_cache()
         t = time.time()
         # VAE aparte (p. ej. sdxl_vae.safetensors): Forge lo carga como diccionario adicional
+        self.unet_dtype = _unet_storage_like_file(path)
         _MMAP["on"] = True
         try:
             self.sd = forge_loader(path, additional_state_dicts=[vae] if vae else None)
@@ -207,9 +225,7 @@ class Engine:
         if self.sd is None:
             _MMAP["ptrs"].clear()
             raise RuntimeError("Modelo no reconocido")
-        copied = _unalias(self.sd)
-        if copied:
-            print(f"[hexanima] {copied} pesos copiados desde el archivo mapeado", flush=True)
+        _unalias(self.sd)
         self.path = key
         self.lora_key = None
         print(f"[hexanima] modelo cargado en {time.time() - t:.1f}s: {os.path.basename(path)}{' + VAE ' + os.path.basename(vae) if vae else ''}", flush=True)

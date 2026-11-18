@@ -35,6 +35,8 @@ pub struct Memory {
     pub vram_total_gb: Option<f64>,
     pub vram_free_gb: Option<f64>,
     pub gpu_temp_c: Option<i64>,
+    /// Portátil desenchufado (la gráfica va limitada: GTX 1650 a 20 W, ~3 veces más lento).
+    pub on_battery: bool,
 }
 
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
@@ -236,5 +238,18 @@ pub fn memory() -> Memory {
         vram_total_gb: nv.as_ref().and_then(|v| v.first()).and_then(mb),
         vram_free_gb: nv.as_ref().and_then(|v| v.get(1)).and_then(mb),
         gpu_temp_c: nv.as_ref().and_then(|v| v.get(2)).and_then(|s| s.parse().ok()),
+        on_battery: on_battery(),
     }
+}
+
+#[cfg(windows)]
+fn on_battery() -> bool {
+    use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut st: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
+    // ACLineStatus 0 = sin cargador; 1 = enchufado; 255 = desconocido (PC de escritorio sin batería)
+    unsafe { GetSystemPowerStatus(&mut st) != 0 && st.ACLineStatus == 0 }
+}
+#[cfg(not(windows))]
+fn on_battery() -> bool {
+    false
 }

@@ -22,7 +22,7 @@
         ram_gb: 15.6, engine: "vulkan", engine_candidates: ["vulkan", "cuda", "cpu"], backend_device: "vulkan1", profile: "medio",
       },
     }),
-    memory: () => ({ ram_total_gb: 15.6, ram_free_gb: 7.2, vram_total_gb: 4, vram_free_gb: 2.9, gpu_temp_c: 51 }),
+    memory: () => ({ ram_total_gb: 15.6, ram_free_gb: 7.2, vram_total_gb: 4, vram_free_gb: 2.9, gpu_temp_c: 51, on_battery: true }),
     start_server: ({ engine }) => ({ port: SD_PORT, engine: engine || "vulkan", device: "vulkan1" }),
     server_status: () => ({ running: true, port: SD_PORT, log: "[I] vista previa: motor externo en " + SD_PORT }),
     save_image: () => "outputs\\preview.png",

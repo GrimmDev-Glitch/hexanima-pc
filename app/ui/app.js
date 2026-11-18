@@ -176,6 +176,8 @@ async function refreshMemory() {
     $("ramTxt").textContent = `${gb(ru)} / ${gb(m.ram_total_gb)} GB`;
     $("ramBar").style.width = `${Math.min(100, (ru / m.ram_total_gb) * 100)}%`;
     $("tempTxt").textContent = m.gpu_temp_c != null ? `GPU ${m.gpu_temp_c} °C` : "";
+    // portátil desenchufado: la gráfica va limitada (GTX 1650 a 20 W, ~3 veces más lento)
+    $("battTxt").classList.toggle("hidden", !m.on_battery);
     return m;
   } catch { return null; }
 }
@@ -315,7 +317,7 @@ async function loadModel() {
     clearInterval(tick);
     state.busy = false;
     $("loadBtn").disabled = false;
-    $("genBtn").disabled = state.loaded !== opt.id;
+    $("genBtn").disabled = !opt;
   }
 }
 
@@ -543,7 +545,7 @@ async function upscaleCurrent() {
     setStatus("No se pudo ampliar: " + e.message, "err");
   } finally {
     state.busy = false; $("upscaleBtn").disabled = false;
-    $("genBtn").disabled = state.loaded !== currentOption()?.id;
+    $("genBtn").disabled = !currentOption();
   }
 }
 
@@ -606,7 +608,7 @@ async function generate(opts = {}) {
     state.busy = false; state.job = null;
     $("progress").classList.remove("on");
     $("extendBatch").disabled = true;
-    $("genBtn").disabled = state.loaded !== opt.id; $("loadBtn").disabled = false; $("stopBtn").disabled = true;
+    $("genBtn").disabled = !opt; $("loadBtn").disabled = false; $("stopBtn").disabled = true;
     showEstimate();
   }
 }
@@ -701,8 +703,8 @@ $("model").onchange = () => {
   const opt = currentOption();
   if (!opt) return;
   applyPreset(opt);
-  $("genBtn").disabled = state.loaded !== opt.id;
-  if (state.loaded !== opt.id) setStatus("Pulsa Cargar para usar este modelo.");
+  $("genBtn").disabled = false;
+  if (state.loaded !== opt.id) setStatus("No está en memoria · se carga al generar");
 };
 $("loadBtn").onclick = loadModel;
 $("genBtn").onclick = () => generate();
@@ -734,7 +736,7 @@ $("restartBtn").onclick = async () => {
   store.set("offload", $("optOffload").checked);
   store.set("extra", $("optExtra").value.trim());
   state.loaded = null; $("genBtn").disabled = true;
-  if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); await loadModel(); }
+  if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); $("genBtn").disabled = !currentOption(); }
 };
 
 // ---------- arranque: abrir el exe y que cargue todo solo ----------
@@ -768,7 +770,8 @@ $("restartBtn").onclick = async () => {
     if (typeof Packs !== "undefined") { Packs.modelsKnown = true; Packs.next(); }
     await Loras.refresh();
     const opt = currentOption();
-    if (opt) { applyPreset(opt); await loadModel(); }
+    // no se carga al abrir (llenaba la RAM sin generar): se carga al pulsar Generar o «Cargar modelo»
+    if (opt) { applyPreset(opt); $("genBtn").disabled = false; setStatus("No está en memoria · se carga al generar"); }
   } catch (e) {
     setStatus("Error al iniciar: " + (e.message || e), "err");
   }

@@ -93,7 +93,7 @@ const EngineDl = {
       this.close();
       if (await startEngine(engineFor(currentOption() || { family: "sdxl" }))) {
         await refreshEngineMenus(); await scanModels(); await Loras.refresh();
-        if (currentOption()) await loadModel();
+        $("genBtn").disabled = !currentOption();
       }
     } catch (e) {
       const msg = String(e.message || e);
@@ -202,7 +202,7 @@ const Packs = {
     await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
     await scanModels();
     const opt = state.options.find((o) => o.family === pack);
-    if (opt) { $("model").value = opt.id; $("model").dispatchEvent(new Event("change")); await loadModel(); }
+    if (opt) { $("model").value = opt.id; $("model").dispatchEvent(new Event("change")); store.set("model", opt.id); }
   },
 };
 

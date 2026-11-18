@@ -638,3 +638,5 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .pack-prog { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .pack-prog .bar > i { transition: width .25s; }
 #packDlg .dlg-foot button { min-height: 42px; padding: 0 18px; font-size: 15px; }
+
+.batt { margin-top: 6px; font-size: 12px; font-weight: 600; color: #f5c46b; line-height: 1.3; }
