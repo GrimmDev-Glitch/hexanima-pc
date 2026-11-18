@@ -43,6 +43,139 @@ def setup_memory(inference_mb=1024, async_loading=False, pin_shared=False):
     memory_management.PIN_SHARED_MEMORY = pin_shared
 
 
+from backend import utils as _futils  # noqa: E402
+from backend.patcher import lora as _flora  # noqa: E402
+
+_forge_refresh = _flora.LoraLoader.refresh
+
+
+@torch.inference_mode()
+def _refresh_sin_copia(self, lora_patches, offload_device=torch.device("cpu"), force_refresh=False):
+    """LoraLoader.refresh de Forge sin la copia de los pesos originales que guarda para poder quitar el LoRA
+    (4-5 GB de RAM con varios LoRAs en SDXL). Para quitarlos o cambiarlos, Engine.set_loras recarga el
+    modelo desde el disco. Los modelos cuantizados (nf4/gguf) siguen con el método de Forge."""
+    hashes = str(list(lora_patches.keys()))
+    if hashes == self.loaded_hash and not force_refresh:
+        return
+    # el CLIP no tiene storage_dtype: se mira si algún peso está cuantizado (nf4 / gguf)
+    quantized = any(hasattr(p, "bnb_quantized") or getattr(p, "gguf_cls", None) is not None for p in self.model.parameters())
+    if quantized or any(online for (_, _, _, online) in lora_patches):
+        return _forge_refresh(self, lora_patches, offload_device, force_refresh)
+    if getattr(self, "hx_merged", False):
+        raise RuntimeError("Los LoRAs anteriores siguen en el modelo: hay que recargarlo")
+    merged = {}
+    for (_, _, _, _online), patches in lora_patches.items():
+        for key, cur in patches.items():
+            merged[key] = merged.get(key, []) + cur
+    _flora.memory_management.signal_empty_cache = True
+    devices = _flora.get_parameter_devices(self.model)
+    for key, cur in merged.items():
+        try:
+            _parent, _child, weight = _futils.get_attr_with_parent(self.model, key)
+        except Exception:
+            raise ValueError(f"Wrong LoRA Key: {key}")
+        try:
+            weight = _flora.merge_lora_to_weight(cur, weight, key, computation_dtype=torch.float32)
+        except Exception:
+            print("Patching LoRA weights out of memory. Retrying by offloading models.")
+            _flora.set_parameter_devices(self.model, parameter_devices={k: offload_device for k in devices.keys()})
+            _flora.memory_management.soft_empty_cache()
+            weight = _flora.merge_lora_to_weight(cur, weight, key, computation_dtype=torch.float32)
+        _futils.set_attr_raw(self.model, key, torch.nn.Parameter(weight, requires_grad=False))
+        del weight
+    _flora.set_parameter_devices(self.model, parameter_devices=devices)
+    self.loaded_hash = hashes
+    self.hx_merged = bool(merged)
+    # ya están dentro de los pesos: soltar los tensores de los LoRAs (~250 MB cada uno). Las claves
+    # se quedan, así que el «hash» no cambia y no se vuelven a aplicar.
+    del merged
+    for patches in lora_patches.values():
+        patches.clear()
+
+
+_flora.LoraLoader.refresh = _refresh_sin_copia
+
+
+# ---------- Leer .safetensors sin copiarlos enteros a la RAM ----------
+# Forge usa safetensors.load_file: el checkpoint entero (6,9 GB en SDXL) va a la RAM y, mientras se arma
+# el modelo, conviven las dos copias (~13,5 GB). Aquí los tensores son vistas de un mapeo del archivo
+# (copy-on-write): Windows lee las páginas al convertirlas y puede soltarlas cuando quiera.
+import json as _json  # noqa: E402
+import mmap as _mmap  # noqa: E402
+
+_ST_DTYPES = {"F64": torch.float64, "F32": torch.float32, "F16": torch.float16, "BF16": torch.bfloat16,
+              "I64": torch.int64, "I32": torch.int32, "I16": torch.int16, "I8": torch.int8, "U8": torch.uint8,
+              "BOOL": torch.bool}
+for _n, _a in (("F8_E4M3", "float8_e4m3fn"), ("F8_E5M2", "float8_e5m2")):
+    if hasattr(torch, _a):
+        _ST_DTYPES[_n] = getattr(torch, _a)
+
+
+_MMAP = {"on": False, "ptrs": set()}  # solo durante Engine.load; ptrs = memoria de los tensores mapeados
+
+
+def load_safetensors_mmap(path):
+    # solo lectura: no reserva memoria (copy-on-write reservaría el tamaño del archivo). Nada escribe en
+    # estos tensores: Forge los copia al modelo y los que usa tal cual se copian en _unalias().
+    with open(path, "rb") as f:
+        n = int.from_bytes(f.read(8), "little")
+        header = _json.loads(f.read(n))
+        mm = _mmap.mmap(f.fileno(), 0, access=_mmap.ACCESS_READ)
+    base = 8 + n
+    out = {}
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        for k, v in header.items():
+            if k == "__metadata__":
+                continue
+            dt = _ST_DTYPES[v["dtype"]]
+            a, b = v["data_offsets"]
+            shape = v["shape"]
+            if b == a:
+                out[k] = torch.empty(shape, dtype=dt)
+                continue
+            t = torch.frombuffer(mm, dtype=dt, count=(b - a) // dt.itemsize, offset=base + a)
+            out[k] = t.reshape(shape)
+            _MMAP["ptrs"].add(t.untyped_storage().data_ptr())
+    return out
+
+
+def _unalias(sd):
+    """Copia los pesos que Forge dejó apuntando al archivo mapeado para poder cerrarlo."""
+    ptrs, n = _MMAP["ptrs"], 0
+    fo = sd.forge_objects
+    for root in (fo.unet.model, fo.clip.cond_stage_model, fo.vae.first_stage_model):
+        for mod in root.modules():
+            for name, p in list(mod._parameters.items()):
+                if p is not None and p.device.type == "cpu" and p.untyped_storage().data_ptr() in ptrs:
+                    mod._parameters[name] = torch.nn.Parameter(p.data.clone(), requires_grad=False); n += 1
+            for name, b in list(mod._buffers.items()):
+                if b is not None and b.device.type == "cpu" and b.untyped_storage().data_ptr() in ptrs:
+                    mod._buffers[name] = b.clone(); n += 1
+    ptrs.clear()
+    import gc; gc.collect()
+    return n
+
+
+_forge_load_torch_file = _futils.load_torch_file
+
+
+def _load_torch_file(ckpt, safe_load=False, device=None):
+    if _MMAP["on"] and isinstance(ckpt, str) and ckpt.lower().endswith(".safetensors") and (device is None or torch.device(device).type == "cpu"):
+        try:
+            return load_safetensors_mmap(ckpt)
+        except KeyError:  # tipo de dato raro: el método de Forge
+            pass
+    return _forge_load_torch_file(ckpt, safe_load=safe_load, device=device)
+
+
+_futils.load_torch_file = _load_torch_file
+import backend.loader as _floader  # noqa: E402
+_floader.load_torch_file = _load_torch_file
+load_torch_file = _load_torch_file
+
+
 class Prompts(list):
     """Lista de prompts con los datos que el motor SDXL lee (ancho, alto, negativo)."""
     def __init__(self, items, width, height, negative=False):
@@ -62,12 +195,21 @@ class Engine:
             return
         self.sd = None
         memory_management.unload_all_models()
+        import gc; gc.collect()
         memory_management.soft_empty_cache()
         t = time.time()
         # VAE aparte (p. ej. sdxl_vae.safetensors): Forge lo carga como diccionario adicional
-        self.sd = forge_loader(path, additional_state_dicts=[vae] if vae else None)
+        _MMAP["on"] = True
+        try:
+            self.sd = forge_loader(path, additional_state_dicts=[vae] if vae else None)
+        finally:
+            _MMAP["on"] = False
         if self.sd is None:
+            _MMAP["ptrs"].clear()
             raise RuntimeError("Modelo no reconocido")
+        copied = _unalias(self.sd)
+        if copied:
+            print(f"[hexanima] {copied} pesos copiados desde el archivo mapeado", flush=True)
         self.path = key
         self.lora_key = None
         print(f"[hexanima] modelo cargado en {time.time() - t:.1f}s: {os.path.basename(path)}{' + VAE ' + os.path.basename(vae) if vae else ''}", flush=True)
@@ -77,6 +219,13 @@ class Engine:
         key = repr(loras)
         if key == self.lora_key:
             return
+        if self.lora_key not in (None, repr([])):
+            # los LoRAs anteriores están fusionados en los pesos (sin copia, ver _refresh_sin_copia):
+            # se vuelve al modelo limpio desde el disco
+            print("[hexanima] LoRAs cambiados: recargando el modelo limpio", flush=True)
+            path, vae = self.path
+            self.path = None
+            self.load(path, vae)
         sd = self.sd
         unet, clip = sd.forge_objects_original.unet, sd.forge_objects_original.clip
         online = unet.model.storage_dtype not in (torch.float32, torch.float16, torch.bfloat16)
@@ -122,9 +271,9 @@ class Engine:
                   clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None):
         """Devuelve el tensor de imagen [1,3,H,W] en -1..1. img2img con init_latent + strength;
         zona a cambiar con mask [1,1,h/8,w/8] (1 = rehacer)."""
-        sd = self.sd
         if stage_cb: stage_cb("conditioning")
         self.set_loras(list(loras))
+        sd = self.sd  # después de set_loras: puede haber recargado el modelo
         sd.set_clip_skip(clip_skip)
         cond = sd.get_learned_conditioning(Prompts([prompt], width, height))
         uncond = sd.get_learned_conditioning(Prompts([negative], width, height, negative=True))
