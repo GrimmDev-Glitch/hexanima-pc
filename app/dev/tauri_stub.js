@@ -95,7 +95,7 @@
       }, 600);
     }),
     engine_dl_cancel: () => null,
-    asset_status: () => [{ kind: 'sdxl_vae', file: 'vae/sdxl_vae_fp16_fix.safetensors', mb: 335, installed: false }, { kind: 'taesdxl', file: 'vae_approx/taesdxl_decoder.pth', mb: 5, installed: false }],
+    asset_status: () => [{ kind: 'sdxl_vae', file: 'vae/sdxl_vae_fp16_fix.safetensors', mb: 335, installed: false }, { kind: 'taesdxl', file: 'vae_approx/taesdxl_decoder.pth', mb: 5, installed: false }, { kind: 'dmd2', file: '@loras/dmd2_sdxl_4step_lora_fp16.safetensors', mb: 394, installed: true }],
     asset_download: async ({ kind }) => kind,
     detector_status: () => [{ kind: 'face', installed: true }, { kind: 'hand', installed: false }],
     detector_install: async () => 'ok',

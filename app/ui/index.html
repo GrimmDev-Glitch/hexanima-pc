@@ -92,6 +92,11 @@
             <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">Muestreo</span><span class="acc-sum" id="sum-sampling"></span></button>
             <div class="acc-body">
             <div class="acc-tools"><button id="resetSampling" class="mini" title="Restablecer pasos, CFG, sampler y scheduler del modelo">↺ Restablecer</button></div>
+            <div id="fastRow" class="fast-row">
+              <label class="fast-toggle"><input id="fastMode" type="checkbox"> <b>⚡ Modo rápido</b></label>
+              <select id="fastSteps" class="field fast-steps" title="Pasos del modo rápido"><option value="4">4 pasos</option><option value="6">6 pasos</option><option value="8" selected>8 pasos</option><option value="10">10 pasos</option></select>
+              <div id="fastInfo" class="lbl fast-info">DMD2 · CFG 1 · unas 5 veces más rápido en SDXL, Illustrious y Pony. Tus pasos, CFG y sampler se guardan para cuando lo apagues.</div>
+            </div>
             <div class="group"><label class="lbl" for="vaePick">VAE</label><select id="vaePick" class="field"></select></div>
         <div class="two">
           <div class="group"><label class="lbl" for="sampler">Sampler</label>
@@ -420,6 +425,14 @@
           <label class="lbl">Motor rápido (PyTorch)</label>
           <div class="btnrow"><span id="engSet" class="lbl" style="flex:1">…</span><button id="engSetBtn" class="ghost sm">Descargar</button></div>
         </div>
+        <label class="lbl" for="optIdle">Liberar el modelo cuando no generas (devuelve la RAM y la VRAM; se vuelve a cargar al generar)</label>
+        <select id="optIdle" class="field" style="max-width:420px">
+          <option value="5">Tras 5 minutos sin generar</option>
+          <option value="10">Tras 10 minutos sin generar</option>
+          <option value="20">Tras 20 minutos sin generar</option>
+          <option value="60">Tras 1 hora sin generar</option>
+          <option value="0">Nunca (mantenerlo cargado)</option>
+        </select>
         <label class="lbl">Vista previa al generar</label>
         <div class="btnrow"><button id="taesdBtn" class="ghost">Mejorar la vista previa (TAESD, 5 MB)</button></div>
         <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload): recomendado con 8 GB de VRAM o menos</label>
@@ -711,5 +724,6 @@
 <script src="layout.js"></script>
 <script src="vae.js"></script>
 <script src="engine.js"></script>
+<script src="fast.js"></script>
 </body>
 </html>

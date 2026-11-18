@@ -82,6 +82,7 @@ def _refresh_sin_copia(self, lora_patches, offload_device=torch.device("cpu"), f
             _flora.memory_management.soft_empty_cache()
             weight = _flora.merge_lora_to_weight(cur, weight, key, computation_dtype=torch.float32)
         _futils.set_attr_raw(self.model, key, torch.nn.Parameter(weight, requires_grad=False))
+        getattr(self.model, "_hx_mapped", {}).pop(key, None)
         del weight
     _flora.set_parameter_devices(self.model, parameter_devices=devices)
     self.loaded_hash = hashes
@@ -143,22 +144,54 @@ def load_safetensors_mmap(path):
 
 
 def _unalias(sd):
-    """Copia los pesos que Forge dejó apuntando al archivo mapeado para poder cerrarlo. Devuelve bytes."""
+    """Tras cargar: el UNet y el VAE que Forge dejó apuntando al archivo mapeado se copian (el UNet se usa en
+    cada paso: leerlo del disco con poca RAM era 3 veces más lento). El CLIP (codificador de texto, 1,5 GB)
+    se queda leyéndose del archivo, sin copia en RAM: solo se usa unos segundos al empezar cada imagen.
+    `_hx_mapped` guarda sus pesos mapeados para volver a ellos cuando Forge lo saca de la gráfica."""
     ptrs, n = _MMAP["ptrs"], 0
     fo = sd.forge_objects
-    for root in (fo.unet.model, fo.clip.cond_stage_model, fo.vae.first_stage_model):
-        for mod in root.modules():
+    clip_root = fo.clip.cond_stage_model
+    mapped = {}
+    for root in (fo.unet.model, clip_root, fo.vae.first_stage_model):
+        keep = root is clip_root and os.environ.get("HEXANIMA_CLIP_MAPPED", "1") != "0"
+        for mname, mod in root.named_modules():
             for name, p in list(mod._parameters.items()):
                 if p is not None and p.device.type == "cpu" and p.untyped_storage().data_ptr() in ptrs:
-                    mod._parameters[name] = torch.nn.Parameter(p.data.clone(), requires_grad=False)
-                    n += p.numel() * p.element_size()
+                    if keep:
+                        mapped[f"{mname}.{name}" if mname else name] = p.data
+                    else:
+                        mod._parameters[name] = torch.nn.Parameter(p.data.clone(), requires_grad=False)
+                        n += p.numel() * p.element_size()
             for name, b in list(mod._buffers.items()):
                 if b is not None and b.device.type == "cpu" and b.untyped_storage().data_ptr() in ptrs:
                     mod._buffers[name] = b.clone()
                     n += b.numel() * b.element_size()
+    clip_root._hx_mapped = mapped
     ptrs.clear()
     import gc; gc.collect()
+    if mapped:
+        print(f"[hexanima] CLIP leído del archivo: {sum(t.numel() * t.element_size() for t in mapped.values()) / 2**30:.2f} GB sin copia en RAM", flush=True)
     return n
+
+
+_forge_model_unload = memory_management.LoadedModel.model_unload
+
+
+def _model_unload(self, avoid_model_moving=False):
+    """Al sacar el CLIP de la gráfica, Forge lo copia a la RAM: se vuelve a apuntar cada peso al archivo."""
+    _forge_model_unload(self, avoid_model_moving)
+    root = getattr(self.model, "model", None)
+    mapped = getattr(root, "_hx_mapped", None)
+    if not mapped:
+        return
+    params = dict(root.named_parameters())
+    for name, t in mapped.items():
+        p = params.get(name)
+        if p is not None and p.device.type == "cpu" and p.shape == t.shape and p.dtype == t.dtype and p.data_ptr() != t.data_ptr():
+            p.data = t
+
+
+memory_management.LoadedModel.model_unload = _model_unload
 
 
 def _unet_storage_like_file(path):

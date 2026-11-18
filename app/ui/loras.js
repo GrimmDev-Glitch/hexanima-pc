@@ -99,7 +99,7 @@ const Loras = {
   cat: "all",       // chip elegido
 
   async refresh() {
-    try { this.lib = await invoke("lora_list"); } catch { this.lib = []; }
+    try { this.lib = (await invoke("lora_list")).filter((l) => !/^dmd2_sdxl_4step/i.test(l.stem)); } catch { this.lib = []; }
     this.renderPanel();
     if (!$("loraDlg").classList.contains("hidden")) this.renderLib();
   },

@@ -30,7 +30,8 @@ const Acc = {
   summaries() {
     const put = (key, txt, on) => { const s = $("sum-" + key); if (s && s.textContent !== txt) s.textContent = txt; s?.classList.toggle("on", !!on); };
     const opt = (sel) => sel.options[sel.selectedIndex]?.text || "";
-    put("sampling", `${opt($("sampler"))} · ${$("steps").value} pasos · CFG ${$("cfg").value}`);
+    const fastOn = typeof Fast !== "undefined" && Fast.on();
+    put("sampling", fastOn ? `⚡ Rápido · ${$("fastSteps").value} pasos · CFG 1` : `${opt($("sampler"))} · ${$("steps").value} pasos · CFG ${$("cfg").value}`, fastOn);
     const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
     put("size", `${w} × ${h}`);
     const n = Loras.tags().size;

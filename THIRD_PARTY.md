@@ -22,5 +22,6 @@
 | Real-ESRGAN anime 6B | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | BSD-3-Clause |
 | 4x-UltraSharp | [Kim2091/UltraSharp](https://huggingface.co/Kim2091/UltraSharp) | CC BY-NC-SA 4.0 |
 | SDXL VAE fp16 fix | [madebyollin/sdxl-vae-fp16-fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix) | MIT |
+| DMD2 4-step LoRA (⚡ Modo rápido) | [tianweiy/DMD2](https://huggingface.co/tianweiy/DMD2) | CC BY-NC 4.0 (uso no comercial) |
 | TAESD XL | [madebyollin/taesd](https://github.com/madebyollin/taesd) | MIT |
 | Modelos y LoRAs de Civitai | civitai.com | la de cada autor |
