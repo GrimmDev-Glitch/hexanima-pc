@@ -35,7 +35,7 @@
   <main class="main">
     <!-- Generar -->
     <section id="page-gen" class="page on">
-      <div class="work">
+      <div class="g-top">
         <div class="toprow">
           <select id="model" class="hidden" aria-hidden="true" tabindex="-1"></select>
           <button id="modelBtn" class="model-chip" title="Elegir modelo"><span id="modelDot" class="dot"></span><span id="modelName">Sin modelo</span><span class="caret">▾</span></button>
@@ -43,6 +43,168 @@
           <button id="refreshBtn" class="ghost icon sm refresh-btn" title="Actualizar: vuelve a buscar modelos, LoRAs, ampliadores y detectores que copiaste a mano a las carpetas" aria-label="Actualizar modelos y LoRAs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg></button>
           <span id="modelStatus" class="status">Iniciando motor…</span>
           <button id="menuBtn" class="ibtn menu-btn" title="Más opciones" aria-label="Más opciones">⋯</button>
+        </div>
+
+      </div>
+
+      <!-- Prompts arriba a lo ancho, Generar a la derecha (como Forge / A1111) -->
+      <div class="g-prompts">
+        <div class="g-prompt-col">
+        <div class="prompt-head">
+          <span class="chip-lbl prompt-lbl">DESCRIPCIÓN</span>
+          <div class="prompt-tools">
+            <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button>
+            <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
+            <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
+            <select id="templatePick" class="mini-select" aria-label="Plantillas de prompt"><option value="">Plantillas</option></select>
+            <button id="saveTemplate" class="mini" title="Guardar el prompt como plantilla" aria-label="Guardar plantilla">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg></button>
+            <button id="deleteTemplate" class="mini" title="Quitar la plantilla elegida" aria-label="Quitar plantilla" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+            <select id="recentPick" class="mini-select" aria-label="Prompts recientes"><option value="">Recientes</option></select>
+            <button id="clearPrompt" class="mini" title="Borrar el prompt" aria-label="Borrar el prompt">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
+          </div>
+        </div>
+
+        <div class="prompt-box">
+          <textarea id="prompt" class="field" rows="3" aria-label="Prompt" placeholder="1girl, silver hair, night city, rain, looking at viewer"></textarea>
+          <span id="promptMeta" class="prompt-meta"></span>
+          <div id="acBox" class="ac-box hidden" role="listbox" aria-label="Sugerencias de etiquetas"></div>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="neg-row">
+          <input id="neg" class="field" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark">
+          <span id="negMeta" class="neg-meta"></span>
+          <button id="negDefault" class="mini" title="Poner el negativo predeterminado del modelo">Predeterminado</button>
+          <select id="negPick" class="mini-select" aria-label="Plantillas del prompt negativo"><option value="">Plantillas</option></select>
+          <button id="negClear" class="mini" title="Borrar el negativo" aria-label="Borrar el negativo">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
+        </div>
+
+        </div>
+        <div class="g-gen">
+          <button id="genBtn" class="primary" disabled>Generar</button>
+          <div class="g-gen-row">
+          <button id="stopBtn" class="ghost" disabled>Detener</button>
+          <div class="batch" title="Imágenes del lote (hasta 999)">
+            <label class="lbl" for="count">Lote</label>
+            <input id="count" class="field" type="number" min="1" max="999" value="1">
+          </div>
+          <button id="extendBatch" class="ghost" disabled title="Sumar estas imágenes al lote en curso">+ Cola</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ajustes a la izquierda, imagen a la derecha -->
+      <div class="g-main">
+      <div class="ctrl">
+        <div class="sec-row"><div class="sec">Controles</div><button id="resetSampling" class="mini" title="Restablecer pasos, CFG, sampler y scheduler del modelo">↺ Restablecer</button></div>
+        <div class="two">
+          <div class="group"><label class="lbl" for="sampler">Sampler</label>
+            <select id="sampler" class="field">
+              <option value="euler">Euler</option><option value="euler_a">Euler a</option>
+              <option value="dpm++2m">DPM++ 2M</option><option value="dpm++2s_a">DPM++ 2S a</option>
+              <option value="lcm">LCM</option>
+            </select></div>
+          <div class="group"><label class="lbl" for="scheduler">Scheduler</label>
+            <select id="scheduler" class="field">
+              <option value="discrete">Discreto</option><option value="karras">Karras</option>
+              <option value="exponential">Exponencial</option><option value="sgm_uniform">SGM Uniform</option>
+            </select></div>
+        </div>
+        <div class="two">
+          <div class="group"><label class="lbl" for="steps">Pasos</label>
+            <input id="steps" class="field" type="number" min="1" max="150" step="1" value="8" inputmode="numeric"></div>
+          <div class="group"><label class="lbl" for="cfg">CFG</label>
+            <input id="cfg" class="field" type="number" min="1" max="30" step="0.5" value="1" inputmode="decimal"></div>
+        </div>
+        <div class="group">
+          <div class="lbl">Tamaño</div>
+          <div class="seg" id="aspect">
+            <button class="ghost on" data-a="p">Retrato</button>
+            <button class="ghost" data-a="s">Cuadrado</button>
+            <button class="ghost" data-a="l">Paisaje</button>
+            <button class="ghost" data-a="c">Otro</button>
+          </div>
+          <div id="customSize" class="custom-size hidden">
+            <label class="lbl" for="customW">Ancho</label>
+            <input id="customW" class="field" type="number" min="256" max="2048" step="64" value="896" inputmode="numeric">
+            <span class="lbl" aria-hidden="true">×</span>
+            <label class="lbl" for="customH">Alto</label>
+            <input id="customH" class="field" type="number" min="256" max="2048" step="64" value="1152" inputmode="numeric">
+            <button id="swapSize" class="ghost icon" title="Intercambiar ancho y alto" aria-label="Intercambiar ancho y alto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg></button>
+          </div>
+          <div id="sizeTxt" class="lbl"></div>
+        </div>
+        <div class="two">
+          <div class="group"><label class="lbl" for="seed">Seed</label><div class="seed-controls"><input id="seed" class="field" value="-1" inputmode="numeric"><button id="randomSeed" class="ghost icon" title="Seed aleatoria" aria-label="Seed aleatoria"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></button></div></div>
+          <div class="group"><label class="lbl" for="clipskip">Clip skip</label>
+            <select id="clipskip" class="field"><option value="-1">Auto</option><option value="1">1</option><option value="2">2</option></select></div>
+        </div>
+
+        <div class="group divider">
+          <button id="loraOpen" class="ghost lora-open">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+            LoRAs <span id="loraCount" class="lbl"></span></button>
+          <div id="loraList" class="group"></div>
+        </div>
+        <div id="hiresBox" class="group divider hires-box">
+          <label class="row hires-head"><span class="hires-t"><input id="hiresOn" type="checkbox"> Hires fix</span><span id="hiresSum" class="lbl">Un segundo paso a mayor tamaño (más lento)</span></label>
+          <div id="hiresOpts" class="hires-opts hidden">
+            <div class="group"><label class="lbl" for="hiresScale">Escala</label><input id="hiresScale" class="field" type="number" min="1.1" max="2.5" step="0.1" value="1.5" inputmode="decimal"></div>
+            <div class="group"><label class="lbl" for="hiresDen" title="Cuánto se rehace en el segundo paso: 0.3 conserva, 0.6 inventa más detalle">Denoise</label><input id="hiresDen" class="field" type="number" min="0.05" max="0.95" step="0.05" value="0.45" inputmode="decimal"></div>
+            <div class="group"><label class="lbl" for="hiresSteps" title="0 = los mismos pasos que la imagen">Pasos</label><input id="hiresSteps" class="field" type="number" min="0" max="60" step="1" value="4" inputmode="numeric"></div>
+            <div class="group hires-up"><label class="lbl" for="hiresUp">Ampliador</label><select id="hiresUp" class="field"></select></div>
+          </div>
+        </div>
+        <div id="adBox" class="group divider hires-box ad-box">
+          <div class="row hires-head"><span class="hires-t">ADetailer</span><span id="adSum" class="lbl">Redibuja caras o manos con más detalle</span></div>
+          <div id="adSeg" class="seg">
+            <button class="ghost sm" data-ad="off">No</button>
+            <button class="ghost sm" data-ad="face" title="Encuentra las caras y las redibuja con más detalle (descarga de 6 MB la primera vez)">Caras</button>
+            <button class="ghost sm" data-ad="hand" title="Encuentra las manos y las redibuja con más detalle (descarga de 6 MB la primera vez)">Manos</button>
+          </div>
+          <div id="adOpts" class="row lbl edit-strength hidden" title="Cuánto se rehace cada cara o mano: 30 % conserva, 60 % inventa más">
+            <label for="adDen">Cuánto rehace</label>
+            <div class="num"><input id="adDen" class="field" type="number" min="10" max="90" step="5" value="40" inputmode="numeric"><span>%</span></div>
+          </div>
+        </div>
+        <div id="editBox" class="group divider edit-box">
+          <div class="row"><button id="editToggle" class="sect-toggle" aria-expanded="false"><span class="caret">▸</span> Editar una foto · <i>opcional</i></button><button id="editClear" class="link hidden" title="Quitar la foto">✕ Quitar</button></div>
+          <div class="edit-row">
+            <img id="editPreview" class="edit-thumb" alt="Foto de partida">
+            <div id="editEmpty" class="edit-thumb empty-thumb" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+            </div>
+            <div class="edit-btns">
+              <label class="ghost sm file-btn">Elegir<input id="editFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+              <button id="useLast" class="ghost sm" disabled title="Usar la última imagen generada">↳ Última imagen</button>
+            </div>
+          </div>
+          <div class="row lbl edit-strength" title="Cuánto cambia la foto: poco conserva casi todo, mucho la rehace">
+            <label for="editStrength">Cuánto cambia</label>
+            <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
+          </div>
+          <div id="editHint" class="lbl edit-hint">Elige una foto para generar a partir de ella (imagen a imagen).</div>
+          <div id="maskRow" class="row edit-mask hidden">
+            <button id="maskBtn" class="ghost sm" title="Pinta la parte de la foto que se debe volver a generar">✎ Zona a cambiar</button>
+            <button id="maskClear" class="link hidden" title="Quitar la zona pintada">✕ Quitar zona</button>
+          </div>
+        </div>
+      </div>
+      <div class="g-out">
+        <div id="canvas" class="canvas">
+          <img id="result" alt="Imagen generada">
+          <div class="empty">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
+            <div>La imagen generada aparece aquí</div>
+            <div id="estimate" style="font-size:13px"></div>
+          </div>
+          <div id="progress" class="progress">
+            <div class="row"><span id="progStage">Preparando…</span><span id="progTime">0 s</span></div>
+            <div class="bar"><i id="progBar"></i></div>
+          </div>
         </div>
 
         <!-- Barra de la imagen (fuera de la imagen, como la del teléfono) -->
@@ -78,156 +240,7 @@
           </div>
         </div>
 
-        <div id="canvas" class="canvas">
-          <img id="result" alt="Imagen generada">
-          <div class="empty">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
-            <div>La imagen generada aparece aquí</div>
-            <div id="estimate" style="font-size:13px"></div>
-          </div>
-          <div id="progress" class="progress">
-            <div class="row"><span id="progStage">Preparando…</span><span id="progTime">0 s</span></div>
-            <div class="bar"><i id="progBar"></i></div>
-          </div>
-        </div>
-
-        <div class="prompt-head">
-          <span class="chip-lbl prompt-lbl">DESCRIPCIÓN</span>
-          <div class="prompt-tools">
-            <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button>
-            <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
-            <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
-            <select id="templatePick" class="mini-select" aria-label="Plantillas de prompt"><option value="">Plantillas</option></select>
-            <button id="saveTemplate" class="mini" title="Guardar el prompt como plantilla" aria-label="Guardar plantilla">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 3h11l3 3v15H5z"/><path d="M8 3v6h8V3M8 21v-7h8v7"/></svg></button>
-            <button id="deleteTemplate" class="mini" title="Quitar la plantilla elegida" aria-label="Quitar plantilla" disabled>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
-            <select id="recentPick" class="mini-select" aria-label="Prompts recientes"><option value="">Recientes</option></select>
-            <button id="clearPrompt" class="mini" title="Borrar el prompt" aria-label="Borrar el prompt">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
-          </div>
-        </div>
-
-        <div class="prompt-box">
-          <textarea id="prompt" class="field" rows="3" aria-label="Prompt" placeholder="1girl, silver hair, night city, rain, looking at viewer"></textarea>
-          <span id="promptMeta" class="prompt-meta"></span>
-          <div id="acBox" class="ac-box hidden" role="listbox" aria-label="Sugerencias de etiquetas"></div>
-        </div>
-        <div class="chips" id="chips"></div>
-        <div class="neg-row">
-          <input id="neg" class="field" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark">
-          <span id="negMeta" class="neg-meta"></span>
-          <button id="negDefault" class="mini" title="Poner el negativo predeterminado del modelo">Predeterminado</button>
-          <select id="negPick" class="mini-select" aria-label="Plantillas del prompt negativo"><option value="">Plantillas</option></select>
-          <button id="negClear" class="mini" title="Borrar el negativo" aria-label="Borrar el negativo">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 20H9L4 15l9-11 8 8-6 8"/><path d="M8 11l6 6"/></svg></button>
-        </div>
-
-        <div class="btnrow">
-          <button id="genBtn" class="primary" disabled>Generar</button>
-          <button id="stopBtn" class="ghost" disabled>Detener</button>
-          <div class="batch" title="Imágenes del lote (hasta 999)">
-            <label class="lbl" for="count">Lote</label>
-            <input id="count" class="field" type="number" min="1" max="999" value="1">
-          </div>
-          <button id="extendBatch" class="ghost" disabled title="Sumar estas imágenes al lote en curso">+ Cola</button>
-        </div>
       </div>
-
-      <div class="ctrl">
-        <div class="sec-row"><div class="sec">Controles</div><button id="resetSampling" class="mini" title="Restablecer pasos, CFG, sampler y scheduler del modelo">↺ Restablecer</button></div>
-        <div class="group">
-          <div class="lbl">Tamaño</div>
-          <div class="seg" id="aspect">
-            <button class="ghost on" data-a="p">Retrato</button>
-            <button class="ghost" data-a="s">Cuadrado</button>
-            <button class="ghost" data-a="l">Paisaje</button>
-            <button class="ghost" data-a="c">Otro</button>
-          </div>
-          <div id="customSize" class="custom-size hidden">
-            <label class="lbl" for="customW">Ancho</label>
-            <input id="customW" class="field" type="number" min="256" max="2048" step="64" value="896" inputmode="numeric">
-            <span class="lbl" aria-hidden="true">×</span>
-            <label class="lbl" for="customH">Alto</label>
-            <input id="customH" class="field" type="number" min="256" max="2048" step="64" value="1152" inputmode="numeric">
-            <button id="swapSize" class="ghost icon" title="Intercambiar ancho y alto" aria-label="Intercambiar ancho y alto"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg></button>
-          </div>
-          <div id="sizeTxt" class="lbl"></div>
-        </div>
-        <div class="two">
-          <div class="group"><label class="lbl" for="steps">Pasos</label>
-            <input id="steps" class="field" type="number" min="1" max="150" step="1" value="8" inputmode="numeric"></div>
-          <div class="group"><label class="lbl" for="cfg">CFG</label>
-            <input id="cfg" class="field" type="number" min="1" max="30" step="0.5" value="1" inputmode="decimal"></div>
-        </div>
-        <div class="two">
-          <div class="group"><label class="lbl" for="sampler">Sampler</label>
-            <select id="sampler" class="field">
-              <option value="euler">Euler</option><option value="euler_a">Euler a</option>
-              <option value="dpm++2m">DPM++ 2M</option><option value="dpm++2s_a">DPM++ 2S a</option>
-              <option value="lcm">LCM</option>
-            </select></div>
-          <div class="group"><label class="lbl" for="scheduler">Scheduler</label>
-            <select id="scheduler" class="field">
-              <option value="discrete">Discreto</option><option value="karras">Karras</option>
-              <option value="exponential">Exponencial</option><option value="sgm_uniform">SGM Uniform</option>
-            </select></div>
-        </div>
-        <div class="two">
-          <div class="group"><label class="lbl" for="seed">Seed</label><div class="seed-controls"><input id="seed" class="field" value="-1" inputmode="numeric"><button id="randomSeed" class="ghost icon" title="Seed aleatoria" aria-label="Seed aleatoria"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg></button></div></div>
-          <div class="group"><label class="lbl" for="clipskip">Clip skip</label>
-            <select id="clipskip" class="field"><option value="-1">Auto</option><option value="1">1</option><option value="2">2</option></select></div>
-        </div>
-
-        <div class="group divider">
-          <button id="loraOpen" class="ghost lora-open">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
-            LoRAs <span id="loraCount" class="lbl"></span></button>
-          <div id="loraList" class="group"></div>
-        </div>
-        <div id="editBox" class="group divider edit-box">
-          <div class="row"><div class="lbl">Editar una foto · <i>opcional</i></div><button id="editClear" class="link hidden" title="Quitar la foto">✕ Quitar</button></div>
-          <div class="edit-row">
-            <img id="editPreview" class="edit-thumb" alt="Foto de partida">
-            <div id="editEmpty" class="edit-thumb empty-thumb" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg>
-            </div>
-            <div class="edit-btns">
-              <label class="ghost sm file-btn">Elegir<input id="editFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-              <button id="useLast" class="ghost sm" disabled title="Usar la última imagen generada">↳ Última imagen</button>
-            </div>
-          </div>
-          <div class="row lbl edit-strength" title="Cuánto cambia la foto: poco conserva casi todo, mucho la rehace">
-            <label for="editStrength">Cuánto cambia</label>
-            <div class="num"><input id="editStrength" class="field" type="number" min="5" max="100" step="5" value="45" inputmode="numeric"><span>%</span></div>
-          </div>
-          <div id="editHint" class="lbl edit-hint">Elige una foto para generar a partir de ella (imagen a imagen).</div>
-          <div id="maskRow" class="row edit-mask hidden">
-            <button id="maskBtn" class="ghost sm" title="Pinta la parte de la foto que se debe volver a generar">✎ Zona a cambiar</button>
-            <button id="maskClear" class="link hidden" title="Quitar la zona pintada">✕ Quitar zona</button>
-          </div>
-        </div>
-        <div id="adBox" class="group divider hires-box ad-box">
-          <div class="row hires-head"><span class="hires-t">ADetailer</span><span id="adSum" class="lbl">Redibuja caras o manos con más detalle</span></div>
-          <div id="adSeg" class="seg">
-            <button class="ghost sm" data-ad="off">No</button>
-            <button class="ghost sm" data-ad="face" title="Encuentra las caras y las redibuja con más detalle (descarga de 6 MB la primera vez)">Caras</button>
-            <button class="ghost sm" data-ad="hand" title="Encuentra las manos y las redibuja con más detalle (descarga de 6 MB la primera vez)">Manos</button>
-          </div>
-          <div id="adOpts" class="row lbl edit-strength hidden" title="Cuánto se rehace cada cara o mano: 30 % conserva, 60 % inventa más">
-            <label for="adDen">Cuánto rehace</label>
-            <div class="num"><input id="adDen" class="field" type="number" min="10" max="90" step="5" value="40" inputmode="numeric"><span>%</span></div>
-          </div>
-        </div>
-        <div id="hiresBox" class="group divider hires-box">
-          <label class="row hires-head"><span class="hires-t"><input id="hiresOn" type="checkbox"> Hires fix</span><span id="hiresSum" class="lbl">Un segundo paso a mayor tamaño (más lento)</span></label>
-          <div id="hiresOpts" class="hires-opts hidden">
-            <div class="group"><label class="lbl" for="hiresScale">Escala</label><input id="hiresScale" class="field" type="number" min="1.1" max="2.5" step="0.1" value="1.5" inputmode="decimal"></div>
-            <div class="group"><label class="lbl" for="hiresDen" title="Cuánto se rehace en el segundo paso: 0.3 conserva, 0.6 inventa más detalle">Denoise</label><input id="hiresDen" class="field" type="number" min="0.05" max="0.95" step="0.05" value="0.45" inputmode="decimal"></div>
-            <div class="group"><label class="lbl" for="hiresSteps" title="0 = los mismos pasos que la imagen">Pasos</label><input id="hiresSteps" class="field" type="number" min="0" max="60" step="1" value="4" inputmode="numeric"></div>
-            <div class="group hires-up"><label class="lbl" for="hiresUp">Ampliador</label><select id="hiresUp" class="field"></select></div>
-          </div>
-        </div>
       </div>
     </section>
 
@@ -394,7 +407,7 @@
 <div id="loraDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="loraDlgTitle">
   <div class="dlg dlg-lib">
     <div class="dlg-head"><h2 id="loraDlgTitle">LoRAs</h2><span id="loraActive" class="lbl"></span>
-      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+      <button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <input id="loraFilter" class="field" placeholder="Filtrar: nombre o palabra…" aria-label="Filtrar LoRAs">
     <div id="loraCats" class="chips"></div>
     <div id="loraRows" class="lora-rows"></div>
@@ -410,7 +423,7 @@
 <!-- Ficha de un modelo de Civitai -->
 <div id="sheetDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
   <div class="dlg dlg-sheet">
-    <div class="dlg-head"><h2 id="sheetTitle"></h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="sheetTitle"></h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="sheet-body">
       <img id="sheetImg" class="sheet-img" alt="">
       <div class="group" style="flex:1;min-width:0">
@@ -433,7 +446,7 @@
 <!-- Selector de modelo (como el del teléfono) -->
 <div id="modelDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modelTitle">
   <div class="dlg dlg-lib">
-    <div class="dlg-head"><h2 id="modelTitle">Modelo</h2><span id="modelCount" class="lbl"></span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="modelTitle">Modelo</h2><span id="modelCount" class="lbl"></span><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="modelCards" class="model-cards"></div>
     <div class="dlg-foot">
       <span class="lbl">Clic para elegir · ✎ cambia el nombre</span>
@@ -448,7 +461,7 @@
 <!-- Paleta de etiquetas -->
 <div id="tagsDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tagsTitle">
   <div class="dlg dlg-lib">
-    <div class="dlg-head"><h2 id="tagsTitle">Etiquetas</h2><span class="lbl">Toca una etiqueta para ponerla o quitarla del prompt</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="tagsTitle">Etiquetas</h2><span class="lbl">Toca una etiqueta para ponerla o quitarla del prompt</span><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="tagsBody" class="tags-body"></div>
     <div class="dlg-foot"><button class="primary sm" data-close>Hecho</button></div>
   </div>
@@ -457,7 +470,7 @@
 <!-- Plantillas de configuración -->
 <div id="cfgDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
   <div class="dlg dlg-ask">
-    <div class="dlg-head"><h2 id="cfgTitle">Plantillas de configuración</h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="cfgTitle">Plantillas de configuración</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="lbl">Guardan modelo, prompt, negativo, muestreo, tamaño, seed, cantidad y LoRAs. Clic para cargar · clic derecho: más opciones.</div>
     <button id="cfgSave" class="ghost">＋ Guardar la configuración actual</button>
     <div id="cfgList" class="ask-list"></div>
@@ -480,7 +493,7 @@
 <div id="viewer" class="viewer hidden" role="dialog" aria-modal="true" aria-label="Visor">
   <div class="v-top">
     <span id="vCount" class="lbl"></span><span id="vInfo" class="lbl v-info"></span>
-    <button class="x v-close" id="vClose" aria-label="Cerrar">×</button>
+    <button class="x v-close" id="vClose" aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
   <div id="vStage" class="v-stage"><img id="vImg" alt="Imagen" draggable="false"></div>
   <button id="vPrev" class="v-nav v-left" aria-label="Anterior">‹</button>
@@ -504,7 +517,7 @@
 <div id="fixDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="fixTitle">
   <div class="dlg dlg-fix">
     <div class="dlg-head"><h2 id="fixTitle">Correcciones</h2><span id="fixStatus" class="lbl"></span>
-      <button id="fixClose" class="x dlg-close" aria-label="Cerrar">×</button></div>
+      <button id="fixClose" class="x dlg-close" aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div class="fix-body">
       <div class="fix-left">
         <div class="cmp-stage fix-stage">
@@ -536,7 +549,7 @@
 <div id="cmpDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cmpTitle">
   <div class="dlg dlg-cmp">
     <div class="dlg-head"><h2 id="cmpTitle">Antes / después</h2><span class="lbl">Arrastra sobre la imagen para mover la línea.</span>
-      <button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+      <button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="cmpStage" class="cmp-stage">
       <div id="cmpBox" class="cmp-box">
         <img id="cmpAfter" alt="Editada"><div id="cmpClip" class="cmp-clip"><img id="cmpBefore" alt="Original"></div>
@@ -550,7 +563,7 @@
 <!-- Ampliar (como "Ampliar en la NPU" del teléfono) -->
 <div id="upDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upTitle">
   <div class="dlg dlg-ask">
-    <div class="dlg-head"><h2 id="upTitle">Ampliar</h2><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="upTitle">Ampliar</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="upOpts" class="group"></div>
     <div id="upMsg" class="lbl"></div>
     <div class="up-sizes"><button id="up2" class="ghost">×2</button><button id="up4" class="ghost">×4</button></div>
@@ -560,7 +573,7 @@
 
 <div id="maskDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="maskTitle">
   <div class="dlg dlg-mask">
-    <div class="dlg-head"><h2 id="maskTitle">✎ Zona a cambiar</h2><span id="maskHint" class="lbl">Pinta lo que se debe volver a generar; el resto de la foto se conserva.</span><button class="x dlg-close" data-close aria-label="Cerrar">×</button></div>
+    <div class="dlg-head"><h2 id="maskTitle">✎ Zona a cambiar</h2><span id="maskHint" class="lbl">Pinta lo que se debe volver a generar; el resto de la foto se conserva.</span><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
     <div id="maskTools" class="mask-tools">
       <div class="seg mask-seg">
         <button class="ghost sm" data-tool="brush" title="Pincel (B)">Pincel</button>

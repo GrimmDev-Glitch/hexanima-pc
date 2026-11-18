@@ -490,6 +490,7 @@ function setMode(mode) {
   const has = !!state.editImage;
   $("editClear").classList.toggle("hidden", !has);
   $("editBox").classList.toggle("on", has);
+  if (has) { $("editBox").classList.add("open"); $("editToggle").setAttribute("aria-expanded", "true"); }
   $("editHint").textContent = has ? `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).` : "Elige una foto para generar a partir de ella (imagen a imagen).";
   if (!has) state.editMask = null;
   if (typeof Mask !== "undefined") { if (!has) Mask.paint = null; Mask.refresh(); }
@@ -767,3 +768,12 @@ async function refreshAll() {
 }
 $("refreshBtn").onclick = refreshAll;
 $("lpRefresh").onclick = refreshAll;
+
+// «Editar una foto» se pliega para dejar sitio (se abre sola al elegir una foto).
+$("editToggle").onclick = () => {
+  const open = !$("editBox").classList.contains("open");
+  $("editBox").classList.toggle("open", open);
+  $("editToggle").setAttribute("aria-expanded", String(open));
+  store.set("editOpen", open);
+};
+if (store.get("editOpen", false)) { $("editBox").classList.add("open"); $("editToggle").setAttribute("aria-expanded", "true"); }
