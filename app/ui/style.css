@@ -687,3 +687,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .cat-head h3 { margin: 0; font-size: 16px; }
 .dlg-pack { max-height: 100%; overflow: auto; }
 .pack .pack-tag { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; color: var(--accent); }
+/* ✦ Estilo ChatGPT (LoRA gpt-image-2 para Anima) */
+.gpt-style { width: 100%; margin-top: 6px; }
+.gpt-style.on { border-color: var(--accent); color: var(--accent); }

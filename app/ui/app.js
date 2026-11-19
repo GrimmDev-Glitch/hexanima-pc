@@ -299,6 +299,7 @@ async function scanModels() {
   if (last && opts.some((o) => o.id === last)) sel.value = last;
   // el selector de VAE depende del modelo elegido y de los archivos del motor
   if (typeof Vae !== "undefined") Vae.refresh();
+  if (typeof Gpt !== "undefined") Gpt.sync();
 }
 
 function applyPreset(opt) {
