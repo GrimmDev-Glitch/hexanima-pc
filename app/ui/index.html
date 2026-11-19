@@ -57,6 +57,7 @@
         <div class="prompt-head">
           <span class="chip-lbl prompt-lbl">DESCRIPCIÓN</span>
           <div class="prompt-tools">
+            <button id="esenBtn" class="mini esen-btn" aria-pressed="false">🌐 ES→EN</button>
             <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button><button id="picPromptBtn" class="mini" title="Prompt desde una imagen: lee una imagen y escribe su prompt (etiquetas o frase)">🖼 Desde imagen</button>
             <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
             <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
@@ -76,6 +77,7 @@
           <span id="promptMeta" class="prompt-meta"></span>
           <div id="acBox" class="ac-box hidden" role="listbox" aria-label="Sugerencias de etiquetas"></div>
         </div>
+        <div id="promptEn" class="esen-prev hidden"></div>
         <div class="chips" id="chips"></div>
           </div>
           <div class="g-card">
@@ -88,6 +90,7 @@
               <textarea id="neg" class="field" rows="2" aria-label="Prompt negativo" placeholder="Prompt negativo: lowres, bad anatomy, watermark"></textarea>
               <span id="negMeta" class="prompt-meta neg-meta"></span>
             </div>
+            <div id="negEn" class="esen-prev hidden"></div>
           </div>
           <section class="acc" data-acc="sampling">
             <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">Muestreo</span><span class="acc-sum" id="sum-sampling"></span></button>
@@ -867,5 +870,6 @@
 <script src="meta.js"></script>
 <script src="info.js"></script>
 <script src="pose.js"></script>
+<script src="esen.js"></script>
 </body>
 </html>

@@ -68,7 +68,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         pass
 
 
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("127.0.0.1", PORT), Handler) as httpd:
+socketserver.ThreadingTCPServer.allow_reuse_address = True
+socketserver.ThreadingTCPServer.daemon_threads = True
+# Varias peticiones a la vez: con un solo hilo, el navegador pedía todo junto y la página se quedaba a medias
+with socketserver.ThreadingTCPServer(("127.0.0.1", PORT), Handler) as httpd:
     print(f"Vista previa en http://127.0.0.1:{PORT}", flush=True)
     httpd.serve_forever()

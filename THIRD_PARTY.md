@@ -24,6 +24,7 @@
 | Qwen-Image 2.1 Turbo (GGUF de unsloth), Qwen3-VL-8B, VAE de Qwen-Image 2.1 | [unsloth](https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF), [Qwen](https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF), [Comfy-Org](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) | Qwen Research License (no comercial) para Qwen-Image; Apache-2.0 para Qwen3-VL |
 | MOSS-Image SFT (GGUF de leejet), Qwen3.5-9B (GGUF de unsloth), VAE de FLUX.2, tokenizer | [leejet](https://huggingface.co/leejet/MOSS-Image-SFT-GGUF), [unsloth](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF), [Comfy-Org](https://huggingface.co/Comfy-Org/MOSS-Image), [OpenMOSS-Team](https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base) | Apache-2.0 |
 | LoRA «Style > gpt-image-2» (✦ Estilo ChatGPT) | [Civitai 2564225](https://civitai.red/models/2564225) (AgileNumbers) | ver la página del modelo (uso comercial y derivados permitidos) |
+| OPUS-MT español → inglés (🌐 ES→EN) | [Helsinki-NLP/opus-mt-es-en](https://huggingface.co/Helsinki-NLP/opus-mt-es-en) | Apache-2.0 |
 | Real-ESRGAN anime 6B | [xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) | BSD-3-Clause |
 | 4x-UltraSharp | [Kim2091/UltraSharp](https://huggingface.co/Kim2091/UltraSharp) | CC BY-NC-SA 4.0 |
 | SDXL VAE fp16 fix | [madebyollin/sdxl-vae-fp16-fix](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix) | MIT |

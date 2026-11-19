@@ -474,7 +474,9 @@ async function runOne(opt, seed, ov = {}) {
   const cfg = clampNum($("cfg"), 5);
   // Las etiquetas <lora:nombre:fuerza> del prompt se convierten en la lista que pide el motor
   // (el servidor no lee etiquetas dentro del texto) y se quitan del prompt enviado.
-  const promptWithTags = expandWildcards($("prompt").value.trim());
+  // 🌐 ES→EN: se genera con la versión en inglés (los comodines {a|b} se eligen antes de traducir)
+  const promptWithTags = await EsEn.apply(expandWildcards($("prompt").value.trim()));
+  const negative = await EsEn.apply($("neg").value.trim());
   const loraSpec = Loras.fromPrompt(promptWithTags);
   if (loraSpec.missing.length) setStatus(`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
   const body = {
@@ -487,7 +489,7 @@ async function runOne(opt, seed, ov = {}) {
     // Motor PyTorch: ADetailer propio (detector YOLOv8 en PyTorch + redibujado por recorte)
     ...(state.engine === "torch" && Ad.mode !== "off" ? { adetailer: { model: Ad.mode, strength: Ad.den() / 100, confidence: 0.3 } } : {}),
     prompt: loraSpec.prompt,
-    negative_prompt: $("neg").value.trim(),
+    negative_prompt: negative,
     clip_skip: +$("clipskip").value,
     width: w, height: h, seed, batch_count: 1,
     sample_params: {
@@ -532,7 +534,7 @@ async function runOne(opt, seed, ov = {}) {
       if (sampMs) store.set("bench:" + opt.id + ":" + w + "x" + h + (fast ? ":fast" : ""), { step: sampMs / 1000 / usedSteps, fixed: total - sampMs / 1000 });
       // .json con los ajustes completos junto al PNG (como la galería del teléfono).
       const meta = {
-        prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
+        prompt: promptWithTags, negative: body.negative_prompt, prompt_es: EsEn.on() ? $("prompt").value.trim() : null, model: opt.id, model_label: opt.label, family: opt.family,
         steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, pose: usedPose, references: mageRefs || null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
         seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: (state.engine === "torch" ? Ad.mode !== "off" : Ad.active()) ? { mode: Ad.mode, strength: Ad.den() } : null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.filter((l) => typeof Fast === "undefined" || !Fast.isOwn(l.path)).map((l) => ({ file: l.path, w: l.multiplier })),
@@ -918,6 +920,7 @@ const ENGINE_IDLE_MB = 4500;
 async function unloadModel() {
   const r = await api("/sdcpp/v1/models/unload", { method: "POST" });
   state.loaded = null;
+  invoke("translate_stop").catch(() => {}); // el traductor ES→EN (~1 GB) también se cierra; se abre al traducir
   // PyTorch en Windows se guarda la memoria liberada para reusarla y no se la devuelve al sistema: medido con el
   // ControlNet, el objeto se libera pero el proceso sigue en 5,4 GB. Un motor anterior a la 0.2.1 no dice
   // cuánto ocupa (sin rss_mb): también se reinicia.

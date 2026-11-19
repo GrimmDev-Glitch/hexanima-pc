@@ -28,6 +28,7 @@ fn label(dir: &str, name: &str) -> (String, String) {
         ("models", "tokenizers") => ("Tokenizers", "Vocabulario de los codificadores (MOSS-Image)"),
         ("models", "pose") => ("Detector de pose", "OpenPose para «🧍 Pose»"),
         ("models", "controlnet") => ("ControlNet", "OpenPose para «🧍 Pose» (SDXL / Illustrious / Pony)"),
+        ("models", "translate") => ("Traductor", "OPUS-MT español → inglés para «🌐 ES→EN»"),
         ("models", "tagger") => ("Leer rasgos", "WD Tagger (Prompt desde una imagen)"),
         ("models", "ipadapter") | ("models", "clip_vision") => ("Personaje de referencia", "IP-Adapter y su codificador de imagen"),
         ("engine", "torch") => ("Motor rápido (PyTorch)", "Se puede volver a descargar en Ajustes"),

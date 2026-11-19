@@ -8,6 +8,7 @@ mod hw;
 mod lora;
 mod server;
 mod storage;
+mod translate;
 mod yolo;
 
 use base64::Engine as _;
@@ -610,6 +611,18 @@ fn civitai_cancel(id: String) {
 }
 
 /// Abre un enlace de Civitai en el navegador del sistema (solo civitai.com / civitai.red).
+// ---------- 🌐 ES→EN: traducir el prompt de español a inglés (sin internet) ----------
+#[tauri::command]
+async fn translate_text(app: tauri::AppHandle, texts: Vec<String>) -> Result<Vec<String>, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || translate::translate(&root, &texts)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn translate_stop() {
+    translate::stop();
+}
+
 // ---------- ⋯ → Almacenamiento y Exportar registros ----------
 #[tauri::command]
 async fn storage_info(app: tauri::AppHandle) -> serde_json::Value {
@@ -711,6 +724,8 @@ fn main() {
             store_get,
             store_set,
             model_sizes,
+            translate_text,
+            translate_stop,
             storage_info,
             storage_clear,
             logs_export,
@@ -761,6 +776,7 @@ fn main() {
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
+            translate::stop();
             // Cerrar el motor al salir (el job object lo garantiza aunque la app se cuelgue).
             if let Some(mut s) = handle.state::<AppState>().server.lock().unwrap().take() {
                 s.stop();

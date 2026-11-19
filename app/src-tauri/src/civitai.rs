@@ -263,6 +263,14 @@ pub const ASSETS: &[(&str, &str, &str, &str, u32)] = &[
     // 🧍 Pose: detector de cuerpo de OpenPose (pesos de CMU, uso no comercial) y ControlNet OpenPose SDXL de xinsir (Apache-2.0)
     ("pose", "pose", "body_pose_model.pth", "https://huggingface.co/lllyasviel/Annotators/resolve/main/body_pose_model.pth", 200),
     ("openpose", "controlnet", "controlnet-openpose-sdxl-xinsir.safetensors", "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors", 2386),
+    // 🌐 ES→EN: OPUS-MT español → inglés (Helsinki-NLP, Apache-2.0), ~300 MB
+    ("tr_config", "translate/opus-mt-es-en", "config.json", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/config.json", 1),
+    ("tr_generation_config", "translate/opus-mt-es-en", "generation_config.json", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/generation_config.json", 1),
+    ("tr_pytorch_model", "translate/opus-mt-es-en", "pytorch_model.bin", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/pytorch_model.bin", 298),
+    ("tr_source", "translate/opus-mt-es-en", "source.spm", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/source.spm", 1),
+    ("tr_target", "translate/opus-mt-es-en", "target.spm", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/target.spm", 1),
+    ("tr_tokenizer_config", "translate/opus-mt-es-en", "tokenizer_config.json", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/tokenizer_config.json", 1),
+    ("tr_vocab", "translate/opus-mt-es-en", "vocab.json", "https://huggingface.co/Helsinki-NLP/opus-mt-es-en/resolve/main/vocab.json", 2),
 ];
 
 fn asset_dir(root: &Path, dir: &str) -> PathBuf {
