@@ -883,6 +883,18 @@ const Idle = {
     this.touch();
   },
 };
+// Tema: oscuro (por defecto), claro o el de Windows
+const Theme = {
+  mq: window.matchMedia("(prefers-color-scheme: light)"),
+  apply() {
+    const t = store.get("theme", "dark");
+    document.documentElement.dataset.theme = t === "system" ? (this.mq.matches ? "light" : "dark") : t;
+  },
+};
+Theme.apply();
+Theme.mq.addEventListener("change", () => Theme.apply());
+$("optTheme").value = store.get("theme", "dark");
+$("optTheme").onchange = () => { store.set("theme", $("optTheme").value); Theme.apply(); };
 $("optIdle").value = String(store.get("idleUnload", 10));
 $("optIdle").onchange = () => { store.set("idleUnload", Number($("optIdle").value)); Idle.touch(); };
 $("genBtn").addEventListener("click", () => Idle.touch());

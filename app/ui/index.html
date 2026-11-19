@@ -432,6 +432,12 @@
       <p>Motor, gráfica y perfil detectados al abrir. Las opciones extra se pasan al motor tal cual (como COMMANDLINE_ARGS de Forge) y reinician el motor.</p>
       <div class="group" style="max-width:640px;margin-top:14px">
         <div id="setInfo" class="lbl"></div>
+        <label class="lbl" for="optTheme">Tema</label>
+        <select id="optTheme" class="field" style="max-width:420px">
+          <option value="dark">Oscuro</option>
+          <option value="light">Claro</option>
+          <option value="system">Como Windows</option>
+        </select>
         <label class="lbl" for="optEngine">Motor</label>
         <select id="optEngine" class="field" style="max-width:420px">
           <option value="auto">Automático (PyTorch para SDXL en NVIDIA; CUDA para Anima)</option>
