@@ -58,6 +58,7 @@
           <span class="chip-lbl prompt-lbl">DESCRIPCIÓN</span>
           <div class="prompt-tools">
             <button id="esenBtn" class="mini esen-btn" aria-pressed="false">🌐 ES→EN</button>
+            <button id="detailBtn" class="mini" title="✨ Detallar: escribe en pocas palabras lo que quieres (en español o inglés) y lo convierte en un prompt en inglés muy específico, leyendo las imágenes">✨ Detallar</button>
             <button id="tagsBtn" class="mini" title="Paleta de etiquetas: Calidad, Encuadre, Luz, Estilo, Expresión, Fondo"># Etiquetas</button><button id="picPromptBtn" class="mini" title="Prompt desde una imagen: lee una imagen y escribe su prompt (etiquetas o frase)">🖼 Desde imagen</button>
             <button id="weightDown" class="mini" title="Bajar el peso de la selección">( − )</button>
             <button id="weightUp" class="mini" title="Subir el peso de la selección">( + )</button>
@@ -453,6 +454,8 @@
       <p>Motor, gráfica y perfil detectados al abrir. Las opciones extra se pasan al motor tal cual (como COMMANDLINE_ARGS de Forge) y reinician el motor.</p>
       <div class="group" style="max-width:640px;margin-top:14px">
         <div id="setInfo" class="lbl"></div>
+        <label class="lbl">Actualizaciones</label>
+        <div class="btnrow"><span id="updInfo" class="lbl" style="flex:1">Se buscan solas una vez al día</span><button id="updBtn" class="ghost sm" title="Busca una versión nueva en GitHub y la instala bajando solo HexAnima.exe">⬆ Buscar actualizaciones</button></div>
         <label class="lbl" for="optTheme">Tema</label>
         <select id="optTheme" class="field" style="max-width:420px">
           <option value="dark">Oscuro</option>
@@ -602,6 +605,7 @@
         <div id="infoAbout" class="lbl" style="white-space:pre-line"></div>
         <div class="lbl">HexAnima fue creada por ayanoby (los núcleos para la NPU, el servidor, la app y los modelos del teléfono). HexAnima PC es la versión para Windows de GrimmDev-Glitch, con stable-diffusion.cpp de leejet y un motor rápido basado en Stable Diffusion WebUI Forge. ¡Gracias!</div>
         <div class="btnrow">
+          <button id="infoUpdate" class="ghost sm">⬆ Buscar actualizaciones</button>
           <button id="infoExport" class="ghost sm">Exportar registros</button>
           <button id="infoGithub" class="ghost sm">GitHub</button>
           <button id="infoReleases" class="ghost sm">Versiones</button>
@@ -610,6 +614,16 @@
       </div>
     </div>
     <div class="dlg-foot"><button class="ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- ✨ Detallar -->
+<div id="detailDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+  <div class="dlg dlg-info">
+    <div class="dlg-head"><h2 id="detailTitle">✨ Prompt detallado</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div id="detailInfo" class="lbl"></div>
+    <textarea id="detailOut" class="field detail-out" rows="9" aria-label="Prompt detallado"></textarea>
+    <div class="dlg-foot"><button class="ghost" data-close>Cancelar</button><button id="detailUse" class="primary sm">Usar este prompt</button></div>
   </div>
 </div>
 
@@ -871,5 +885,7 @@
 <script src="info.js"></script>
 <script src="pose.js"></script>
 <script src="esen.js"></script>
+<script src="detail.js"></script>
+<script src="update.js"></script>
 </body>
 </html>

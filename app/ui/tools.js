@@ -145,6 +145,7 @@ $("menuBtn").onclick = (e) => {
     { label: "Leer metadatos de una imagen", run: () => Meta.open() },
     { label: "Almacenamiento", run: () => Storage.open() },
     { label: "Info", run: () => Info.open() },
+    { label: "Buscar actualizaciones", run: () => Update.check(true) },
     { label: "Ajustes", run: () => document.querySelector('.nav[data-page="settings"]').click() },
   ]);
 };

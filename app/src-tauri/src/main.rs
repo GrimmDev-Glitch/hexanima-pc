@@ -9,6 +9,7 @@ mod lora;
 mod server;
 mod storage;
 mod translate;
+mod updater;
 mod yolo;
 
 use base64::Engine as _;
@@ -611,6 +612,29 @@ fn civitai_cancel(id: String) {
 }
 
 /// Abre un enlace de Civitai en el navegador del sistema (solo civitai.com / civitai.red).
+// ---------- ⬆ Actualizar la app desde GitHub ----------
+#[tauri::command]
+async fn update_check() -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(updater::check).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn update_install(app: tauri::AppHandle, url: String, size: u64, sha256: Option<String>) -> Result<(), String> {
+    use tauri::Emitter;
+    let a2 = app.clone();
+    let exe = tauri::async_runtime::spawn_blocking(move || {
+        updater::install(&url, size, sha256.as_deref(), &mut |done, total| {
+            let _ = a2.emit("dl-progress", json!({ "id": "app-update", "done": done, "total": total, "state": "downloading" }));
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    // abrir la versión nueva y cerrar esta (al salir se para el motor)
+    std::process::Command::new(&exe).current_dir(exe.parent().unwrap_or(std::path::Path::new("."))).spawn().map_err(|e| format!("No se pudo reiniciar: {e}"))?;
+    app.exit(0);
+    Ok(())
+}
+
 // ---------- 🌐 ES→EN: traducir el prompt de español a inglés (sin internet) ----------
 #[tauri::command]
 async fn translate_text(app: tauri::AppHandle, texts: Vec<String>) -> Result<Vec<String>, String> {
@@ -710,6 +734,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState { root: find_root(), hw: Mutex::new(None), server: Mutex::new(None) })
         .setup(|app| {
+            updater::cleanup(); // el exe viejo de una actualización anterior
             // Miniaturas del Historial servidas directamente desde outputs/ (solo esa carpeta).
             let out = app.state::<AppState>().root.join("outputs");
             let _ = std::fs::create_dir_all(&out);
@@ -730,6 +755,8 @@ fn main() {
             store_get,
             store_set,
             model_sizes,
+            update_check,
+            update_install,
             translate_text,
             translate_stop,
             image_tags,

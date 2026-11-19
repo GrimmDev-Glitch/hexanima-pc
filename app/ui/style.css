@@ -768,3 +768,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .esen-btn { white-space: nowrap; }
 .esen-btn.on { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff; border-color: transparent; }
 .esen-prev { margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: var(--card); border: 1px dashed var(--line); color: var(--muted); font-size: 13px; line-height: 1.35; word-break: break-word; }
+
+/* ✨ Detallar */
+.detail-out { width: 100%; min-height: 180px; resize: vertical; line-height: 1.4; user-select: text; }
