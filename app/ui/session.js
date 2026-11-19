@@ -30,10 +30,14 @@ const Session = {
     $("pgNext").disabled = this.i >= this.list.length - 1;
     for (const id of ["resVar", "resEdit", "resFix", "upscaleBtn", "imgFav", "imgCopy", "imgFull", "imgClear"]) $(id).disabled = !c;
     if (!c) { $("resSeed").textContent = ""; $("resCompare").classList.add("hidden"); return; }
+    // una cuadrícula u hoja de contacto no es una imagen para editar, corregir ni ampliar
+    const sheet = !!c.meta?.grid;
+    for (const id of ["resVar", "resEdit", "resFix", "upscaleBtn"]) if (sheet) $(id).disabled = true;
     if (!state.busy) showImage(c.src);
     $("imgFav").textContent = c.meta?.fav ? "★" : "☆";
     $("imgFav").classList.toggle("on", !!c.meta?.fav);
-    $("resSeed").textContent = c.meta?.seed != null ? `seed ${c.meta.seed}${c.meta.width ? ` · ${c.meta.width} × ${c.meta.height}` : ""}` : "";
+    $("resSeed").textContent = sheet ? `Cuadrícula · ${c.meta.count || ""} imágenes`
+      : c.meta?.seed != null ? `seed ${c.meta.seed}${c.meta.width ? ` · ${c.meta.width} × ${c.meta.height}` : ""}` : "";
     $("resCompare").classList.toggle("hidden", !c.before);
   },
 

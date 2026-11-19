@@ -423,7 +423,7 @@ async function waitIfHot() {
   }
 }
 
-async function runOne(opt, seed) {
+async function runOne(opt, seed, ov = {}) {
   const editing = state.mode === "edit" && state.editImage && opt.family !== "mage";
   // Al editar, el tamaño es el de la foto (ya ajustado a múltiplos de 64 al elegirla).
   const [w, h] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
@@ -460,6 +460,9 @@ async function runOne(opt, seed) {
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);
   const mageRefs = typeof MageRefs !== "undefined" ? MageRefs.apply(body, opt) : 0;
   const usedRef = typeof Ref !== "undefined" && Ref.apply(body, opt);
+  // ⊞ Comparar 2×2: la imagen i cambia el CFG o los pasos (después del Modo rápido, que también los fija)
+  if (ov.cfg != null) body.sample_params.guidance.txt_cfg = ov.cfg;
+  if (ov.steps != null) body.sample_params.sample_steps = ov.steps;
   const usedSteps = body.sample_params.sample_steps, usedCfg = body.sample_params.guidance.txt_cfg;
   const sub = await api("/sdcpp/v1/img_gen", { method: "POST", body: JSON.stringify(body) });
   state.job = sub.id;
@@ -492,7 +495,7 @@ async function runOne(opt, seed) {
       const path = await invoke("save_image", { b64: img, prefix: editing ? "edit" : opt.family, meta });
       state.lastSaved = path;
       Session.add({ name: path, src: "data:image/png;base64," + img, meta, before: editing ? state.editImage.src : null });
-      return { total, path };
+      return { total, path, src: "data:image/png;base64," + img, meta };
     }
     if (j.status === "failed") throw new Error(j.error?.message || "falló la generación");
     if (j.status === "cancelled") return null;
@@ -630,18 +633,25 @@ async function generate(opts = {}) {
   store.set("params:" + opt.id, { steps: +$("steps").value, cfg: +$("cfg").value, sampler: $("sampler").value, scheduler: $("scheduler").value, neg: $("neg").value });
   store.set("prompt", $("prompt").value);
   rememberPrompt($("prompt").value.trim(), $("neg").value.trim());
-  state.batchTarget = Math.min(999, Math.max(1, opts.count || parseInt($("count").value, 10) || 1));
+  // ⊞ Comparar 2×2: siempre 4 imágenes y el lote no se puede ampliar
+  const grid = opts.grid || 0;
+  state.batchTarget = grid ? 4 : Math.min(999, Math.max(1, opts.count || parseInt($("count").value, 10) || 1));
   let seed = opts.newSeed ? -1 : parseInt($("seed").value, 10);
   if (!(seed >= 0)) seed = Math.floor(Math.random() * 2 ** 31);
-  $("extendBatch").disabled = false;
+  $("extendBatch").disabled = !!grid;
+  const made = [], labels = [];
   try {
     for (let i = 0; i < state.batchTarget && !state.stop; i++) {
       if (i > 0) await waitIfHot();
-      setStatus(state.batchTarget > 1 ? `Imagen ${i + 1} de ${state.batchTarget} · seed ${seed + i}` : `Generando · seed ${seed}`);
-      const r = await runOne(opt, seed + i);
+      const g = grid ? Grids.plan(grid, i, seed) : { seed: seed + i };
+      setStatus(state.batchTarget > 1 ? `Imagen ${i + 1} de ${state.batchTarget} · ${g.label || "seed " + g.seed}` : `Generando · seed ${seed}`);
+      const r = await runOne(opt, g.seed, g);
       if (!r) { setStatus("Detenido.", "warn"); break; }
-      setStatus(`Lista en ${fmtS(r.total)} · seed ${seed + i} · guardada en outputs`, "ok");
+      made.push(r); if (grid) labels.push(g.label);
+      setStatus(`Lista en ${fmtS(r.total)} · seed ${g.seed} · guardada en outputs`, "ok");
     }
+    // Lote de 2 o más: hojas de contacto; comparación: la cuadrícula 2×2 (no si se detuvo)
+    if (!state.stop && typeof Grids !== "undefined") await Grids.finish(grid, made, labels);
   } catch (e) {
     const s = await invoke("server_status");
     $("serverLog").textContent = s.log || "";
