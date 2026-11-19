@@ -91,7 +91,7 @@ const Collections = {
       { label: "Descargar las que faltan", run: () => this.downloadMissing(c) },
       { label: "Cambiar nombre…", run: () => this.rename(c) },
       { label: "Exportar (copiar enlaces)", run: async () => {
-          await copyText(c.items.map((i) => `https://civitai.com/models/${i.id}${i.modelVersions?.[0]?.id ? "?modelVersionId=" + i.modelVersions[0].id : ""}`).join("\n"));
+          await copyText(c.items.map((i) => `https://civitai.red/models/${i.id}${i.modelVersions?.[0]?.id ? "?modelVersionId=" + i.modelVersions[0].id : ""}`).join("\n"));
           toast("Enlaces copiados al portapapeles");
         } },
       { label: "Eliminar colección", danger: true, run: async () => { if (await this.remove(c) && LoraPage.coll === c.id) { LoraPage.coll = null; LoraPage.render(); } } },

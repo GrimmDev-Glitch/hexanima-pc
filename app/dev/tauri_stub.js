@@ -13,7 +13,7 @@
   ];
   const title = (l) => l.alias || l.name || l.stem;
   const listeners = {};
-  const civ = async (path) => (await fetch("https://civitai.com/api/v1" + path)).json();
+  const civ = async (path) => (await fetch("https://civitai.red/api/v1" + path)).json();
   const handlers = {
     app_info: () => ({
       root: "C:\\HexAnima", version: "0.1.0-preview", engines: new URLSearchParams(location.search).has("notorch") ? ["vulkan", "cuda"] : ["torch", "vulkan", "cuda"], debug: false,

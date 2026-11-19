@@ -588,7 +588,7 @@ $("sheetSave").onclick = (e) => {
 };
 $("sheetWeb").onclick = () => {
   const m = Civitai.model, v = Civitai.version();
-  if (m) invoke("open_url", { url: `https://civitai.com/models/${m.id}${v ? "?modelVersionId=" + v.id : ""}` });
+  if (m) invoke("open_url", { url: `https://civitai.red/models/${m.id}${v ? "?modelVersionId=" + v.id : ""}` });
 };
 window.__TAURI__?.event?.listen?.("dl-progress", (ev) => {
   const p = ev.payload;
@@ -602,7 +602,7 @@ window.__TAURI__?.event?.listen?.("dl-progress", (ev) => {
 // Ajustes: clave API de Civitai
 $("optCivitaiKey").value = store.get("civitaiKey", "");
 $("optCivitaiKey").onchange = () => { store.set("civitaiKey", $("optCivitaiKey").value.trim()); };
-$("openCivitaiAccount").onclick = () => invoke("open_url", { url: "https://civitai.com/user/account" });
+$("openCivitaiAccount").onclick = () => invoke("open_url", { url: "https://civitai.red/user/account" });
 
 // Páginas de la barra lateral: LoRAs (completa), Civitai e Historial se preparan al abrirlas.
 for (const n of document.querySelectorAll(".nav")) {

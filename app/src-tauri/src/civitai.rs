@@ -1,5 +1,5 @@
 //! Civitai: búsqueda, ficha de modelo y descarga con progreso (igual que HexAnima Android).
-//! La clave API solo se envía a hosts *.civitai.com; las redirecciones se siguen a mano
+//! Todo va por civitai.red; la clave API solo se envía a civitai.red; las redirecciones se siguen a mano
 //! para que el servidor de almacenamiento nunca reciba credenciales.
 
 use serde::Deserialize;
@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::lora;
 
-const API: &str = "https://civitai.com/api/v1";
+const API: &str = "https://civitai.red/api/v1";
 static CANCEL: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 pub(crate) fn client() -> Result<reqwest::blocking::Client, String> {
@@ -28,13 +28,21 @@ pub(crate) fn client() -> Result<reqwest::blocking::Client, String> {
 }
 
 fn is_civitai(url: &reqwest::Url) -> bool {
-    url.host_str().is_some_and(|h| h == "civitai.com" || h.ends_with(".civitai.com"))
+    url.host_str().is_some_and(|h| h == "civitai.red")
 }
 
-/// GET siguiendo hasta 6 redirecciones; Authorization solo para civitai.com.
+/// Los enlaces de civitai.com (p. ej. downloadUrl de la API) se piden a civitai.red.
+fn to_red(url: &mut reqwest::Url) {
+    if matches!(url.host_str(), Some("civitai.com" | "www.civitai.com")) {
+        let _ = url.set_host(Some("civitai.red"));
+    }
+}
+
+/// GET siguiendo hasta 6 redirecciones; Authorization solo para civitai.red.
 fn get(url: &str, key: Option<&str>) -> Result<reqwest::blocking::Response, String> {
     let c = client()?;
     let mut url = reqwest::Url::parse(url).map_err(|e| e.to_string())?;
+    to_red(&mut url);
     for _ in 0..6 {
         let mut req = c.get(url.clone());
         if let (Some(k), true) = (key.filter(|k| !k.is_empty()), is_civitai(&url)) {
@@ -246,7 +254,7 @@ pub const ASSETS: &[(&str, &str, &str, &str, u32)] = &[
     // Modo rápido: LoRA DMD2 de 4 pasos (tianweiy, CC BY-NC 4.0)
     ("dmd2", "@loras", "dmd2_sdxl_4step_lora_fp16.safetensors", "https://huggingface.co/tianweiy/DMD2/resolve/main/dmd2_sdxl_4step_lora_fp16.safetensors", 394),
     // Modo rápido para modelos Anima normales (como las versiones «turbo11» del teléfono): LoRA Anima Turbo v1.1
-    ("anima_turbo", "@loras", "anima-turbo-v11-rank32-bias.safetensors", "https://civitai.com/api/download/models/3309664?fileId=3196967", 142),
+    ("anima_turbo", "@loras", "anima-turbo-v11-rank32-bias.safetensors", "https://civitai.red/api/download/models/3309664?fileId=3196967", 142),
     // Personaje de referencia: leer rasgos (WD Tagger v3, Apache-2.0) e IP-Adapter para NoobAI/Illustrious
     ("tagger", "tagger", "wd-vit-tagger-v3.safetensors", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.safetensors", 378),
     ("tagger_tags", "tagger", "wd-vit-tagger-v3.csv", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/selected_tags.csv", 1),

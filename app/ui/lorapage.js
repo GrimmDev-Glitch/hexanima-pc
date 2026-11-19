@@ -257,7 +257,7 @@ const LoraPage = {
       { label: "Mover a carpeta…", run: () => this.moveTo([l.file]) },
       { label: "Mostrar en la carpeta", run: () => invoke("reveal_file", { path: "loras/" + l.file }).catch((e) => toast(String(e))) },
       { label: l.civitai_checked === "ok" || l.model_id ? "Actualizar datos de Civitai" : "Buscar datos en Civitai", run: () => this.fetchInfo([l.file]) },
-      ...(l.model_id ? [{ label: "Abrir en Civitai", run: () => invoke("open_url", { url: `https://civitai.com/models/${l.model_id}${l.version_id ? "?modelVersionId=" + l.version_id : ""}` }) }] : []),
+      ...(l.model_id ? [{ label: "Abrir en Civitai", run: () => invoke("open_url", { url: `https://civitai.red/models/${l.model_id}${l.version_id ? "?modelVersionId=" + l.version_id : ""}` }) }] : []),
       { label: "Eliminar", danger: true, run: () => Loras.remove(l).then(after) },
     ]);
   },
