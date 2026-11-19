@@ -140,7 +140,7 @@ $("menuBtn").onclick = (e) => {
     { label: "Ampliar una imagen de la galería", run: () => pickImage().then((src) => src && Upscale.open(src)) },
     { label: "Prompt desde una imagen", run: () => PicPrompt.open() },
     { label: "Descargar modelos (Anima, Mage)", run: () => Packs.open() },
-    { label: "Cargar ajustes desde un PNG", run: loadPngSettings },
+    { label: "Leer metadatos de una imagen", run: () => Meta.open() },
     { label: "Ajustes", run: () => document.querySelector('.nav[data-page="settings"]').click() },
   ]);
 };
@@ -152,13 +152,6 @@ function pickImage() {
     inp.onchange = async () => { const f = inp.files?.[0]; resolve(f ? await readFileDataUrl(f) : null); };
     inp.click();
   });
-}
-
-async function loadPngSettings() {
-  try {
-    const meta = await invoke("png_pick_settings");
-    if (meta) History.useSettings({ meta });
-  } catch (e) { toast(String(e.message || e), 4500); }
 }
 
 // ---------- Plantillas de configuración ----------

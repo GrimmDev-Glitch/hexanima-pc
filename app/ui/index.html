@@ -554,6 +554,32 @@
   </div>
 </div>
 
+<!-- ⋯ → Leer metadatos de una imagen -->
+<div id="metaDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="metaTitle">
+  <div class="dlg dlg-meta">
+    <div class="dlg-head"><h2 id="metaTitle">Metadatos de una imagen</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <input id="metaFile" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+    <div id="metaDrop" class="meta-drop">
+      <div>Arrastra aquí una imagen PNG, JPG o WebP</div>
+      <div class="lbl">Lee el prompt, el negativo, los pasos, el CFG, el sampler, la seed, el tamaño, el modelo y las LoRAs que guardó el programa que la hizo (HexAnima, A1111, Forge, ComfyUI, NovelAI, InvokeAI…).</div>
+      <button id="metaPick" class="primary sm">Elegir imagen</button>
+    </div>
+    <div id="metaRes" class="meta-res hidden">
+      <img id="metaImg" class="meta-img" alt="">
+      <div class="meta-side">
+        <div id="metaName" class="lbl meta-name"></div>
+        <div id="metaFields" class="meta-fields"></div>
+        <details class="meta-raw"><summary class="lbl">Texto original</summary><pre id="metaRaw"></pre></details>
+      </div>
+    </div>
+    <div class="dlg-foot">
+      <button id="metaOther" class="ghost">Otra imagen</button>
+      <button id="metaCopyAll" class="ghost" disabled>Copiar todo</button>
+      <button id="metaUse" class="primary sm" disabled>Usar estos ajustes</button>
+    </div>
+  </div>
+</div>
+
 <!-- Diálogo genérico (texto / elegir / confirmar) -->
 <div id="askDlg" data-sticky="1" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="askTitle">
   <div class="dlg dlg-ask">
@@ -778,5 +804,6 @@
 <script src="catalog.js"></script>
 <script src="grids.js"></script>
 <script src="gpt.js"></script>
+<script src="meta.js"></script>
 </body>
 </html>
