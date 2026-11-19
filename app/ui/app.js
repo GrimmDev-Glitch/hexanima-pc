@@ -911,6 +911,24 @@ $("refreshBtn").onclick = refreshAll;
 $("lpRefresh").onclick = refreshAll;
 
 
+/** Libera el modelo. El motor rápido suelta también ControlNet, IP-Adapter, ampliadores… y dice cuánta RAM le
+ *  queda; si sigue por encima de lo que ocupa PyTorch solo (~2-3 GB), se reinicia el proceso: así la RAM
+ *  vuelve entera a Windows. La próxima generación arranca unos segundos más tarde. */
+const ENGINE_IDLE_MB = 4500;
+async function unloadModel() {
+  const r = await api("/sdcpp/v1/models/unload", { method: "POST" });
+  state.loaded = null;
+  // PyTorch en Windows se guarda la memoria liberada para reusarla y no se la devuelve al sistema: medido con el
+  // ControlNet, el objeto se libera pero el proceso sigue en 5,4 GB. Un motor anterior a la 0.2.1 no dice
+  // cuánto ocupa (sin rss_mb): también se reinicia.
+  if (state.engine === "torch" && !(r?.rss_mb <= ENGINE_IDLE_MB)) {
+    setStatus(r?.rss_mb ? `El motor seguía ocupando ${(r.rss_mb / 1024).toFixed(1)} GB: reiniciándolo para devolver la RAM…` : "Reiniciando el motor para devolver la RAM…");
+    await startEngine("torch");
+  }
+  refreshMemory();
+  return r;
+}
+
 // ---------- Liberar el modelo tras unos minutos sin generar ----------
 // Cargado, el motor ocupa 7-8 GB de RAM aunque no se use: con la app abierta en segundo plano el
 // resto del PC se queda sin memoria. Se libera solo y se vuelve a cargar al pulsar Generar.
@@ -921,10 +939,8 @@ const Idle = {
     const mins = Number(store.get("idleUnload", 10));
     if (!mins || !state.loaded || state.busy || Date.now() - this.last < mins * 60000) return;
     try {
-      await api("/sdcpp/v1/models/unload", { method: "POST" });
-      state.loaded = null;
+      await unloadModel();
       setStatus(`Modelo liberado tras ${mins} min sin generar · se carga al generar`, "");
-      refreshMemory();
     } catch { /* motor ocupado o reiniciándose: se intenta en el siguiente minuto */ }
     this.touch();
   },

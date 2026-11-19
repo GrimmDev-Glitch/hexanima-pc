@@ -112,9 +112,10 @@ class H(BaseHTTPRequestHandler):
             if p == "/sdcpp/v1/models/unload":
                 c = need_core()
                 with RUN:
-                    c.ENGINE.unload()
+                    rss = c.free_all()
+                log(f"modelo liberado · el motor ocupa {rss} MB de RAM")
                 with LOCK: STATUS.update(state="empty", recipe=None, models={})
-                return self.send(200, dict(STATUS))
+                return self.send(200, {**dict(STATUS), "rss_mb": rss})
             if p == "/sdcpp/v1/models/refresh":
                 return self.send(200, {"ok": True})
             if p == "/sdcpp/v1/img_gen":

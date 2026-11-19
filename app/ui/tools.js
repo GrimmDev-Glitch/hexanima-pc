@@ -26,7 +26,7 @@ setInterval(syncModelUi, 1000);
 $("loadBtn").onclick = async () => {
   const o = currentOption(); if (!o || state.busy) return;
   if (state.loaded === o.id) {
-    try { await api("/sdcpp/v1/models/unload", { method: "POST" }); state.loaded = null; setStatus("Modelo liberado: la RAM y la VRAM quedan libres", "ok"); }
+    try { await unloadModel(); setStatus("Modelo liberado: la RAM y la VRAM quedan libres", "ok"); }
     catch (e) { setStatus("No se pudo liberar: " + e.message, "err"); }
     refreshMemory(); syncModelUi();
   } else { await loadModel(); syncModelUi(); }

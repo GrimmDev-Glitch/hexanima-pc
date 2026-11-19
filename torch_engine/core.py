@@ -415,3 +415,31 @@ def cnet_for(body, prog=None):
         log(f"ControlNet cargado en {time.time() - t:.1f} s")
     return {"model": _CNET["model"], "hint": decode_image(body["control_image"]),
             "strength": float(body.get("control_strength") or 1.0), "start": 0.0, "end": 1.0}
+
+
+
+# ---------- Liberar todo (botón «Liberar modelo» y liberar al estar inactivo) ----------
+def free_all():
+    """Suelta el modelo y todo lo que se carga aparte (ControlNet, IP-Adapter, CLIP de visión, ampliadores,
+    detectores, tagger, pose, vista previa) y fuerza la recolección: sin gc.collect() los objetos con
+    referencias circulares de Forge siguen ocupando RAM. Devuelve la RAM del proceso en MB."""
+    import gc
+    ENGINE.unload()
+    for cache in (_DET, _UP, _TAG, _EMB, _POSE):
+        cache.clear()
+    _IPA.update(path=None, sd=None)
+    _CNET.update(path=None, model=None)
+    _PREV.update(kind=None, model=None)
+    for _ in range(3):
+        if not gc.collect():
+            break
+    try:
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    except Exception:
+        pass
+    try:
+        import psutil
+        return int(psutil.Process().memory_info().rss / 2**20)
+    except Exception:
+        return None
