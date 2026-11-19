@@ -142,6 +142,23 @@ En el teléfono es una sola columna con secciones plegables. En PC se reparte en
 
 ---
 
+## Próximo (acordado el 19 nov 2026, después de la 0.1.9)
+
+**1. 🧍 Pose (ControlNet OpenPose), primero para SDXL / Illustrious / Pony**
+- Caja «🧍 Pose» en «Editar una foto», junto a «Personaje de referencia» (se pueden combinar: la referencia copia
+  el aspecto, la pose copia la postura). Fuerza 0,5–2,5 como en el teléfono.
+- Elegir una foto → el motor rápido saca el esqueleto (OpenPose/DWPose en PyTorch, sin instalar nada aparte) y se
+  ve antes de generar; o cargar directamente un esqueleto hecho en OpenPose Editor, PoseMy.Art o Magic Poser.
+- Descarga del ControlNet desde la app (~2,5 GB: xinsir OpenPose SDXL o uno de NoobAI/Illustrious, a elegir).
+- Anima: investigar si existe un control de pose en un formato que lea el motor de PC (el del teléfono,
+  `pose/anima_pose_preview2_control_w.bin`, es para la NPU). Qwen y Mage ya copian poses con 🧍 Copiar pose.
+
+**2. 👗 Copiar ropa con detección automática de la ropa**
+- Seguir usando Qwen-Image 2.1 (imagen 1 = personaje, imagen 2 = ropa) con la plantilla 👗 Copiar ropa.
+- Nuevo: un detector de ropa (como `segment/clothes_512` del teléfono) que rellena «Área a cambiar» solo con la
+  ropa, para que la cara, el pelo y el fondo queden con los mismos píxeles.
+- Que funcione también con Mage y con SDXL / Illustrious (inpainting de la zona + IP-Adapter con la imagen 2).
+
 ## Orden de trabajo
 
 **Fase 1 · Pantalla principal y flujo diario** (todo con lo que ya hay)

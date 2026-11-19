@@ -1,6 +1,6 @@
 [package]
 name = "hexanima"
-version = "0.1.8"
+version = "0.1.9"
 description = "HexAnima PC"
 edition = "2021"
 
