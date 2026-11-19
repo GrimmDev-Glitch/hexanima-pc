@@ -7,6 +7,7 @@ mod gallery;
 mod hw;
 mod lora;
 mod server;
+mod storage;
 mod yolo;
 
 use base64::Engine as _;
@@ -609,9 +610,38 @@ fn civitai_cancel(id: String) {
 }
 
 /// Abre un enlace de Civitai en el navegador del sistema (solo civitai.com / civitai.red).
+// ---------- ⋯ → Almacenamiento y Exportar registros ----------
+#[tauri::command]
+async fn storage_info(app: tauri::AppHandle) -> serde_json::Value {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || storage::info(&root)).await.unwrap_or_else(|e| json!({ "error": e.to_string() }))
+}
+
+#[tauri::command]
+async fn storage_clear(app: tauri::AppHandle, id: String) -> Result<u64, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || storage::clear(&root, &id)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn logs_export(app: tauri::AppHandle, info: serde_json::Value) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let name = format!("hexanima-registros-{}.zip", chrono::Local::now().format("%Y%m%d-%H%M"));
+    let Some(f) = app.dialog().file().set_title("Exportar registros").set_file_name(&name).add_filter("ZIP", &["zip"]).blocking_save_file() else {
+        return Ok(None);
+    };
+    let dest = f.into_path().map_err(|e| e.to_string())?;
+    let root = app.state::<AppState>().root.clone();
+    let hw = app.state::<AppState>().hw.lock().unwrap().clone();
+    let info = json!({ "app": env!("CARGO_PKG_VERSION"), "hardware": hw, "ui": info });
+    tauri::async_runtime::spawn_blocking(move || storage::export_logs(&root, &dest, info).map(|_| Some(dest.display().to_string())))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    let allowed_host = ["https://civitai.com/", "https://civitai.red/"].iter().any(|p| url.starts_with(p));
+    let allowed_host = ["https://civitai.com/", "https://civitai.red/", "https://github.com/", "https://huggingface.co/"].iter().any(|p| url.starts_with(p));
     let safe_chars = url.chars().all(|c| c.is_ascii_alphanumeric() || "/:._-?=&%".contains(c));
     if !allowed_host || !safe_chars || url.len() > 300 {
         return Err("Enlace no permitido".into());
@@ -681,6 +711,9 @@ fn main() {
             store_get,
             store_set,
             model_sizes,
+            storage_info,
+            storage_clear,
+            logs_export,
             model_pick,
             model_import,
             upscaler_status,

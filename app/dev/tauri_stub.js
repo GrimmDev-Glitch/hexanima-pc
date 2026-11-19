@@ -26,6 +26,13 @@
     start_server: ({ engine }) => ({ port: SD_PORT, engine: engine || "vulkan", device: "vulkan1" }),
     server_status: () => ({ running: true, port: SD_PORT, log: "[I] vista previa: motor externo en " + SD_PORT }),
     save_image: () => "outputs\\preview.png",
+    storage_info: () => ({ free: 379e9, groups: [
+      { title: "MODELOS", items: [{ id: "models/checkpoints", title: "Checkpoints", sub: "Modelos SDXL / Illustrious / Pony completos", bytes: 13.9e9, action: "open" }, { id: "loras", title: "LoRAs", sub: "Se gestionan en LoRAs", bytes: 2.1e9, action: "open" }] },
+      { title: "MOTORES", items: [{ id: "engine/torch", title: "Motor rápido (PyTorch)", sub: "Se puede volver a descargar en Ajustes", bytes: 4.7e9, action: "" }, { id: "engine-leftovers", title: "Restos del motor rápido", sub: "Descarga a medias o copia del motor anterior", bytes: 1.2e9, action: "clear" }] },
+      { title: "CACHÉS", items: [{ id: "cache", title: "Caché", sub: "Archivos temporales", bytes: 0, action: "clear" }, { id: "logs", title: "Registros", sub: "Lo que escribe el motor", bytes: 3.4e6, action: "clear" }] },
+      { title: "IMÁGENES", items: [{ id: "outputs", title: "Imágenes", sub: "Tus imágenes", bytes: 2.6e9, action: "open" }] } ] }),
+    storage_clear: () => 1.2e9,
+    logs_export: () => "C:/Users/demo/hexanima-registros.zip",
     output_files: () => fakeOutputs,
     read_output: async ({ name }) => { const b = await (await fetch("/__outputs/" + name)).arrayBuffer(); let s = ""; const u = new Uint8Array(b); for (let i = 0; i < u.length; i += 8192) s += String.fromCharCode(...u.subarray(i, i + 8192)); return btoa(s); },
     open_folder: () => null,

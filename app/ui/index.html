@@ -472,7 +472,7 @@
           <button class="ghost sm" data-open="outputs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Imágenes</button>
           <button class="ghost sm" data-open="logs"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> Registros</button>
         </div>
-        <div class="lbl" style="margin-top:10px">Registro del motor</div>
+        <div class="btnrow" style="margin-top:10px"><span class="lbl" style="flex:1">Registro del motor</span><button id="setExport" class="ghost sm" title="Guarda un ZIP con los registros y los datos del equipo para avisar de un error (sin tu clave de Civitai)">Exportar registros</button></div>
         <div id="serverLog" class="log"></div>
       </div>
     </section>
@@ -550,6 +550,38 @@
     <div class="lbl">Guardan modelo, prompt, negativo, muestreo, tamaño, seed, cantidad y LoRAs. Clic para cargar · clic derecho: más opciones.</div>
     <button id="cfgSave" class="ghost">＋ Guardar la configuración actual</button>
     <div id="cfgList" class="ask-list"></div>
+    <div class="dlg-foot"><button class="ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- ⋯ → Almacenamiento -->
+<div id="storageDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="storageTitle">
+  <div class="dlg dlg-info">
+    <div class="dlg-head"><h2 id="storageTitle">Almacenamiento</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="btnrow"><b id="storageFree" style="flex:1"></b><button id="storageRefresh" class="ghost sm">↻ Actualizar</button></div>
+    <div id="storageList" class="st-list"></div>
+    <div class="dlg-foot"><button class="ghost" data-close>Cerrar</button></div>
+  </div>
+</div>
+
+<!-- ⋯ → Info -->
+<div id="infoDlg" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+  <div class="dlg dlg-info">
+    <div class="dlg-head"><h2 id="infoTitle">Info</h2><button class="x dlg-close" data-close aria-label="Cerrar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="st-list">
+      <div id="infoList" class="info-list"></div>
+      <div class="st-card info-card">
+        <b>Acerca de</b>
+        <div id="infoAbout" class="lbl" style="white-space:pre-line"></div>
+        <div class="lbl">HexAnima fue creada por ayanoby (los núcleos para la NPU, el servidor, la app y los modelos del teléfono). HexAnima PC es la versión para Windows de GrimmDev-Glitch, con stable-diffusion.cpp de leejet y un motor rápido basado en Stable Diffusion WebUI Forge. ¡Gracias!</div>
+        <div class="btnrow">
+          <button id="infoExport" class="ghost sm">Exportar registros</button>
+          <button id="infoGithub" class="ghost sm">GitHub</button>
+          <button id="infoReleases" class="ghost sm">Versiones</button>
+          <button id="infoLicenses" class="ghost sm">Licencias</button>
+        </div>
+      </div>
+    </div>
     <div class="dlg-foot"><button class="ghost" data-close>Cerrar</button></div>
   </div>
 </div>
@@ -805,5 +837,6 @@
 <script src="grids.js"></script>
 <script src="gpt.js"></script>
 <script src="meta.js"></script>
+<script src="info.js"></script>
 </body>
 </html>

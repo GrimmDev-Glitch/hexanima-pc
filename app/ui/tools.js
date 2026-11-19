@@ -141,6 +141,8 @@ $("menuBtn").onclick = (e) => {
     { label: "Prompt desde una imagen", run: () => PicPrompt.open() },
     { label: "Descargar modelos (Anima, Mage)", run: () => Packs.open() },
     { label: "Leer metadatos de una imagen", run: () => Meta.open() },
+    { label: "Almacenamiento", run: () => Storage.open() },
+    { label: "Info", run: () => Info.open() },
     { label: "Ajustes", run: () => document.querySelector('.nav[data-page="settings"]').click() },
   ]);
 };

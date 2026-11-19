@@ -809,6 +809,7 @@ $("restartBtn").onclick = async () => {
     state.hw = info.hardware;
     state.engines = info.engines || [];
     state.torchCuda = info.torch_cuda;
+    state.version = info.version;
     // La consola solo existe en compilaciones de desarrollo; en el .exe final no hay opción.
     if (info.debug) {
       $("optConsoleRow").classList.remove("hidden");
