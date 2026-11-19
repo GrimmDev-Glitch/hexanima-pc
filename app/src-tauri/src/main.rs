@@ -213,27 +213,61 @@ fn model_sizes(state: State<AppState>) -> serde_json::Value {
     serde_json::Value::Object(out)
 }
 
-/// ＋ Importar modelo: copia un .safetensors/.gguf a models/checkpoints (SDXL y similares)
-/// o models/diffusion_models (Anima: solo el modelo de difusión), según sus tensores.
+/// ＋ Importar modelo, paso 1: elegir el archivo y detectar su familia por los tensores.
 #[tauri::command]
-async fn model_import(app: tauri::AppHandle) -> Result<Option<String>, String> {
+async fn model_pick(app: tauri::AppHandle) -> Result<Option<serde_json::Value>, String> {
     use tauri_plugin_dialog::DialogExt;
     let Some(f) = app.dialog().file().set_title("Importar un modelo").add_filter("Modelo", &["safetensors", "gguf"]).blocking_pick_file() else {
         return Ok(None);
     };
     let src = f.into_path().map_err(|e| e.to_string())?;
-    let root = app.state::<AppState>().root.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let kind = lora::model_kind(&src);
-        let dir = root.join("models").join(if kind == "anima" { "diffusion_models" } else { "checkpoints" });
+        Ok(Some(json!({
+            "path": src.display().to_string(),
+            "name": src.file_name().map(|n| n.to_string_lossy().to_string()),
+            "bytes": std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0),
+            "kind": kind,
+        })))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// ＋ Importar modelo, paso 2: copia a models/checkpoints (SDXL) o models/diffusion_models (el resto).
+/// El nombre lleva la familia (anima, mage, qwen-image, moss) porque la app agrupa los modelos por él.
+#[tauri::command]
+async fn model_import(app: tauri::AppHandle, path: String, kind: String) -> Result<String, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let src = std::path::PathBuf::from(&path);
+        let ext = src.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if !src.is_file() || !(ext == "safetensors" || ext == "gguf") {
+            return Err("El archivo no es un .safetensors ni un .gguf".into());
+        }
+        let (folder, tag) = match kind.as_str() {
+            "sdxl" => ("checkpoints", ""),
+            "anima" => ("diffusion_models", "anima"),
+            "mage" => ("diffusion_models", "mage"),
+            "qwen-image" => ("diffusion_models", "qwen-image"),
+            "moss" => ("diffusion_models", "moss"),
+            _ => return Err("Familia desconocida".into()),
+        };
+        let dir = root.join("models").join(folder);
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let name = src.file_name().ok_or("archivo")?;
-        let dst = dir.join(name);
+        let mut name = src.file_name().ok_or("archivo")?.to_string_lossy().to_string();
+        let low = name.to_lowercase().replace('_', "-");
+        if !tag.is_empty() && !low.contains(tag) {
+            name = format!("{tag}-{name}");
+        }
+        let dst = dir.join(&name);
         if dst.exists() {
             return Err("Ya hay un modelo con ese nombre".into());
         }
-        std::fs::copy(&src, &dst).map_err(|e| e.to_string())?;
-        Ok(Some(format!("{}/{}", dir.file_name().unwrap().to_string_lossy(), name.to_string_lossy())))
+        let part = dir.join(format!("{name}.part"));
+        std::fs::copy(&src, &part).map_err(|e| { let _ = std::fs::remove_file(&part); e.to_string() })?;
+        std::fs::rename(&part, &dst).map_err(|e| e.to_string())?;
+        Ok(format!("{folder}/{name}"))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -647,6 +681,7 @@ fn main() {
             store_get,
             store_set,
             model_sizes,
+            model_pick,
             model_import,
             upscaler_status,
             vae_import,

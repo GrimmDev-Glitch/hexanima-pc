@@ -99,14 +99,34 @@ $("mdCivitai").onclick = () => {
   Civitai.type = "Checkpoint";
   document.querySelector('.nav[data-page="civitai"]').click();
 };
+// ＋ Importar: detecta la familia por los tensores del archivo y deja confirmarla o cambiarla.
+const IMPORT_KINDS = [
+  { value: "sdxl", label: "SDXL · Illustrious · Pony (checkpoint completo)" },
+  { value: "anima", label: "Anima" },
+  { value: "qwen-image", label: "Qwen-Image 2.1" },
+  { value: "moss", label: "MOSS-Image" },
+  { value: "mage", label: "Mage-Flow" },
+];
 $("mdImport").onclick = async () => {
   try {
-    const f = await invoke("model_import");
+    const f = await invoke("model_pick");
     if (!f) return;
+    if (f.kind === "lora") return toast("Ese archivo es una LoRA: impórtalo desde LoRAs → Importar.", 6000);
+    const found = IMPORT_KINDS.find((k) => k.value === f.kind);
+    const gb = (f.bytes / 1e9).toLocaleString("es", { maximumFractionDigits: 1 });
+    const kind = await ask({
+      title: "Importar " + f.name,
+      msg: (found ? `Parece un modelo ${found.label} (${gb} GB). Confírmalo o elige otra familia:` : `No se reconoce la familia de este modelo (${gb} GB). Elige cuál es:`),
+      list: IMPORT_KINDS.map((k) => ({ ...k, label: k.label + (k.value === f.kind ? "  ✓ detectado" : ""), on: k.value === f.kind })),
+    });
+    if (!kind) return;
+    setStatus(`Copiando ${f.name}…`);
+    const dst = await invoke("model_import", { path: f.path, kind });
     await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
     await scanModels();
     ModelPicker.render();
-    toast("Modelo importado: " + f);
+    const shown = state.options.some((o) => o.models && Object.values(o.models).some((id) => String(id).includes(dst.split("/").pop())));
+    setStatus(shown ? "Modelo importado: " + dst : `Importado en ${dst}, pero faltan archivos de la familia (codificador de texto o VAE) para usarlo: descárgalos desde ⋯ → Descargar modelos.`, shown ? "ok" : "warn");
   } catch (e) { toast("No se pudo importar: " + (e.message || e), 5000); }
 };
 

@@ -100,11 +100,86 @@ fn detect_base(h: &Map<String, Value>) -> Option<&'static str> {
     None
 }
 
-/// Tipo de modelo completo por sus tensores: "anima" (solo DiT) o "checkpoint" (SDXL…).
+/// Nombres de los tensores de un .safetensors o un .gguf (sin el prefijo model.diffusion_model.).
+pub fn tensor_names(p: &Path) -> Vec<String> {
+    let strip = |k: &str| k.strip_prefix("model.diffusion_model.").unwrap_or(k).to_string();
+    if let Some(n) = gguf_names(p) {
+        return n.iter().map(|k| strip(k)).collect();
+    }
+    header(p).map(|h| h.keys().filter(|k| *k != "__metadata__").map(|k| strip(k)).collect()).unwrap_or_default()
+}
+
+/// Lee la cabecera de un GGUF (v2/v3): salta los metadatos y devuelve los nombres de los tensores.
+fn gguf_names(p: &Path) -> Option<Vec<String>> {
+    use std::io::BufReader;
+    let mut f = BufReader::with_capacity(1 << 20, File::open(p).ok()?);
+    let mut b4 = [0u8; 4];
+    f.read_exact(&mut b4).ok()?;
+    if &b4 != b"GGUF" {
+        return None;
+    }
+    fn u32_(f: &mut impl Read) -> Option<u32> { let mut b = [0u8; 4]; f.read_exact(&mut b).ok()?; Some(u32::from_le_bytes(b)) }
+    fn u64_(f: &mut impl Read) -> Option<u64> { let mut b = [0u8; 8]; f.read_exact(&mut b).ok()?; Some(u64::from_le_bytes(b)) }
+    fn skip(f: &mut impl Read, n: u64) -> Option<()> { std::io::copy(&mut f.take(n), &mut std::io::sink()).ok().filter(|c| *c == n).map(|_| ()) }
+    fn string(f: &mut impl Read) -> Option<String> {
+        let n = u64_(f)?;
+        if n > 1 << 20 { return None; }
+        let mut v = vec![0u8; n as usize];
+        f.read_exact(&mut v).ok()?;
+        Some(String::from_utf8_lossy(&v).into_owned())
+    }
+    fn skip_val(f: &mut impl Read, t: u32) -> Option<()> {
+        match t {
+            0 | 1 | 7 => skip(f, 1),
+            2 | 3 => skip(f, 2),
+            4 | 5 | 6 => skip(f, 4),
+            10 | 11 | 12 => skip(f, 8),
+            8 => { let n = u64_(f)?; skip(f, n) }
+            9 => { let at = u32_(f)?; let n = u64_(f)?; for _ in 0..n { skip_val(f, at)?; } Some(()) }
+            _ => None,
+        }
+    }
+    let _version = u32_(&mut f)?;
+    let nt = u64_(&mut f)?;
+    let nkv = u64_(&mut f)?;
+    if nt > 100_000 || nkv > 100_000 {
+        return None;
+    }
+    for _ in 0..nkv {
+        string(&mut f)?;
+        let t = u32_(&mut f)?;
+        skip_val(&mut f, t)?;
+    }
+    let mut names = Vec::with_capacity(nt as usize);
+    for _ in 0..nt {
+        names.push(string(&mut f)?);
+        let nd = u32_(&mut f)?;
+        skip(&mut f, 8 * nd as u64 + 4 + 8)?;
+    }
+    Some(names)
+}
+
+/// Familia de un modelo por sus tensores (medido con los archivos reales de cada una):
+/// "lora", "sdxl" (checkpoint completo), "anima", "mage", "qwen-image" (2.1), "moss" o "unknown".
 pub fn model_kind(p: &Path) -> &'static str {
-    match header(p) {
-        Some(h) if h.keys().any(|k| k.starts_with("net.blocks") || k.contains("llm_adapter") || k.contains("t_embedder")) => "anima",
-        _ => "checkpoint",
+    let names = tensor_names(p);
+    let any = |pat: &str| names.iter().any(|k| k.contains(pat));
+    if names.is_empty() {
+        "unknown"
+    } else if any("lora_up") || any("lora_down") || any("lora_A") || any("lora_B") || any(".hada_") || any(".lokr_") {
+        "lora"
+    } else if any("video_embedder") || any("shared_block_modulation") {
+        "moss" // antes que Anima: MOSS también tiene t_embedder
+    } else if any("llm_adapter") || any("net.blocks") || any("t_embedder") {
+        "anima"
+    } else if any("txt_in.in_layer") || any("img_mlp.gate_up") {
+        "qwen-image"
+    } else if any("txt_norm") && any("attn.add_k_proj") {
+        "mage"
+    } else if any("conditioner.embedders") || any("label_emb") || any("input_blocks") {
+        "sdxl"
+    } else {
+        "unknown"
     }
 }
 
@@ -452,4 +527,19 @@ pub fn downloaded_index(root: &Path) -> Value {
         }
     }
     json!({ "ids": ids.keys().collect::<Vec<_>>(), "names": names })
+}
+
+#[cfg(test)]
+mod kind_tests {
+    /// HEXANIMA_HEADS=<carpeta con cabeceras de prueba> cargo test model_kind_real -- --ignored
+    #[test]
+    #[ignore]
+    fn model_kind_real() {
+        let d = std::path::PathBuf::from(std::env::var("HEXANIMA_HEADS").unwrap());
+        for (f, want) in [("anima.safetensors", "anima"), ("mage.gguf", "mage"), ("qwen.gguf", "qwen-image"), ("moss.gguf", "moss"), ("lora.safetensors", "lora"), ("sdxl.safetensors", "sdxl")] {
+            let got = super::model_kind(&d.join(f));
+            println!("{f}: {got}");
+            assert_eq!(got, want, "{f}");
+        }
+    }
 }
