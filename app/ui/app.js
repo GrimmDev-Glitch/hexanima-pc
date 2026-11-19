@@ -194,13 +194,20 @@ async function refreshMemory() {
  *  es algo más rápido por paso (~14 s frente a ~24 s en SDXL 832×1216) pero hace fallar la gráfica cada
  *  2-3 imágenes (ErrorDeviceLost) y a ratos baja a 29 s/paso; CUDA hizo 3 de 3 sin fallos.
  *  En Ajustes se puede forzar CUDA o Vulkan. */
-/** El motor PyTorch trae PyTorch 2.3.1 + CUDA 12.1: kernels hasta sm_90. Las RTX serie 50 (Blackwell,
- *  capacidad 10.x/12.x) dan «no kernel image is available»; ahí se usa CUDA de sd.cpp (runtime 12.8). */
-function torchSupportsGpu() {
+/** Motor PyTorch: el de siempre trae PyTorch 2.3.1 + CUDA 12.1 (kernels hasta sm_90) y las RTX serie 50
+ *  (Blackwell, capacidad 10.x/12.x) dan «no kernel image is available»; para ellas está el motor
+ *  PyTorch 2.7.1 + CUDA 12.8 (motor-cu128.json). Sin él, esas gráficas usan CUDA de sd.cpp (runtime 12.8). */
+function needsCu128() {
   const g = state.hw?.gpu;
   if (g?.vendor !== "nvidia") return false;
-  if (g.compute_cap != null) return g.compute_cap < 10;
-  return !/RTX\s*(PRO\s*)?50\d\d|blackwell/i.test(g.name || "");
+  if (g.compute_cap != null) return g.compute_cap >= 10;
+  return /RTX\s*(PRO\s*)?50\d\d|blackwell/i.test(g.name || "");
+}
+
+/** ¿El motor PyTorch instalado sirve para esta gráfica? */
+function torchSupportsGpu() {
+  if (state.hw?.gpu?.vendor !== "nvidia") return false;
+  return !needsCu128() || Number(state.torchCuda || 0) >= 128;
 }
 
 function engineFor(opt) {
@@ -790,6 +797,7 @@ $("restartBtn").onclick = async () => {
     const info = await invoke("app_info");
     state.hw = info.hardware;
     state.engines = info.engines || [];
+    state.torchCuda = info.torch_cuda;
     // La consola solo existe en compilaciones de desarrollo; en el .exe final no hay opción.
     if (info.debug) {
       $("optConsoleRow").classList.remove("hidden");

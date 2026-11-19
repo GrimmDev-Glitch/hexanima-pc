@@ -54,6 +54,7 @@ fn app_info(state: State<AppState>) -> serde_json::Value {
         "hardware": hw.clone(),
         "version": env!("CARGO_PKG_VERSION"),
         "engines": engines,
+        "torch_cuda": engine_dl::installed_cuda(&state.root),
         "debug": cfg!(debug_assertions),
     })
 }
@@ -280,12 +281,13 @@ async fn asset_download(app: tauri::AppHandle, kind: String) -> Result<String, S
 
 // ---------- Motor PyTorch: descarga desde Hugging Face (bienvenida / Ajustes) ----------
 #[tauri::command]
-async fn engine_dl_info(app: tauri::AppHandle) -> serde_json::Value {
+async fn engine_dl_info(app: tauri::AppHandle, cu128: Option<bool>) -> serde_json::Value {
     let root = app.state::<AppState>().root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let remote = engine_dl::remote();
+        let remote = engine_dl::remote(cu128.unwrap_or(false));
         json!({
             "installed": engine_dl::installed(&root),
+            "installed_cuda": engine_dl::installed_cuda(&root),
             "remote": remote.as_ref().ok(),
             "error": remote.as_ref().err(),
             "free_bytes": engine_dl::free_bytes(&root),
@@ -297,11 +299,11 @@ async fn engine_dl_info(app: tauri::AppHandle) -> serde_json::Value {
 }
 
 #[tauri::command]
-async fn engine_download(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+async fn engine_download(app: tauri::AppHandle, cu128: Option<bool>) -> Result<serde_json::Value, String> {
     use tauri::Emitter;
     let root = app.state::<AppState>().root.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let m = engine_dl::remote()?;
+        let m = engine_dl::remote(cu128.unwrap_or(false))?;
         let a2 = app.clone();
         engine_dl::install(&root, &m, &mut |stage, done, total| {
             let _ = app.emit("dl-progress", json!({ "id": "engine-torch", "stage": stage, "done": done, "total": total }));

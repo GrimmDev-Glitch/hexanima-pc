@@ -10,7 +10,7 @@ const EngineDl = {
   gb(b) { return (b / 1e9).toLocaleString("es", { maximumFractionDigits: 1 }); },
 
   async refresh() {
-    try { this.info = await invoke("engine_dl_info"); } catch (e) { this.info = { error: String(e) }; }
+    try { this.info = await invoke("engine_dl_info", { cu128: needsCu128() }); } catch (e) { this.info = { error: String(e) }; }
     this.renderSettings();
     return this.info;
   },
@@ -19,7 +19,8 @@ const EngineDl = {
   async maybeWelcome() {
     if (!state.hw || this.checked) return;  // lo llama el arranque de app.js o este archivo, lo que llegue después
     this.checked = true;
-    if (!this.nvidia() || !torchSupportsGpu() || (state.engines || []).includes("torch")) { this.renderSettings(); return; }
+    // sin motor, o con el de CUDA 12.1 en una RTX serie 50: ofrecer el que le sirve
+    if (!this.nvidia() || ((state.engines || []).includes("torch") && torchSupportsGpu())) { this.renderSettings(); return; }
     await this.refresh();
     if (store.get("engineWelcomeLater", false) && !this.info.partial_bytes) return;
     this.open();
@@ -84,10 +85,11 @@ const EngineDl = {
     this.showProgress(true); this.renderSettings();
     const off = await window.__TAURI__.event.listen("dl-progress", (ev) => { if (ev.payload.id === "engine-torch") this.onProgress(ev.payload); });
     try {
-      await invoke("engine_download");
+      await invoke("engine_download", { cu128: needsCu128() });
       $("engTxt").textContent = "✓ Motor rápido instalado. Arrancándolo…";
       const info = await invoke("app_info");
       state.engines = info.engines || [];
+      state.torchCuda = info.torch_cuda;
       state.loaded = null;
       toast("✓ Motor rápido instalado", 4000);
       this.close();
@@ -114,13 +116,13 @@ const EngineDl = {
     const i = this.info, b = $("engSetBtn"), t = $("engSet");
     $("engSetRow").classList.toggle("hidden", !this.nvidia());
     if (this.busy) { b.textContent = "Ver progreso"; b.disabled = false; return; }
-    if (!torchSupportsGpu()) {
-      t.textContent = "Aún no funciona en tu gráfica (RTX serie 50): se usa CUDA";
-      b.classList.add("hidden");
-      return;
-    }
     const inst = (state.engines || []).includes("torch");
-    if (inst) {
+    if (inst && !torchSupportsGpu()) {
+      // motor de CUDA 12.1 en una RTX serie 50: no le sirve, hay que bajar el de CUDA 12.8
+      t.textContent = "El instalado no funciona en tu gráfica (RTX serie 50): descarga el motor para ella" + (i?.remote ? ` · ${this.gb(i.remote.bytes)} GB` : "");
+      b.textContent = i?.partial_bytes ? "Continuar la descarga" : "Descargar";
+      b.classList.remove("hidden");
+    } else if (inst) {
       const up = i?.remote && i.installed != null && i.remote.version > i.installed;
       t.textContent = up ? `Instalado · hay una versión nueva (${i.remote.version})` : "✓ Instalado";
       b.textContent = "Actualizar"; b.classList.toggle("hidden", !up);

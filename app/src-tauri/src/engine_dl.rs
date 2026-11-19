@@ -26,6 +26,12 @@ pub struct Manifest {
     pub files: u64,
 }
 
+/// Dos motores: motor.json (PyTorch 2.3.1 + CUDA 12.1, el de siempre) y motor-cu128.json
+/// (PyTorch 2.7.1 + CUDA 12.8, para las RTX serie 50; necesita driver 570 o posterior).
+fn manifest_name(cu128: bool) -> &'static str {
+    if cu128 { "motor-cu128.json" } else { "motor.json" }
+}
+
 fn base() -> String {
     std::env::var("HEXANIMA_ENGINE_URL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| ENGINE_BASE.to_string())
 }
@@ -53,8 +59,8 @@ fn get(url: &str, from: u64) -> Result<reqwest::blocking::Response, String> {
     Err("Demasiadas redirecciones".into())
 }
 
-pub fn remote() -> Result<Manifest, String> {
-    let text = get(&format!("{}/motor.json", base()), 0)?.text().map_err(|e| e.to_string())?;
+pub fn remote(cu128: bool) -> Result<Manifest, String> {
+    let text = get(&format!("{}/{}", base(), manifest_name(cu128)), 0)?.text().map_err(|e| e.to_string())?;
     let m: Manifest = serde_json::from_str(&text).map_err(|e| format!("motor.json no válido: {e}"))?;
     if m.file.contains(['/', '\\']) || m.file.contains("..") {
         return Err("motor.json no válido".into());
@@ -69,6 +75,16 @@ pub fn installed(root: &Path) -> Option<u32> {
     }
     let p = root.join("engine").join("torch").join("motor.json");
     Some(fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Manifest>(&s).ok()).map_or(0, |m| m.version))
+}
+
+/// CUDA del PyTorch instalado en engine/torch («121», «128»…), leído del nombre de torch-*.dist-info.
+pub fn installed_cuda(root: &Path) -> Option<String> {
+    let sp = root.join("engine").join("torch").join("python").join("Lib").join("site-packages");
+    fs::read_dir(sp).ok()?.flatten().find_map(|e| {
+        let n = e.file_name().to_string_lossy().to_string();
+        let rest = n.strip_prefix("torch-")?.strip_suffix(".dist-info")?;
+        Some(rest.split("+cu").nth(1)?.to_string())
+    })
 }
 
 #[cfg(windows)]
@@ -304,7 +320,7 @@ mod tests {
     #[ignore]
     fn install_from_local_server() {
         let root = PathBuf::from(std::env::var("HEXANIMA_TEST_ROOT").expect("HEXANIMA_TEST_ROOT"));
-        let m = remote().expect("motor.json");
+        let m = remote(false).expect("motor.json");
         let mut last = String::new();
         let t = Instant::now();
         install(&root, &m, &mut |s, d, tot| {
