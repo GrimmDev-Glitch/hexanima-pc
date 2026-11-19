@@ -116,3 +116,22 @@ mod net_tests {
         println!("actual {} · última {} · más nueva {} · exe {}", v["current"], v["latest"], v["newer"], v["exe"]);
     }
 }
+
+#[cfg(test)]
+mod install_tests {
+    /// Prueba la instalación con la versión publicada: reemplaza el ejecutable de ESTA prueba (en target/), no la app.
+    #[test]
+    #[ignore]
+    fn install_real() {
+        let v = super::check().unwrap();
+        let exe = &v["exe"];
+        println!("última {} · exe {} bytes · sha256 {}", v["latest"], exe["size"], exe["sha256"]);
+        let me = std::env::current_exe().unwrap();
+        let path = super::install(exe["url"].as_str().unwrap(), exe["size"].as_u64().unwrap(), exe["sha256"].as_str(), &mut |_, _| {}).unwrap();
+        assert_eq!(path, me);
+        let got = super::sha256_file(&path).unwrap();
+        println!("instalado en {} · sha256 {got}", path.display());
+        assert!(super::old_path(&me).is_file(), "el exe anterior queda como HexAnima.old.exe");
+        if let Some(want) = exe["sha256"].as_str() { assert_eq!(got, want); }
+    }
+}
