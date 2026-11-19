@@ -165,7 +165,7 @@ def run_img_gen(job, body):
         return ENGINE.generate2(body.get("prompt", ""), body.get("negative_prompt", ""), pw, ph, steps_, cfg, seed,
                                 sampler=sampler, scheduler=scheduler, clip_skip=clip_skip, loras=loras,
                                 init_latent=init_latent, strength=strength, mask=mask_lat(mask, pw, ph) if mask is not None else None,
-                                step_cb=cb, stage_cb=lambda s: prog(s), ipa=ipa)
+                                step_cb=cb, stage_cb=lambda s: prog(s), ipa=ipa, cnet=cnet)
 
     def mask_lat(m, pw, ph):
         a = np.asarray(m.resize((pw // 8, ph // 8), Image.BILINEAR)).astype(np.float32) / 255.0
@@ -173,6 +173,8 @@ def run_img_gen(job, body):
 
     # personaje de referencia: se prepara aquí (la primera vez con cada imagen tarda unos segundos)
     ipa = ipa_for(body, prog)
+    # 🧍 Pose: ControlNet OpenPose con el esqueleto (también en el segundo paso del Hires fix)
+    cnet = cnet_for(body, prog)
     prog("conditioning")
     init_latent = None
     strength = 1.0
@@ -324,6 +326,8 @@ REF_FILES = {
     "tagger_tags": ("tagger", "wd-vit-tagger-v3.csv"),
     "ipadapter": ("ipadapter", "noobIPAMARK1_mark1.safetensors"),
     "clip_vision": ("clip_vision", "clip_vision_g.safetensors"),
+    "pose": ("pose", "body_pose_model.pth"),
+    "openpose": ("controlnet", "controlnet-openpose-sdxl-xinsir.safetensors"),
 }
 
 
@@ -380,3 +384,34 @@ def ipa_for(body, prog=None):
         _IPA.update(path=ref_path("ipadapter"), sd=ht.load_ipadapter(ref_path("ipadapter")))
     return {"adapter": _IPA["sd"], "embeds": emb, "weight": float(spec.get("weight", 0.7)),
             "start": float(spec.get("start", 0.0)), "end": float(spec.get("end", 1.0))}
+
+
+
+# ---------- 🧍 Pose: detector OpenPose y ControlNet ----------
+_POSE = {}
+_CNET = {"path": None, "model": None}
+
+
+def pose_detect(img):
+    """Esqueleto de colores (PIL) y número de personas."""
+    if not os.path.isfile(ref_path("pose")):
+        raise ValueError("Falta el detector de pose: se descarga desde la caja «🧍 Pose»")
+    if "m" not in _POSE:
+        from pose import OpenPose
+        _POSE["m"] = OpenPose(ref_path("pose"))
+    return _POSE["m"](img)
+
+
+def cnet_for(body, prog=None):
+    if not body.get("control_image"):
+        return None
+    path = ref_path("openpose")
+    if not os.path.isfile(path):
+        raise ValueError("Falta el ControlNet de pose: se descarga desde la caja «🧍 Pose»")
+    if _CNET["path"] != path:
+        if prog: prog("loading_control")
+        t = time.time()
+        _CNET.update(path=path, model=ht.load_controlnet(path))
+        log(f"ControlNet cargado en {time.time() - t:.1f} s")
+    return {"model": _CNET["model"], "hint": decode_image(body["control_image"]),
+            "strength": float(body.get("control_strength") or 1.0), "start": 0.0, "end": 1.0}

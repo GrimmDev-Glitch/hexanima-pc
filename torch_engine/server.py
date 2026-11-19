@@ -136,6 +136,15 @@ class H(BaseHTTPRequestHandler):
                     boxes = c.detector(b.get("kind", "face")).detect(img, float(b.get("confidence") or 0.3))
                 return self.send(200, {"items": [{"x1": x1, "y1": y1, "x2": x2, "y2": y2, "confidence": c} for x1, y1, x2, y2, c in boxes],
                                        "width": img.width, "height": img.height})
+            if p == "/hexanima/v1/pose":
+                b = self.body()
+                img = decode_image(b["image"])
+                c = need_core()
+                t = time.time()
+                with RUN:
+                    sk, n = c.pose_detect(img)
+                return self.send(200, {"image": png_b64(sk), "people": n, "width": sk.width, "height": sk.height,
+                                       "seconds": round(time.time() - t, 2)})
             if p == "/hexanima/v1/tag":
                 b = self.body()
                 img = decode_image(b["image"])

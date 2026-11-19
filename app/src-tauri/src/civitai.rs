@@ -260,6 +260,9 @@ pub const ASSETS: &[(&str, &str, &str, &str, u32)] = &[
     ("tagger_tags", "tagger", "wd-vit-tagger-v3.csv", "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/selected_tags.csv", 1),
     ("ipadapter", "ipadapter", "noobIPAMARK1_mark1.safetensors", "https://huggingface.co/subby2006/noob-ipa/resolve/main/noobIPAMARK1_mark1.safetensors", 1405),
     ("clip_vision", "clip_vision", "clip_vision_g.safetensors", "https://huggingface.co/comfyanonymous/clip_vision_g/resolve/main/clip_vision_g.safetensors", 3690),
+    // 🧍 Pose: detector de cuerpo de OpenPose (pesos de CMU, uso no comercial) y ControlNet OpenPose SDXL de xinsir (Apache-2.0)
+    ("pose", "pose", "body_pose_model.pth", "https://huggingface.co/lllyasviel/Annotators/resolve/main/body_pose_model.pth", 200),
+    ("openpose", "controlnet", "controlnet-openpose-sdxl-xinsir.safetensors", "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0/resolve/main/diffusion_pytorch_model.safetensors", 2386),
 ];
 
 fn asset_dir(root: &Path, dir: &str) -> PathBuf {

@@ -752,3 +752,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 /* Tema claro: las superficies semitransparentes oscuras sobre la interfaz pasan a claras */
 :root[data-theme="light"] .mask-stage { background: repeating-conic-gradient(#ECE7F6 0 25%, #F7F5FB 0 50%) 0 0 / 22px 22px; }
 :root[data-theme="light"] .seg button.on { color: #fff; }
+
+/* 🧍 Pose */
+.pose-row { display: flex; gap: 12px; align-items: flex-start; }
+.pose-thumb { width: 104px; height: 140px; flex: none; border-radius: 8px; background: #000; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.pose-thumb img { display: none; width: 100%; height: 100%; object-fit: contain; }
+.pose-thumb img.on { display: block; }
+.pose-thumb span { color: var(--faint); font-size: 12px; }
+.pose-side { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.pose-on { display: flex; align-items: center; gap: 8px; }
+.pose-str { display: flex; align-items: center; gap: 8px; }
+.pose-str .field { width: 90px; }

@@ -323,9 +323,9 @@ class Engine:
 
     @torch.inference_mode()
     def generate2(self, prompt, negative, width, height, steps, cfg, seed, sampler="euler_a", scheduler="discrete",
-                  clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None, ipa=None):
+                  clip_skip=2, loras=(), init_latent=None, strength=1.0, mask=None, step_cb=None, stage_cb=None, ipa=None, cnet=None):
         """Devuelve el tensor de imagen [1,3,H,W] en -1..1. img2img con init_latent + strength;
-        zona a cambiar con mask [1,1,h/8,w/8] (1 = rehacer)."""
+        zona a cambiar con mask [1,1,h/8,w/8] (1 = rehacer). cnet: {"model", "hint" PIL, "strength", "start", "end"}."""
         if stage_cb: stage_cb("conditioning")
         self.set_loras(list(loras))
         sd = self.sd  # después de set_loras: puede haber recargado el modelo
@@ -336,6 +336,13 @@ class Engine:
         unet = sd.forge_objects.unet
         if ipa:  # personaje de referencia: {"adapter": state dict, "embeds": tensor, "weight", "start", "end"}
             unet = apply_ipadapter(unet, ipa["adapter"], ipa["embeds"], ipa.get("weight", 0.7), ipa.get("start", 0.0), ipa.get("end", 1.0))
+        if cnet:  # 🧍 Pose (ControlNet): el esqueleto a tamaño de la imagen, 0..1
+            from backend.patcher.controlnet import apply_controlnet_advanced
+            import numpy as np
+            hint = cnet["hint"].convert("RGB").resize((width, height))
+            hint = torch.from_numpy(np.asarray(hint, dtype=np.float32) / 255.0).permute(2, 0, 1)[None]
+            unet = apply_controlnet_advanced(unet, cnet["model"], hint, float(cnet.get("strength", 1.0)),
+                                             float(cnet.get("start", 0.0)), float(cnet.get("end", 1.0)))
         g = torch.Generator(device="cpu").manual_seed(int(seed))
         noise = torch.randn([1, 4, height // 8, width // 8], generator=g, dtype=torch.float32)
         sigmas = self.sigmas(steps, scheduler)
@@ -354,6 +361,9 @@ class Engine:
             x = noise.to(dev) * sigmas[0]
         m = mask.to(dev) if (mask is not None and lat0 is not None) else None
         c, u = compile_conditions(cond), compile_conditions(uncond)
+        if unet.controlnet_linked_list is not None:  # como sampling_function de Forge
+            for h in c + u:
+                h["control"] = unet.controlnet_linked_list
         model = unet.model
 
         class Denoiser:  # los samplers de Forge miran denoiser.inner_model.predictor
@@ -526,3 +536,62 @@ def apply_ipadapter(unet, adapter_sd, embeds, weight=0.7, start=0.0, end=1.0):
                 if not isinstance(lin, _CachedKV):
                     a.ip_layers.to_kvs[key] = _CachedKV(lin, [patch.conds[i], patch.unconds[i]], gpu)
     return work
+
+
+
+def load_controlnet(path):
+    """ControlNet de SDXL (.safetensors original o diffusers, p. ej. xinsir OpenPose). Adaptado de
+    modules_forge/supported_controlnet.py de Stable Diffusion WebUI Forge (AGPL-3.0)."""
+    from huggingface_guess.detection import unet_config_from_diffusers_unet, model_config_from_unet
+    from huggingface_guess.utils import unet_to_diffusers
+    from backend.operations import using_forge_operations
+    from backend.nn.cnets import cldm
+    from backend.patcher.controlnet import ControlNet
+
+    data = load_torch_file(path)
+    config = None
+    if "controlnet_cond_embedding.conv_in.weight" in data:  # formato diffusers
+        dtype = memory_management.unet_dtype()
+        config = unet_config_from_diffusers_unet(data, dtype)
+        keys = unet_to_diffusers(config)
+        keys["controlnet_mid_block.weight"] = "middle_block_out.0.weight"
+        keys["controlnet_mid_block.bias"] = "middle_block_out.0.bias"
+        n = 0
+        while True:
+            k = f"controlnet_down_blocks.{n}.weight"
+            if k not in data:
+                break
+            keys[k] = f"zero_convs.{n}.0.weight"
+            keys[f"controlnet_down_blocks.{n}.bias"] = f"zero_convs.{n}.0.bias"
+            n += 1
+        n = 0
+        while True:
+            for s in (".weight", ".bias"):
+                k_in = "controlnet_cond_embedding.conv_in" + s if n == 0 else f"controlnet_cond_embedding.blocks.{n - 1}{s}"
+                last = k_in not in data
+                if last:
+                    k_in = "controlnet_cond_embedding.conv_out" + s
+                keys[k_in] = f"input_hint_block.{n * 2}{s}"
+            if last:
+                break
+            n += 1
+        data = {keys[k]: data[k] for k in keys if k in data}
+    prefix = "control_model." if "control_model.zero_convs.0.0.weight" in data else ""
+    if f"{prefix}zero_convs.0.0.weight" not in data:
+        raise ValueError("Ese archivo no es un ControlNet de SDXL")
+    dtype = memory_management.unet_dtype()
+    if config is None:
+        config = model_config_from_unet(data, prefix, True).unet_config
+    config["dtype"] = dtype
+    load_device = memory_management.get_torch_device()
+    cdtype = memory_management.get_computation_dtype(load_device)
+    config.pop("out_channels", None)
+    config["hint_channels"] = data[f"{prefix}input_hint_block.0.weight"].shape[1]
+    with using_forge_operations(dtype=dtype, manual_cast_enabled=cdtype != dtype):
+        model = cldm.ControlNet(**config).to(dtype=dtype)
+    if prefix:
+        data = {k[len(prefix):]: v for k, v in data.items() if k.startswith(prefix)}
+    missing, unexpected = model.load_state_dict(data, strict=False)
+    if missing:
+        print(f"[hexanima-torch] ControlNet: faltan {len(missing)} tensores", flush=True)
+    return ControlNet(model, load_device=load_device, manual_cast_dtype=cdtype)

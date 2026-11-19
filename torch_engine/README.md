@@ -21,3 +21,12 @@ Medido en una GTX 1650 4 GB / 16 GB RAM (hassaku SDXL, 4 LoRAs, 832×1216, Euler
 
 - `tagger.py`: WD Tagger v3 (SmilingWolf, Apache-2.0) reescrito en PyTorch.
 - IP-Adapter: `lib_ipadapter` de Forge (GPL-3.0, basado en cubiq/ComfyUI_IPAdapter_plus), en `forge/extensions-builtin/sd_forge_ipadapter`. Modelo noobIPA Mark1 (FAIPL-1.0-SD) y codificador CLIP ViT-bigG.
+
+## 🧍 Pose
+
+- `pose.py`: detector de cuerpo de OpenPose (18 puntos) en PyTorch, sin OpenCV, basado en el anotador de
+  lllyasviel/ControlNet (Apache-2.0). Pesos `models/pose/body_pose_model.pth` (CMU, uso no comercial).
+  Endpoint `POST /hexanima/v1/pose {image}` → esqueleto PNG y número de personas (~2 s en una GTX 1050).
+- ControlNet: `models/controlnet/controlnet-openpose-sdxl-xinsir.safetensors` (Apache-2.0), cargado con
+  `hexanima_torch.load_controlnet` (adaptado de `modules_forge/supported_controlnet.py` de Forge) y aplicado en
+  `generate2` con `apply_controlnet_advanced`; `img_gen` lo usa si llega `control_image` (+ `control_strength`).

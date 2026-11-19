@@ -3,7 +3,7 @@
 "use strict";
 
 const Acc = {
-  defaults: { sampling: true, size: true, loras: true, hires: false, ad: false, edit: false },
+  defaults: { sampling: true, size: true, loras: true, pose: false, hires: false, ad: false, edit: false },
   el(key) { return document.querySelector(`.acc[data-acc="${key}"]`); },
   set(key, open, save = true) {
     const e = this.el(key); if (!e) return;
@@ -36,6 +36,8 @@ const Acc = {
     put("size", `${w} × ${h}`);
     const n = Loras.tags().size;
     put("loras", n ? `${n} activo${n > 1 ? "s" : ""}` : "ninguno", n);
+    const pon = typeof Pose !== "undefined" && Pose.on();
+    put("pose", pon ? `fuerza ${$("poseStrength").value}` : typeof Pose !== "undefined" && Pose.skel ? "elegida, sin usar" : "apagada", pon);
     const hon = $("hiresOn").checked;
     put("hires", hon ? `×${$("hiresScale").value} · denoise ${$("hiresDen").value}` : "apagado", hon);
     put("ad", Ad.mode === "face" ? "caras" : Ad.mode === "hand" ? "manos" : "apagado", Ad.mode !== "off");

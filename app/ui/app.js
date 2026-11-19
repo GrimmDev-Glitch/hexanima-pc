@@ -442,7 +442,7 @@ async function refreshEngineMenus() {
 
 
 // ---------- generar ----------
-const STAGE = {
+const STAGE = { loading_control: "Cargando el ControlNet de pose",
   queued: "En cola", waiting: "Esperando", preparing: "Preparando", conditioning: "Leyendo el prompt",
   sampling: "Generando", vae_decode: "Decodificando imagen", vae_encode: "Codificando imagen",
   upscaling: "Ampliando", adetailer: "Corrigiendo detalles", encoding: "Guardando", reference: "Preparando el personaje de referencia",
@@ -503,6 +503,7 @@ async function runOne(opt, seed, ov = {}) {
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);
   const mageRefs = typeof MageRefs !== "undefined" ? MageRefs.apply(body, opt) : 0;
   const usedRef = typeof Ref !== "undefined" && Ref.apply(body, opt);
+  const usedPose = typeof Pose !== "undefined" ? Pose.apply(body, opt) : null;
   // Qwen-Image 2.1 Turbo: sus 8 sigmas fijos (con otros pasos, el planificador normal)
   if (opt.preset === "qwen" && body.sample_params.sample_steps === 8 && ov.steps == null) body.sample_params.custom_sigmas = QWEN_TURBO_SIGMAS;
   // ⊞ Comparar 2×2: la imagen i cambia el CFG o los pasos (después del Modo rápido, que también los fija)
@@ -532,7 +533,7 @@ async function runOne(opt, seed, ov = {}) {
       // .json con los ajustes completos junto al PNG (como la galería del teléfono).
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, model: opt.id, model_label: opt.label, family: opt.family,
-        steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, references: mageRefs || null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
+        steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, pose: usedPose, references: mageRefs || null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
         seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: (state.engine === "torch" ? Ad.mode !== "off" : Ad.active()) ? { mode: Ad.mode, strength: Ad.den() } : null,
         strength: editing ? body.strength : null, loras: loraSpec.lora.filter((l) => typeof Fast === "undefined" || !Fast.isOwn(l.path)).map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
@@ -663,6 +664,7 @@ async function generate(opts = {}) {
   if (!opt || state.busy) return;
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
   if (!(await Ad.ensure())) return;
+  if (typeof Pose !== "undefined" && !(await Pose.ensure())) return;
   // Con la RAM casi llena el motor tiene que esperar al disco y cada paso tarda el doble o más.
   try {
     const m = await invoke("memory");

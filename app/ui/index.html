@@ -161,6 +161,23 @@
         </div>
             </div>
           </section>
+          <section class="acc" data-acc="pose">
+            <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">🧍 Pose</span><span class="acc-sum" id="sum-pose"></span></button>
+            <div class="acc-body">
+        <div class="group pose-box">
+          <div class="pose-row">
+            <div class="pose-thumb"><img id="posePrev" alt="Esqueleto de la pose"><span id="poseEmpty">Sin pose</span></div>
+            <div class="pose-side">
+              <button id="posePick" class="ghost sm">Elegir foto o esqueleto…</button>
+              <label class="lbl pose-on"><input id="poseOn" type="checkbox" disabled> Usar la pose al generar</label>
+              <div class="pose-str"><label class="lbl" for="poseStrength">Fuerza</label><input id="poseStrength" class="field" type="number" min="0.1" max="2" step="0.05" value="0.9" inputmode="decimal" disabled></div>
+              <div class="btnrow"><button id="poseFit" class="link" disabled title="Pone el tamaño de la imagen con la forma del esqueleto">↔ Tamaño de la pose</button><button id="poseClear" class="link" disabled>✕ Quitar</button></div>
+            </div>
+          </div>
+          <div id="poseInfo" class="lbl"></div>
+        </div>
+            </div>
+          </section>
           <section class="acc" data-acc="hires">
             <button class="acc-head" aria-expanded="false"><span class="acc-caret">▸</span><span class="acc-title">Hires fix</span><span class="acc-sum" id="sum-hires"></span></button>
             <div class="acc-body">
@@ -849,5 +866,6 @@
 <script src="gpt.js"></script>
 <script src="meta.js"></script>
 <script src="info.js"></script>
+<script src="pose.js"></script>
 </body>
 </html>
