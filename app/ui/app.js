@@ -363,6 +363,24 @@ function applyPreset(opt) {
   syncLabels(); updateSizeTxt(); showEstimate();
 }
 
+/** TAE de la familia para la vista previa con stable-diffusion.cpp (el motor rápido usa su propio TAESD).
+ *  Se descarga solo la primera vez (10-30 MB); si falla, se sigue con la vista previa simple. */
+const TAE = { qwen: "tae_qwen21", anima: "tae_wan21", sdxl: "tae_sdxl" };
+async function taeFor(opt) {
+  const kind = TAE[opt.family];
+  if (!kind || state.engine === "torch") return null;
+  try {
+    let a = (await invoke("asset_status")).find((x) => x.kind === kind);
+    if (a && !a.installed) {
+      setStatus("Descargando la vista previa nítida (una sola vez)…");
+      await invoke("asset_download", { kind });
+      await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
+      a = { ...a, installed: true };
+    }
+    return a?.installed ? a.file : null;
+  } catch { return null; }
+}
+
 async function loadModel() {
   const opt = currentOption();
   if (!opt || state.busy) return;
@@ -381,6 +399,10 @@ async function loadModel() {
   const tick = setInterval(() => setStatus(`Cargando ${opt.label}… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
   try {
     const models = typeof Vae !== "undefined" ? Vae.modelsFor(opt) : opt.models;
+    // Vista previa nítida: el autoencoder diminuto de la familia (solo para ver la imagen mientras se genera)
+    const tae = await taeFor(opt);
+    if (tae) models.tae = tae;
+    state.previewMode = tae ? "tae" : "proj";
     await api("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify({ recipe: opt.recipe, models }) });
     state.loaded = opt.id;
     setStatus(`Listo · ${opt.label} (${Math.round((Date.now() - t0) / 1000)} s)`, "ok");
@@ -499,7 +521,7 @@ async function runOne(opt, seed, ov = {}) {
     lora: loraSpec.lora,
     // Vulkan y el perfil bajo: VAE por mosaicos (sin ellos el primer intento puede fallar por memoria)
     vae_tiling_params: { enabled: vaeTiling() },
-    preview: "proj", preview_interval: 1,
+    preview: state.previewMode || "proj", preview_interval: 1,
     output_format: "png", embed_image_metadata: true,
   };
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);

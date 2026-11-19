@@ -619,6 +619,12 @@ async fn translate_text(app: tauri::AppHandle, texts: Vec<String>) -> Result<Vec
 }
 
 #[tauri::command]
+async fn image_tags(app: tauri::AppHandle, image: String, general: Option<f64>) -> Result<serde_json::Value, String> {
+    let root = app.state::<AppState>().root.clone();
+    tauri::async_runtime::spawn_blocking(move || translate::tag(&root, &image, general.unwrap_or(0.25))).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn translate_stop() {
     translate::stop();
 }
@@ -726,6 +732,7 @@ fn main() {
             model_sizes,
             translate_text,
             translate_stop,
+            image_tags,
             storage_info,
             storage_clear,
             logs_export,

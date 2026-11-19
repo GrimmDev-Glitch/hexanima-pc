@@ -155,7 +155,6 @@ const PicPrompt = {
   len() { return store.get("tagLen", 1); },
 
   async open(src) {
-    if (state.engine !== "torch") return toast("«Prompt desde una imagen» necesita el motor rápido (PyTorch, NVIDIA)", 5000);
     if (!(await downloadAssets(["tagger", "tagger_tags"], "Prompt desde una imagen",
       "Lee una imagen y escribe su prompt: etiquetas (1girl, silver hair…) o una frase. Usa WD ViT Tagger v3 de SmilingWolf (Apache-2.0), el mismo que el teléfono."))) return;
     src = src || (await pickImage());
@@ -163,9 +162,11 @@ const PicPrompt = {
     this.img = src;
     setStatus("Leyendo la imagen…");
     try {
-      const r = await api("/hexanima/v1/tag", { method: "POST", body: JSON.stringify({ image: src }) });
-      this.tags = r.tags.filter((t) => t.category !== 9);
-      $("picCount").textContent = `${this.tags.length} etiquetas en ${String(r.seconds).replace(".", ",")} s`;
+      // El ayudante (Python del motor rápido en la CPU): funciona con cualquier modelo cargado, no solo con SDXL
+      const t0 = performance.now();
+      const raw = await invoke("image_tags", { image: src, general: 0.35 });
+      this.tags = raw.map(([name, score, category]) => ({ name, score, category })).filter((t) => t.category !== 9);
+      $("picCount").textContent = `${this.tags.length} etiquetas en ${((performance.now() - t0) / 1000).toFixed(1).replace(".", ",")} s`;
       setStatus("");
     } catch (e) { return toast("No se pudo leer la imagen: " + (e.message || e), 6000); }
     $("picImg").src = src;

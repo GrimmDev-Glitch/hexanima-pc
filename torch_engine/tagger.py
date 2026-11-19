@@ -66,7 +66,9 @@ class WDTagger(nn.Module):
         s = max(img.size)  # cuadrado con fondo blanco, como el tagger original
         sq = Image.new("RGB", (s, s), (255, 255, 255)); sq.paste(img, ((s - img.width) // 2, (s - img.height) // 2))
         sq = sq.resize((self.SIZE, self.SIZE), Image.BICUBIC)
-        x = torch.from_numpy(np.asarray(sq).astype("float32") / 127.5 - 1.0).permute(2, 0, 1)[None]
+        # BGR: los pesos vienen del tagger ONNX de SmilingWolf, que lee los canales al revés. Con RGB salían
+        # etiquetas falsas como «blue_skin» o «alien» en fotos de piel normal (medido con dos fotos de prueba).
+        x = torch.from_numpy(np.asarray(sq)[:, :, ::-1].astype("float32") / 127.5 - 1.0).permute(2, 0, 1)[None]
         self.to(device)
         p = torch.sigmoid(self.forward(x.to(device))[0]).float().cpu()
         self.to("cpu")

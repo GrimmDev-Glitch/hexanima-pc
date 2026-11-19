@@ -79,6 +79,8 @@ impl Server {
             // Real-ESRGAN / 4x-UltraSharp para "Ampliar" y hires fix (se buscan en el primer nivel).
             "--hires-upscalers-dir".into(), upscalers.display().to_string(),
             "--flash-attn".into(), "on".into(),
+            // El TAE (taeqi2_1, taew2_1, taesdxl) solo para la vista previa: la imagen final sale con el VAE completo
+            "--taesd-preview-only".into(),
         ];
         if let Some(d) = device {
             args.push("--backend".into());

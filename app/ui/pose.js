@@ -37,7 +37,12 @@ const Pose = {
       if (this.isSkeleton(im)) {
         this.skel = { src, w: im.width, h: im.height, people: null, from: "esqueleto" };
       } else {
-        if (state.engine !== "torch") return toast("Para sacar la pose de una foto hace falta el motor rápido (NVIDIA). Puedes cargar un esqueleto ya hecho (OpenPose Editor, PoseMy.Art…).", 7000);
+        if (state.engine !== "torch") {
+          const has = (state.engines || []).includes("torch");
+          return toast(has
+            ? "La pose usa el motor rápido, que se activa con modelos SDXL, Illustrious o Pony: elige uno de esos en Modelo y vuelve a elegir la foto. Con Qwen o Mage usa «🧍 Copiar pose» en Editar una foto."
+            : "Para sacar la pose de una foto hace falta el motor rápido (NVIDIA): descárgalo en Ajustes → Motor rápido (PyTorch). También puedes cargar un esqueleto ya hecho (OpenPose Editor, PoseMy.Art…).", 9000);
+        }
         if (!(await downloadAssets(["pose"], "Detector de pose", "Saca el esqueleto (cabeza, hombros, brazos y piernas) de una foto con OpenPose. Los pesos son de CMU, de uso no comercial.", (t) => { $("poseInfo").textContent = t; }))) return this.render();
         $("poseInfo").textContent = "Buscando la pose…";
         const r = await api("/hexanima/v1/pose", { method: "POST", body: JSON.stringify({ image: src }) });
