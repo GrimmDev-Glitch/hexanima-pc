@@ -19,7 +19,7 @@ const EngineDl = {
   async maybeWelcome() {
     if (!state.hw || this.checked) return;  // lo llama el arranque de app.js o este archivo, lo que llegue después
     this.checked = true;
-    if (!this.nvidia() || (state.engines || []).includes("torch")) { this.renderSettings(); return; }
+    if (!this.nvidia() || !torchSupportsGpu() || (state.engines || []).includes("torch")) { this.renderSettings(); return; }
     await this.refresh();
     if (store.get("engineWelcomeLater", false) && !this.info.partial_bytes) return;
     this.open();
@@ -114,6 +114,11 @@ const EngineDl = {
     const i = this.info, b = $("engSetBtn"), t = $("engSet");
     $("engSetRow").classList.toggle("hidden", !this.nvidia());
     if (this.busy) { b.textContent = "Ver progreso"; b.disabled = false; return; }
+    if (!torchSupportsGpu()) {
+      t.textContent = "Aún no funciona en tu gráfica (RTX serie 50): se usa CUDA";
+      b.classList.add("hidden");
+      return;
+    }
     const inst = (state.engines || []).includes("torch");
     if (inst) {
       const up = i?.remote && i.installed != null && i.remote.version > i.installed;

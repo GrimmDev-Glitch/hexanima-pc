@@ -194,11 +194,20 @@ async function refreshMemory() {
  *  es algo más rápido por paso (~14 s frente a ~24 s en SDXL 832×1216) pero hace fallar la gráfica cada
  *  2-3 imágenes (ErrorDeviceLost) y a ratos baja a 29 s/paso; CUDA hizo 3 de 3 sin fallos.
  *  En Ajustes se puede forzar CUDA o Vulkan. */
+/** El motor PyTorch trae PyTorch 2.3.1 + CUDA 12.1: kernels hasta sm_90. Las RTX serie 50 (Blackwell,
+ *  capacidad 10.x/12.x) dan «no kernel image is available»; ahí se usa CUDA de sd.cpp (runtime 12.8). */
+function torchSupportsGpu() {
+  const g = state.hw?.gpu;
+  if (g?.vendor !== "nvidia") return false;
+  if (g.compute_cap != null) return g.compute_cap < 10;
+  return !/RTX\s*(PRO\s*)?50\d\d|blackwell/i.test(g.name || "");
+}
+
 function engineFor(opt) {
   const engines = state.engines || [];
   const nvidia = state.hw?.gpu?.vendor === "nvidia";
   // El motor PyTorch trae su propio ADetailer y detector (YOLOv8): SDXL siempre puede usarlo
-  const torchOk = opt?.family === "sdxl" && engines.includes("torch");
+  const torchOk = opt?.family === "sdxl" && engines.includes("torch") && torchSupportsGpu();
   const pref = store.get("enginePref", "auto");
   if (pref === "torch") return torchOk ? "torch" : (nvidia && engines.includes("cuda") ? "cuda" : state.hw?.engine);
   if (pref !== "auto" && engines.includes(pref)) return pref;

@@ -16,6 +16,8 @@ pub struct Gpu {
     pub vendor: String, // nvidia | amd | intel | other
     pub vram_gb: Option<f64>,
     pub driver: Option<String>,
+    /// Capacidad CUDA (p. ej. 7.5 en la GTX 1650, 12.0 en la RTX 5060); None si nvidia-smi no la da.
+    pub compute_cap: Option<f64>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -89,6 +91,8 @@ fn detect_nvidia() -> Option<Gpu> {
         vendor: "nvidia".into(),
         vram_gb: v[1].parse::<f64>().ok().map(|mb| round1(mb / 1024.0)),
         driver: Some(v[2].clone()),
+        // aparte: los drivers viejos no conocen compute_cap y harían fallar toda la consulta
+        compute_cap: nvidia_query("compute_cap").and_then(|c| c.first()?.parse().ok()),
     })
 }
 
@@ -124,7 +128,7 @@ fn detect_wmi() -> Option<Gpu> {
             .and_then(|s| s.trim().parse::<f64>().ok())
             .filter(|b| *b > 0.0)
             .map(|b| round1(b / 1024f64.powi(3)));
-        let g = Gpu { name, vendor: vendor.into(), vram_gb: vram, driver: None };
+        let g = Gpu { name, vendor: vendor.into(), vram_gb: vram, driver: None, compute_cap: None };
         // Preferir dedicada (no Intel) y con mas VRAM
         let score = |g: &Gpu| (g.vendor != "intel") as i32 * 100 + g.vram_gb.unwrap_or(0.0) as i32;
         if best.as_ref().map_or(true, |b| score(&g) > score(b)) {
