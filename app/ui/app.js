@@ -98,6 +98,11 @@ const FAMILY = {
   mage: { steps: 4, cfg: 1, sampler: "euler", scheduler: "discrete", neg: "", chips: ["the character from image 1", "keep the same face and outfit", "in a new pose", "high quality anime illustration"] },
   anima: { steps: 8, cfg: 1, sampler: "euler", scheduler: "discrete", neg: "", chips: ["masterpiece", "best quality", "highres", "detailed eyes"] },
   anima_base: { steps: 20, cfg: 4, sampler: "dpm++2m", scheduler: "sgm_uniform", neg: "worst quality, low quality, blurry", chips: ["masterpiece", "best quality", "highres"] },
+  // Qwen-Image 2.1 Turbo: 8 pasos, CFG 1, Euler y los sigmas del Turbo (los pone runOne); frases, no etiquetas
+  qwen: { steps: 8, cfg: 1, sampler: "euler", scheduler: "discrete", neg: "", chips: ["high quality", "detailed", "soft natural light", "a clear sign that says"] },
+  qwen_base: { steps: 20, cfg: 4, sampler: "euler", scheduler: "discrete", neg: "blurry, low quality, distorted text", chips: ["high quality", "detailed", "soft natural light"] },
+  // MOSS-Image: sin el adaptador de 4 pasos del teléfono (necesita su propio muestreador): 20 pasos, CFG 3
+  moss: { steps: 20, cfg: 3, sampler: "euler", scheduler: "discrete", neg: "lowres, blurry, bad anatomy, bad hands", chips: ["realistic photo", "detailed skin", "soft light", "high quality"] },
   sdxl: {
     steps: 28, cfg: 5.5, sampler: "euler_a", scheduler: "discrete",
     neg: "worst quality, low quality, bad anatomy, bad hands, missing fingers, extra digits, blurry, jpeg artifacts, watermark, signature",
@@ -109,12 +114,18 @@ const ASPECT_ANIMA = { p: [512, 768], s: [640, 640], l: [768, 512] };
 // Mage está entrenado a ~1024 px: a 512×768 sale tosco (caras y manos); 768×1152 a 4 pasos queda bien
 // (GTX 1650: 117 s frente a 58 s). 8 pasos apenas mejora y tarda el doble.
 const ASPECT_MAGE = { p: [768, 1152], s: [960, 960], l: [1152, 768] };
+// Qwen-Image (múltiplos de 32) y MOSS (de 16): cerca de 1 megapíxel, como Mage
+const BIG_FAMILIES = ["mage", "qwen", "moss"];
+/** Familias que editan con imágenes de referencia (ref_images) en vez de imagen a imagen. */
+const REF_FAMILIES = ["mage", "qwen"];
+/** Sigmas fijos de Qwen-Image 2.1 Turbo (preset qwen-image-2.1-turbo del motor): 8 pasos. */
+const QWEN_TURBO_SIGMAS = [1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568, 0.0];
 
 function maxSide(family) {
   const p = state.hw?.profile || "medio";
   if (p === "bajo") return 768;
   if (p === "alto") return 1536;
-  return family === "sdxl" || family === "mage" ? 1216 : 1024; // medio
+  return family === "sdxl" || BIG_FAMILIES.includes(family) ? 1216 : 1024; // medio
 }
 
 const align64 = (n) => Math.min(2048, Math.max(256, Math.round((+n || 0) / 64) * 64));
@@ -124,7 +135,7 @@ function currentSize() {
   if (state.aspect === "c") return [align64($("customW").value), align64($("customH").value)];
   const opt = currentOption();
   const fam = opt?.family || "sdxl";
-  let [w, h] = (fam === "mage" ? ASPECT_MAGE : fam === "anima" ? ASPECT_ANIMA : ASPECT)[state.aspect];
+  let [w, h] = (BIG_FAMILIES.includes(fam) ? ASPECT_MAGE : fam === "anima" ? ASPECT_ANIMA : ASPECT)[state.aspect];
   const ms = maxSide(fam);
   if (Math.max(w, h) > ms) { const k = ms / Math.max(w, h); w *= k; h *= k; }
   return [Math.max(256, Math.floor(w / 64) * 64), Math.max(256, Math.floor(h / 64) * 64)];
@@ -262,8 +273,9 @@ async function scanModels() {
   for (const f of by("checkpoints")) {
     opts.push({ id: "ckpt:" + f.id, label: f.name.replace(/\.(safetensors|gguf|ckpt)$/i, "") + " · SDXL", family: "sdxl", recipe: "sdxl-checkpoint", models: { model: f.id } });
   }
-  const llm = files.filter((f) => f.category === "text_encoders" && /qwen[_-]?3/i.test(f.name) && !/vl|mmproj/i.test(f.name))[0];
-  const vae = by("vae", /qwen[_-]?image/i)[0];
+  // Anima: Qwen3 0.6B (no Qwen3.5 de MOSS ni Qwen3-VL) y el VAE de Qwen Image (no el de la 2.1)
+  const llm = files.filter((f) => f.category === "text_encoders" && /qwen[_-]?3(?![.\d])/i.test(f.name) && !/vl|mmproj/i.test(f.name))[0];
+  const vae = by("vae", /qwen[_-]?image/i).filter((f) => !/2[._]1/.test(f.name))[0];
   for (const f of by("diffusion_models", /anima/i)) {
     if (!llm || !vae) continue;
     const turbo = /turbo/i.test(f.name);
@@ -276,13 +288,43 @@ async function scanModels() {
   // Mage-Flow Edit Turbo (Microsoft, MIT): edita con una orden y hasta 3 imágenes de referencia, 4 pasos
   const mllm = files.find((f) => f.category === "text_encoders" && /qwen[_-]?3[_-]?vl[_-]?4b/i.test(f.name) && !/mmproj/i.test(f.name));
   const mvis = files.find((f) => /mmproj/i.test(f.name) && /qwen[_-]?3[_-]?vl[_-]?4b/i.test(f.name));
-  const mvae = by("vae", /mage/i)[0];
-  for (const f of by("diffusion_models", /mage/i)) {
+  // «mage» a secas también está dentro de «image» (qwen-image, moss-image): se busca Mage-Flow o mage- al principio
+  const isMage = (n) => /mage[-_ ]?flow|^mage[-_]/i.test(n);
+  const mvae = files.filter((f) => f.category === "vae" && isMage(f.name))[0];
+  for (const f of files.filter((x) => x.category === "diffusion_models" && isMage(x.name))) {
     if (!mllm || !mvae) continue;
     opts.push({
       id: "mage:" + f.id, label: (/edit/i.test(f.name) ? "Mage Edit" : "Mage") + (/turbo/i.test(f.name) ? " Turbo" : "") + " · Mage",
       family: "mage", recipe: "mage-flow-edit",
       models: { diffusion_model: f.id, llm: mllm.id, vae: mvae.id, ...(mvis ? { llm_vision: mvis.id } : {}) },
+    });
+  }
+  // Qwen-Image 2.1 (Qwen): Qwen3-VL-8B + su proyector de visión (editar con referencias) y el VAE de la 2.1.
+  // Turbo: 8 pasos con sus sigmas fijos; la normal, 20 pasos con CFG 4.
+  const qllm = files.find((f) => f.category === "text_encoders" && /qwen[_-]?3[_-]?vl[_-]?8b/i.test(f.name) && !/mmproj/i.test(f.name));
+  const qvis = files.find((f) => /mmproj/i.test(f.name) && /qwen[_-]?3[_-]?vl[_-]?8b/i.test(f.name));
+  const qvae = by("vae", /qwen[_-]?image[_-]?2[._]1/i)[0];
+  for (const f of by("diffusion_models", /qwen[_-]?image/i)) {
+    if (!qllm || !qvae) continue;
+    const turbo = /turbo|lightning/i.test(f.name);
+    opts.push({
+      id: "qwen:" + f.id, label: f.name.replace(/\.(safetensors|gguf)$/i, "") + " · Qwen-Image",
+      family: "qwen", preset: turbo ? "qwen" : "qwen_base", recipe: turbo ? "qwen-image-21-turbo" : "qwen-image-21",
+      models: { diffusion_model: f.id, llm: qllm.id, vae: qvae.id, ...(qvis ? { llm_vision: qvis.id } : {}) },
+    });
+  }
+  // MOSS-Image (OpenMOSS): Qwen3.5-9B, su tokenizer.json y el VAE de FLUX.2. Base o SFT según el nombre
+  // (MiaoMiao Harem MOSS es de la Base; RealSkin MOSS, del SFT).
+  const sllm = files.find((f) => f.category === "text_encoders" && /qwen[_-]?3\.5/i.test(f.name) && !/mmproj/i.test(f.name));
+  const stok = files.find((f) => f.category === "tokenizers");
+  const svae = by("vae", /flux[_-]?2/i).filter((f) => !/small/i.test(f.name))[0] || by("vae", /flux[_-]?2/i)[0];
+  for (const f of by("diffusion_models", /moss/i)) {
+    if (!sllm || !stok || !svae) continue;
+    const base = /base|harem/i.test(f.name);
+    opts.push({
+      id: "moss:" + f.id, label: f.name.replace(/\.(safetensors|gguf)$/i, "") + " · MOSS",
+      family: "moss", preset: "moss", recipe: base ? "moss-image-base" : "moss-image-sft",
+      models: { diffusion_model: f.id, llm: sllm.id, tokenizer: stok.id, vae: svae.id },
     });
   }
   state.options = opts;
@@ -425,7 +467,7 @@ async function waitIfHot() {
 }
 
 async function runOne(opt, seed, ov = {}) {
-  const editing = state.mode === "edit" && state.editImage && opt.family !== "mage";
+  const editing = state.mode === "edit" && state.editImage && !REF_FAMILIES.includes(opt.family);
   // Al editar, el tamaño es el de la foto (ya ajustado a múltiplos de 64 al elegirla).
   const [w, h] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
   const steps = clampNum($("steps"), 20);
@@ -461,6 +503,8 @@ async function runOne(opt, seed, ov = {}) {
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);
   const mageRefs = typeof MageRefs !== "undefined" ? MageRefs.apply(body, opt) : 0;
   const usedRef = typeof Ref !== "undefined" && Ref.apply(body, opt);
+  // Qwen-Image 2.1 Turbo: sus 8 sigmas fijos (con otros pasos, el planificador normal)
+  if (opt.preset === "qwen" && body.sample_params.sample_steps === 8 && ov.steps == null) body.sample_params.custom_sigmas = QWEN_TURBO_SIGMAS;
   // ⊞ Comparar 2×2: la imagen i cambia el CFG o los pasos (después del Modo rápido, que también los fija)
   if (ov.cfg != null) body.sample_params.guidance.txt_cfg = ov.cfg;
   if (ov.steps != null) body.sample_params.sample_steps = ov.steps;
@@ -553,7 +597,7 @@ async function setEditImage(src) {
 function setMode(mode) {
   // con «Usar la imagen como referencia del personaje» la foto no es el punto de partida (no hay img2img)
   const ref = typeof Ref !== "undefined" && Ref.on();
-  const mage = currentOption()?.family === "mage";
+  const mage = REF_FAMILIES.includes(currentOption()?.family);
   state.mode = mode === "edit" && state.editImage && !ref && !mage ? "edit" : "gen";
   $("editBox").classList.toggle("mage-on", mage);
   const has = !!state.editImage;

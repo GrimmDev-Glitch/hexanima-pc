@@ -7,13 +7,14 @@ const MageRefs = {
   MAX: 3,
   extra: [],   // [{src, w, h}] imágenes 2 y 3
 
-  isMage() { return currentOption()?.family === "mage"; },
+  isMage() { return REF_FAMILIES.includes(currentOption()?.family); },
+  name() { return currentOption()?.family === "qwen" ? "Qwen" : "Mage"; },
 
   all() { return [state.editImage, ...this.extra].filter(Boolean); },
 
   /** Añade las referencias a la petición. Devuelve cuántas (0 si no es Mage). */
   apply(body, opt) {
-    if (opt?.family !== "mage") return 0;
+    if (!REF_FAMILIES.includes(opt?.family)) return 0;
     const refs = this.all();
     if (refs.length) body.ref_images = refs.map((r) => r.src);
     return refs.length;
@@ -21,7 +22,7 @@ const MageRefs = {
 
   async add() {
     if (!state.editImage) return toast("Primero elige la imagen 1 (Elegir o ↳ Última imagen)", 3500);
-    if (this.all().length >= this.MAX) return toast("Mage admite hasta 3 imágenes de referencia", 3000);
+    if (this.all().length >= this.MAX) return toast(this.name() + " admite hasta 3 imágenes de referencia", 3000);
     const src = await pickImage();
     if (!src) return;
     try { this.extra.push(await prepareEditImage(src)); } catch (e) { return toast("No se pudo abrir la imagen: " + (e.message || e), 4000); }
@@ -49,8 +50,8 @@ const MageRefs = {
     $("mageAdd").disabled = !state.editImage || this.all().length >= this.MAX;
     if (this.isMage()) {
       $("editHint").textContent = state.editImage
-        ? `Mage: ${this.all().length === 1 ? "1 imagen" : this.all().length + " imágenes"} de referencia. Escribe lo que quieres en una frase (en inglés va mejor): «the character from image 1 singing on a stage, holding a sword».`
-        : "Mage edita con una orden en frase. Elige la imagen 1 (o genera sin imágenes, desde cero).";
+        ? `${this.name()}: ${this.all().length === 1 ? "1 imagen" : this.all().length + " imágenes"} de referencia. Escribe lo que quieres en una frase (en inglés va mejor): «the character from image 1 singing on a stage, holding a sword».`
+        : `${this.name()} edita con una orden en frase. Elige la imagen 1 (o genera sin imágenes, desde cero).`;
     }
   },
 };

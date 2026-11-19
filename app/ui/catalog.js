@@ -10,7 +10,9 @@ const CATALOG = [
   { id: "harem29", name: "MiaoMiao Harem · 2.9B BETA 1.1", desc: "Anime · 2.9B: más detalle, más lento (sin Modo rápido)", model: 934764, version: 3360028, prefer: /fp16/i, gb: 5.4, match: /harem.*2\.9b[_ ]?beta[_ ]?1\.1/i },
   { id: "real13", name: "MiaoMiao RealSkin · Anima 1.3", desc: "Realista · 2B", model: 2026594, version: 3265292, gb: 3.9, fast: true, match: /realskin.*anima[_ ]?v1\.3/i },
   { id: "real29", name: "MiaoMiao RealSkin · 2.9B 1.0", desc: "Realista · 2.9B: más detalle, más lento (sin Modo rápido)", model: 2026594, version: 3415563, gb: 5.4, match: /realskin.*anima[_ ]?2\.9b[_ ]?v1/i },
-  { id: "moss", name: "MiaoMiao RealSkin / Harem · MOSS", desc: "Necesita MOSS-Image, que aún no funciona en PC", soon: true },
+  // MOSS-Image (MIAOKA): versión INT8 (5 GB) en vez de FP16 (9,5 GB); comparten Qwen3.5-9B, tokenizer y VAE (paquete «moss_base»)
+  { id: "realmoss", name: "MiaoMiao RealSkin · MOSS 1.0", desc: "Realista · MOSS-Image SFT · 20 pasos, mejor con 8 GB de VRAM o más", model: 2026594, version: 3433017, prefer: /int8/i, gb: 5.0, family: "moss", shared: "moss_base", match: /realskin.*moss/i },
+  { id: "haremmoss", name: "MiaoMiao Harem · MOSS 1.1", desc: "Anime · MOSS-Image Base · 20 pasos, mejor con 8 GB de VRAM o más", model: 3015023, version: 3434952, prefer: /int8/i, gb: 5.0, family: "moss", shared: "moss_base", match: /harem.*moss/i },
 ];
 
 const Catalog = {
@@ -22,7 +24,9 @@ const Catalog = {
     this.render();
   },
 
-  have(e) { return (this.index.ids || []).includes("version_id:" + e.version) || state.options.some((o) => o.family === "anima" && e.match?.test(o.id)); },
+  have(e) { return (this.index.ids || []).includes("version_id:" + e.version) || state.options.some((o) => o.family === (e.family || "anima") && e.match?.test(o.id)); },
+  shared(e) { return e.shared || "anima_base"; },
+  sharedName(e) { return this.shared(e) === "moss_base" ? "codificador, tokenizer y VAE de MOSS" : "codificador y VAE de Anima"; },
 
   render() {
     const box = $("catList");
@@ -36,7 +40,7 @@ const Catalog = {
       d.querySelector(".pack-name").textContent = e.name;
       if (e.fast) d.querySelector(".pack-name").insertAdjacentHTML("beforeend", '<span class="pack-tag">⚡ 8 pasos</span>');
       d.querySelector(".pack-desc").textContent = e.desc;
-      d.querySelector(".pack-size").textContent = e.soon ? "" : have ? "✓ Descargado" : `Descarga de ${String(e.gb).replace(".", ",")} GB (+ codificador y VAE de Anima si faltan)`;
+      d.querySelector(".pack-size").textContent = e.soon ? "" : have ? "✓ Descargado" : `Descarga de ${String(e.gb).replace(".", ",")} GB (+ ${this.sharedName(e)} si faltan)`;
       const b = d.querySelector("button");
       b.className = e.soon ? "ghost" : "primary pack-btn";
       b.textContent = e.soon ? "Próximamente" : have ? "Usar" : "Descargar";
@@ -59,14 +63,15 @@ const Catalog = {
     card = [...$("catList").children][CATALOG.indexOf(e)];
     const offs = [];
     try {
-      // 1) codificador y VAE de Anima (compartidos), si faltan
-      const st = (await invoke("pack_status")).anima_base;
+      // 1) los archivos compartidos de la familia (codificador, VAE…), si faltan
+      const sp = this.shared(e), st = (await invoke("pack_status"))[sp];
       if (st && !st.installed) {
         offs.push(await window.__TAURI__.event.listen("dl-progress", (ev) => {
-          const p = ev.payload; if (p.id !== "pack-anima_base" || !p.total) return;
-          this.progress(card, `Codificador y VAE de Anima… ${Math.round((100 * p.done) / p.total)} %`, (100 * p.done) / p.total);
+          const p = ev.payload; if (p.id !== "pack-" + sp || !p.total) return;
+          const label = this.sharedName(e);
+          this.progress(card, `${label[0].toUpperCase() + label.slice(1)}… ${Math.round((100 * p.done) / p.total)} %`, (100 * p.done) / p.total);
         }));
-        await invoke("pack_download", { pack: "anima_base" });
+        await invoke("pack_download", { pack: sp });
       }
       // 2) el modelo original desde Civitai
       const m = await invoke("civitai_model", { id: e.model, key: Civitai.key() });
@@ -104,7 +109,7 @@ const Catalog = {
   async use(e) {
     await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
     await scanModels();
-    const opt = state.options.find((o) => o.family === "anima" && e.match.test(o.id));
+    const opt = state.options.find((o) => o.family === (e.family || "anima") && e.match.test(o.id));
     $("packDlg").classList.add("hidden");
     if (!opt) return toast("Descargado: elígelo en Modelo", 4000);
     $("model").value = opt.id; $("model").dispatchEvent(new Event("change")); store.set("model", opt.id);
@@ -115,3 +120,5 @@ const Catalog = {
 // se dibuja cada vez que se abre el panel de descargas
 const _packsOpen = Packs.open.bind(Packs);
 Packs.open = async function () { await _packsOpen(); await Catalog.refresh(); };
+
+$("catalogBtn").onclick = () => Packs.open();

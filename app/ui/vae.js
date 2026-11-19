@@ -33,6 +33,11 @@ const Vae = {
     const sel = $("vaePick"), opt = currentOption();
     sel.innerHTML = "";
     if (!opt) { sel.disabled = true; return; }
+    if (opt.family === "qwen" || opt.family === "moss") {
+      sel.add(new Option(opt.family === "qwen" ? "VAE de Qwen-Image 2.1 (necesario)" : "VAE de FLUX.2 (necesario para MOSS)", ""));
+      sel.disabled = true;
+      return;
+    }
     if (opt.family === "mage") {
       sel.add(new Option("VAE de Mage (necesario para Mage)", ""));
       sel.disabled = true;

@@ -41,6 +41,7 @@
           <select id="model" class="hidden" aria-hidden="true" tabindex="-1"></select>
           <button id="modelBtn" class="model-chip" title="Elegir modelo"><span id="modelDot" class="dot"></span><span id="modelName">Sin modelo</span><span class="caret">▾</span></button>
           <button id="loadBtn" class="ghost sm">Cargar modelo</button>
+          <button id="catalogBtn" class="ghost sm" title="Catálogo de modelos: Anima, Mage, Qwen-Image, MOSS y los MiaoMiao del teléfono">＋ Catálogo</button>
           <button id="refreshBtn" class="ghost icon sm refresh-btn" title="Actualizar: vuelve a buscar modelos, LoRAs, ampliadores y detectores que copiaste a mano a las carpetas" aria-label="Actualizar modelos y LoRAs"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg></button>
           <span id="modelStatus" class="status">Iniciando motor…</span>
           <button id="menuBtn" class="ibtn menu-btn" title="Más opciones" aria-label="Más opciones">⋯</button>
@@ -669,15 +670,19 @@
           <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
         <button class="primary pack-btn">Descargar</button>
       </div>
-      <div class="pack soon">
-        <div class="pack-info"><div class="pack-name">Qwen-Image</div>
-          <div class="lbl">Fotos realistas y editar fotos con referencias · necesita una gráfica potente</div></div>
-        <button class="ghost" disabled>Próximamente</button>
+      <div class="pack" data-pack="qwen">
+        <div class="pack-info"><div class="pack-name">Qwen-Image 2.1 Turbo</div>
+          <div class="lbl">Fotos realistas, textos legibles en la imagen y editar fotos con una orden y hasta 3 referencias · 8 pasos · mejor con 8 GB de VRAM o más · uso no comercial</div>
+          <div class="lbl pack-size"></div>
+          <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
+        <button class="primary pack-btn">Descargar</button>
       </div>
-      <div class="pack soon">
-        <div class="pack-info"><div class="pack-name">MOSS-Image</div>
-          <div class="lbl">Retratos realistas (RealSkin) · necesita una gráfica potente</div></div>
-        <button class="ghost" disabled>Próximamente</button>
+      <div class="pack" data-pack="moss">
+        <div class="pack-info"><div class="pack-name">MOSS-Image SFT</div>
+          <div class="lbl">Fotos y retratos realistas descritos con frases · 20 pasos (el modo de 4 pasos del teléfono no existe en PC) · mejor con 8 GB de VRAM o más</div>
+          <div class="lbl pack-size"></div>
+          <div class="pack-prog hidden"><div class="bar"><i></i></div><div class="lbl pack-txt"></div></div></div>
+        <button class="primary pack-btn">Descargar</button>
       </div>
     </div>
     <div class="cat-head"><h3>Catálogo · los modelos de HexAnima del teléfono</h3>

@@ -156,7 +156,7 @@ const Packs = {
   },
 
   async open() {
-    $("packTitle").textContent = (state.options || []).length ? "Descargar modelos" : "Elige un modelo para empezar";
+    $("packTitle").textContent = (state.options || []).length ? "Catálogo de modelos" : "Elige un modelo para empezar";
     try { this.status = await invoke("pack_status"); } catch { this.status = {}; }
     for (const card of document.querySelectorAll("#packDlg .pack[data-pack]")) this.renderCard(card);
     $("packErr").classList.add("hidden");
@@ -171,7 +171,7 @@ const Packs = {
     btn.disabled = !!this.busy;
     card.querySelector(".pack-prog").classList.toggle("hidden", this.busy !== card.dataset.pack);
     $("packCancel").classList.toggle("hidden", !this.busy);
-    $("packSkip").textContent = this.busy ? "Seguir usando la app" : "Omitir";
+    $("packSkip").textContent = this.busy ? "Seguir usando la app" : (state.options || []).length ? "Cerrar" : "Omitir";
   },
 
   onProgress(card, p) {

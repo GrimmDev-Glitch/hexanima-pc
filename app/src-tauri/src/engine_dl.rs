@@ -224,6 +224,33 @@ pub const PACKS: &[(&str, &str, &str, &str, u64)] = &[
      "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-4B-Instruct-Q8_0.gguf", 453_974_304),
     ("mage", "vae", "mage_flow_vae_bf16.safetensors",
      "https://huggingface.co/Comfy-Org/Mage-Flow/resolve/main/vae/mage_flow_vae_bf16.safetensors", 345_053_056),
+    // Qwen-Image 2.1 Turbo (Qwen Research License, no comercial): GGUF Q4_K_M de unsloth, Qwen3-VL-8B Q4_K_M
+    // + su proyector de visión (para editar con fotos de referencia) y el VAE propio de la 2.1
+    ("qwen", "diffusion_models", "qwen-image-2.1-turbo-Q4_K_M.gguf",
+     "https://huggingface.co/unsloth/Qwen-Image-2.1-Turbo-GGUF/resolve/main/qwen-image-2.1-turbo-Q4_K_M.gguf", 4_199_565_120),
+    ("qwen", "text_encoders", "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+     "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/Qwen3VL-8B-Instruct-Q4_K_M.gguf", 5_027_784_800),
+    ("qwen", "text_encoders", "mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+     "https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-8B-Instruct-F16.gguf", 1_159_029_824),
+    ("qwen", "vae", "qwen_image_2.1_vae_bf16.safetensors",
+     "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/main/vae/qwen_image_2.1_vae_bf16.safetensors", 675_509_688),
+    // MOSS-Image SFT (OpenMOSS, Apache-2.0): GGUF Q4_K de leejet, Qwen3.5-9B Q4_K_M, VAE de FLUX.2 y el
+    // tokenizer de Qwen3.5 (el motor lo pide aparte: otro vocabulario que el Qwen integrado)
+    ("moss", "diffusion_models", "MOSS-Image-SFT-Q4_K.gguf",
+     "https://huggingface.co/leejet/MOSS-Image-SFT-GGUF/resolve/main/MOSS-Image-SFT-Q4_K.gguf", 3_327_400_800),
+    ("moss", "text_encoders", "Qwen3.5-9B-Q4_K_M.gguf",
+     "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf", 5_680_522_464),
+    ("moss", "vae", "flux2-vae.safetensors",
+     "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors", 336_211_292),
+    ("moss", "tokenizers", "tokenizer_qwen3.5.json",
+     "https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base/resolve/main/tokenizer/tokenizer.json", 19_989_325),
+    // Archivos compartidos de MOSS solos: los usan MiaoMiao RealSkin / Harem MOSS del catálogo
+    ("moss_base", "text_encoders", "Qwen3.5-9B-Q4_K_M.gguf",
+     "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf", 5_680_522_464),
+    ("moss_base", "vae", "flux2-vae.safetensors",
+     "https://huggingface.co/Comfy-Org/MOSS-Image/resolve/main/vae/flux2-vae.safetensors", 336_211_292),
+    ("moss_base", "tokenizers", "tokenizer_qwen3.5.json",
+     "https://huggingface.co/OpenMOSS-Team/MOSS-Image-Base/resolve/main/tokenizer/tokenizer.json", 19_989_325),
 ];
 
 pub fn pack_status(root: &Path) -> serde_json::Value {

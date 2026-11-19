@@ -44,7 +44,7 @@ const ModelPicker = {
   render() {
     const box = $("modelCards"); box.innerHTML = "";
     $("modelCount").textContent = state.options.length ? `${state.options.length} instalados` : "";
-    if (!state.options.length) box.innerHTML = '<div class="lbl empty-lib">No hay modelos: usa ＋ Civitai o ＋ Importar.</div>';
+    if (!state.options.length) box.innerHTML = '<div class="lbl empty-lib">No hay modelos: usa ＋ Catálogo, ＋ Civitai o ＋ Importar.</div>';
     for (const o of state.options) {
       const p = FAMILY[o.preset || o.family];
       const sel = $("model").value === o.id, loaded = state.loaded === o.id;
@@ -54,7 +54,8 @@ const ModelPicker = {
       c.innerHTML = `<div class="mtop"><span class="mname"></span>${sel ? '<span class="mcheck">✓</span>' : ""}<button class="mini mreveal" title="Mostrar el archivo en la carpeta" aria-label="Mostrar en la carpeta">⌕</button><button class="mini medit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button></div>
         <div class="mbadges"></div><div class="lbl mfile"></div>`;
       c.querySelector(".mname").textContent = modelTitle(o);
-      const badges = [o.family === "anima" ? "Anima" : "SDXL", o.preset === "anima" ? `Turbo · ${p.steps}` : `CFG ${p.cfg} · ${p.steps} pasos`];
+      const fam = { anima: "Anima", mage: "Mage", qwen: "Qwen-Image", moss: "MOSS" }[o.family] || "SDXL";
+      const badges = [fam, o.preset === "anima" || o.preset === "qwen" ? `Turbo · ${p.steps}` : `CFG ${p.cfg} · ${p.steps} pasos`];
       const gb = this.bytes(o); if (gb) badges.push((gb / 1073741824).toFixed(1) + " GB");
       if (est) badges.push("~" + fmtS(est));
       if (loaded) badges.push("En memoria");
@@ -93,7 +94,8 @@ $("mdFolders").onclick = (e) => {
     { label: "Toda la carpeta models", run: () => open("models") },
   ]);
 };
-$("mdCatalog").onclick = () => toast("El catálogo de modelos para PC llega en la fase 3; por ahora usa ＋ Civitai o ＋ Importar", 4500);
+// ＋ Catálogo: el catálogo predeterminado (Anima, Mage, Qwen, MOSS y los MiaoMiao), el mismo de la bienvenida
+$("mdCatalog").onclick = () => { closeModal("modelDlg"); Packs.open(); };
 $("mdCivitai").onclick = () => {
   closeModal("modelDlg");
   Civitai.type = "Checkpoint";
@@ -139,7 +141,7 @@ $("menuBtn").onclick = (e) => {
     { label: "Plantillas de configuración", run: () => CfgTemplates.open() },
     { label: "Ampliar una imagen de la galería", run: () => pickImage().then((src) => src && Upscale.open(src)) },
     { label: "Prompt desde una imagen", run: () => PicPrompt.open() },
-    { label: "Descargar modelos (Anima, Mage)", run: () => Packs.open() },
+    { label: "Catálogo de modelos", run: () => Packs.open() },
     { label: "Leer metadatos de una imagen", run: () => Meta.open() },
     { label: "Almacenamiento", run: () => Storage.open() },
     { label: "Info", run: () => Info.open() },
@@ -312,7 +314,7 @@ updatePromptMeta = function () {
   const n = Math.ceil(p.length / 3.6);
   const el = $("promptMeta");
   if (!p.trim()) { el.textContent = ""; el.className = "prompt-meta"; return; }
-  if (o?.family === "anima") {
+  if (o?.family === "anima" || o?.family === "qwen" || o?.family === "moss" || o?.family === "mage") {
     el.textContent = `≈${n} / 512 tokens`;
     el.className = "prompt-meta" + (n > 512 ? " err" : n > 435 ? " warn" : "");
   } else {
