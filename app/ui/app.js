@@ -1,7 +1,8 @@
 // HexAnima PC: interfaz. Habla con el motor local (sd-server.exe en 127.0.0.1); no usa internet.
 "use strict";
 
-const { invoke } = window.__TAURI__.core;
+const { invoke: invokeNative } = window.__TAURI__.core;
+const invoke = (command, args) => invokeNative(command, args).catch((error) => { throw UiLanguage.error(error); });
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -33,12 +34,12 @@ function savedList(key) { const v = store.get(key, []); return Array.isArray(v) 
 function fillPromptLists() {
   const templates = savedList("templates");
   const pick = $("templatePick");
-  pick.innerHTML = '<option value="">Plantillas</option>';
+  pick.innerHTML = UiLanguage.text('<option value="">Plantillas</option>');
   templates.forEach((t, i) => pick.add(new Option(t.name, String(i))));
   $("deleteTemplate").disabled = true;
   const recent = $("recentPick");
-  recent.innerHTML = '<option value="">Recientes</option>';
-  savedList("recentPrompts").forEach((p, i) => recent.add(new Option(p.prompt.slice(0, 64) || "Prompt vacío", String(i))));
+  recent.innerHTML = UiLanguage.text('<option value="">Recientes</option>');
+  savedList("recentPrompts").forEach((p, i) => recent.add(new Option(p.prompt.slice(0, 64) || UiLanguage.text("Prompt vacío"), String(i))));
 }
 function rememberPrompt(prompt, negative) {
   const items = savedList("recentPrompts").filter((p) => p.prompt !== prompt);
@@ -49,8 +50,9 @@ function rememberPrompt(prompt, negative) {
 function updatePromptMeta() {
   const p = $("prompt").value;
   const tags = p.split(",").filter((x) => x.trim()).length;
+  const pluralWildcard = UiLanguage.selected === "en" ? "s" : "es";
   const wildcards = [...p.matchAll(/\{[^{}]+\|[^{}]+\}/g)].length;
-  $("promptMeta").textContent = p.length ? `${tags} etiquetas${wildcards ? ` · ${wildcards} comodín${wildcards > 1 ? "es" : ""}` : ""}` : "";
+  $("promptMeta").textContent = p.length ? UiLanguage.template`${tags} etiquetas${wildcards ? UiLanguage.template` · ${wildcards} comodín${wildcards > 1 ? pluralWildcard : ""}` : ""}` : "";
 }
 function expandWildcards(prompt) {
   return prompt.replace(/\{([^{}]+)\}/g, (full, choices) => {
@@ -71,7 +73,7 @@ function adjustPromptWeight(delta) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fmtS = (s) => (s >= 90 ? `${(s / 60).toFixed(1)} min` : `${Math.round(s)} s`);
-const gb = (x) => (x == null ? "—" : x.toFixed(1).replace(".", ","));
+const gb = (x) => x == null ? "—" : x.toLocaleString(UiLanguage.selected, { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false });
 
 async function api(path, opts = {}) {
   const r = await fetch(state.api + path, { headers: { "Content-Type": "application/json" }, ...opts });
@@ -79,11 +81,159 @@ async function api(path, opts = {}) {
   let body;
   try { body = JSON.parse(text); } catch { body = { raw: text }; }
   if (!r.ok) {
-    const e = new Error(body.error || body.message || `HTTP ${r.status}`);
+    const e = new Error(UiLanguage.error(body.error || body.message) || `HTTP ${r.status}`);
     e.status = r.status; e.body = body;
     throw e;
   }
   return body;
+}
+
+async function engineRequest(path, opts = {}, timeout = 15000) {
+  try {
+    const deadline = AbortSignal.timeout(timeout);
+    return await api(path, { ...opts, signal: opts.signal ? AbortSignal.any([deadline, opts.signal]) : deadline });
+  } catch (error) {
+    if (!error.status || error.status === 404 && path.includes("/jobs/")) {
+      await invoke("stop_server");
+      state.loaded = null;
+      state.engine = null;
+      state.job = null;
+      if (opts.signal?.aborted) throw new Error(UiLanguage.text("Detenido. El motor se reiniciará al volver a generar."));
+      throw new Error(UiLanguage.text("El motor dejó de responder o perdió el trabajo. Se detuvo y se reiniciará al volver a generar."));
+    }
+    throw error;
+  }
+}
+
+async function requireResources(body = {}, modelBytes = 0) {
+  const memory = await refreshMemory();
+  if (!(memory?.ram_total_gb > 0)) throw new Error(UiLanguage.text("No se pudo verificar la RAM disponible."));
+  const pixels = Math.max(0, Number(body.width || 0) * Number(body.height || 0));
+  const hiresPixels = Number(body.hires?.target_width || 0) * Number(body.hires?.target_height || 0);
+  const workingGb = (pixels * (1 + Number(!!body.adetailer || !!body.extra_ad_args || !!body.control_image)) + hiresPixels) / 1048576 * 0.75;
+  const required = 2.5 + workingGb + modelBytes / 1073741824;
+  if (memory.ram_free_gb < required) {
+    throw new Error(UiLanguage.template`RAM insuficiente: ${memory.ram_free_gb.toFixed(1)} GB libres. Se estiman ${required.toFixed(1)} GB necesarios con la reserva del sistema. Reduce el tamaño, desactiva Hires o libera RAM.`);
+  }
+  if (body.width && state.device !== "cpu") {
+    if (memory.gpu_temp_c == null || memory.gpu_temp_c >= thermalThreshold() || memory.vram_free_gb == null) {
+      throw new Error(UiLanguage.text("No hay margen térmico o una lectura fiable de la GPU. Vuelve a Generar para que HexAnima evalúe el modo CPU."));
+    }
+    if (memory.vram_free_gb < 0.5 + workingGb) {
+      throw new Error(UiLanguage.text("VRAM libre insuficiente para esta resolución o sus etapas adicionales. Reduce el tamaño o desactiva Hires."));
+    }
+  }
+}
+
+async function submitImage(body) {
+  await requireResources(body);
+  const sub = await engineRequest("/sdcpp/v1/img_gen", { method: "POST", body: JSON.stringify(body) });
+  state.job = sub.id;
+  return sub;
+}
+
+function upscaleTiles(length, size = 128, overlap = 24) {
+  const starts = [0];
+  while (starts.at(-1) + size < length) starts.push(Math.min(starts.at(-1) + size - overlap, length - size));
+  return starts.map((start, i) => ({
+    start,
+    from: i ? Math.floor((start + starts[i - 1] + size) / 2) : 0,
+    to: i + 1 < starts.length ? Math.floor((start + starts[i + 1] + size) / 2) : length,
+  }));
+}
+
+async function submitUpscale(body, stopping = () => false, factor = 4, progress = () => {}) {
+  const image = new Image();
+  image.src = body.image;
+  await image.decode();
+  const w = image.naturalWidth, h = image.naturalHeight;
+  const width = w * factor, height = h * factor;
+  if (width * height > 24000000 || width > 8192 || height > 8192) {
+    throw new Error(UiLanguage.text("La imagen supera el límite de Ampliar. Usa ×2 o recorta la foto."));
+  }
+  const required = 2.5 + 0.75 + (w * h * 4 + width * height * 16) / 1073741824;
+  const ensureMemory = async () => {
+    const memory = await refreshMemory();
+    if (memory?.ram_free_gb == null || memory.ram_free_gb < required) {
+      throw new Error(UiLanguage.template`Ampliar necesita unos ${required.toFixed(1)} GB de RAM libre con la reserva de Windows.`);
+    }
+  };
+  if (stopping()) throw new Error("Detenido.");
+  // El escalador tiene su propio modelo. Reiniciar libera los pesos de difusión
+  // y evita que la ampliación dependa de la gráfica o de su temperatura.
+  if (!state.cpuRecovery || state.loaded || state.device !== "cpu") {
+    const engine = (state.engines || []).find((name) => ["cpu", "cuda", "vulkan"].includes(name));
+    if (!engine) throw new Error(UiLanguage.text("Hace falta un motor local compatible con CPU para ampliar."));
+    state.loaded = null;
+    if (!(await startEngine(engine, true))) throw new Error(UiLanguage.text("No se pudo iniciar el motor de ampliación en CPU."));
+  }
+  await ensureMemory();
+  const out = document.createElement("canvas"), tile = document.createElement("canvas");
+  out.width = width; out.height = height;
+  const output = out.getContext("2d");
+  output.imageSmoothingQuality = "high";
+  const xs = upscaleTiles(w), ys = upscaleTiles(h);
+  const controller = new AbortController();
+  const check = setInterval(() => { if (stopping()) controller.abort(); }, 250);
+  try {
+    let done = 0;
+    for (const y of ys) for (const x of xs) {
+      if (stopping()) throw new Error("Detenido.");
+      const tw = Math.min(128, w - x.start), th = Math.min(128, h - y.start);
+      tile.width = tw; tile.height = th;
+      tile.getContext("2d").drawImage(image, x.start, y.start, tw, th, 0, 0, tw, th);
+      await ensureMemory();
+      if (stopping()) throw new Error("Detenido.");
+      const result = await engineRequest("/sdcpp/v1/upscale", {
+        method: "POST", signal: controller.signal,
+        body: JSON.stringify({ ...body, image: tile.toDataURL("image/png"), repeats: 1 }),
+      }, 600000);
+      const b64 = result.images?.[0]?.b64_json;
+      if (!b64) throw new Error(UiLanguage.text("El motor no devolvió el mosaico ampliado."));
+      const enlarged = new Image();
+      enlarged.src = "data:image/png;base64," + b64;
+      await enlarged.decode();
+      if (enlarged.naturalWidth !== tw * 4 || enlarged.naturalHeight !== th * 4) {
+        throw new Error(UiLanguage.text("El motor devolvió un mosaico con un tamaño inesperado."));
+      }
+      const keepW = x.to - x.from, keepH = y.to - y.from;
+      output.drawImage(enlarged, (x.from - x.start) * 4, (y.from - y.start) * 4, keepW * 4, keepH * 4,
+        x.from * factor, y.from * factor, keepW * factor, keepH * factor);
+      progress(++done, xs.length * ys.length);
+    }
+    if (stopping()) throw new Error("Detenido.");
+    return { width, height, images: [{ b64_json: out.toDataURL("image/png").split(",")[1] }] };
+  } finally {
+    clearInterval(check);
+    tile.width = 0; out.width = 0;
+  }
+}
+
+async function waitForImage(id, stopping, onProgress) {
+  const path = "/sdcpp/v1/jobs/" + id;
+  let cancelAt;
+  for (;;) {
+    if (stopping() && cancelAt == null) {
+      cancelAt = Date.now();
+      await engineRequest(path + "/cancel", { method: "POST" }).catch((error) => {
+        if (!error.status) throw error;
+      });
+    }
+    await sleep(400);
+    const job = await engineRequest(path);
+    if (["completed", "cancelled", "failed"].includes(job.status)) {
+      state.job = null;
+      return job;
+    }
+    if (cancelAt != null && Date.now() - cancelAt > 60000) {
+      await invoke("stop_server");
+      state.loaded = null;
+      state.engine = null;
+      state.job = null;
+      throw new Error(UiLanguage.text("El motor no confirmó la cancelación. Se detuvo y se reiniciará al volver a generar."));
+    }
+    onProgress(job);
+  }
 }
 
 function setStatus(text, kind = "") {
@@ -148,8 +298,8 @@ function updateSizeTxt() {
   $("customSize").classList.toggle("hidden", state.aspect !== "c");
   $("sizeTxt").className = "lbl" + (over ? " warn" : "");
   $("sizeTxt").textContent = over
-    ? `${w} × ${h} · supera el máximo recomendado (${ms} px): tardará más y puede quedarse sin memoria`
-    : `${w} × ${h}${state.aspect === "c" ? " · múltiplos de 64" : ""} · máximo del perfil ${ms} px`;
+    ? UiLanguage.template`${w} × ${h} · supera el máximo recomendado (${ms} px): tardará más y puede quedarse sin memoria`
+    : UiLanguage.template`${w} × ${h}${state.aspect === "c" ? UiLanguage.text(" · múltiplos de 64") : ""} · máximo del perfil ${ms} px`;
   if (typeof Hires !== "undefined") Hires.refresh();
 }
 
@@ -174,10 +324,10 @@ $("swapSize").onclick = () => {
 // ---------- hardware ----------
 function renderHw(hw) {
   const g = hw.gpu;
-  $("hwName").textContent = g ? `${g.name.replace("NVIDIA GeForce ", "")}${g.vram_gb ? " · " + gb(g.vram_gb) + " GB" : ""}` : "Sin GPU compatible";
-  const prof = { bajo: "Bajo", medio: "Medio", alto: "Alto" }[hw.profile] || hw.profile;
-  $("hwProfile").textContent = `Perfil: ${prof} · ${hw.engine.toUpperCase()}${hw.backend_device ? " (" + hw.backend_device + ")" : ""}`;
-  $("setInfo").textContent = `Gráfica: ${g ? g.name : "ninguna"} · RAM ${gb(hw.ram_gb)} GB · motor ${hw.engine} · dispositivo ${hw.backend_device || "auto"} · perfil ${hw.profile}`;
+  $("hwName").textContent = g ? `${g.name.replace("NVIDIA GeForce ", "")}${g.vram_gb ? " · " + gb(g.vram_gb) + " GB" : ""}` : UiLanguage.text("Sin GPU compatible");
+  const prof = profileLabel(hw.profile);
+  $("hwProfile").textContent = UiLanguage.template`Perfil: ${prof} · ${hw.engine.toUpperCase()}${hw.backend_device ? " (" + hw.backend_device + ")" : ""}`;
+  $("setInfo").textContent = UiLanguage.template`Gráfica: ${g ? g.name : UiLanguage.text("ninguna")} · RAM ${gb(hw.ram_gb)} GB · motor ${hw.engine} · dispositivo ${hw.backend_device || "auto"} · perfil ${prof}`;
 }
 
 async function refreshMemory() {
@@ -192,6 +342,7 @@ async function refreshMemory() {
     $("ramTxt").textContent = `${gb(ru)} / ${gb(m.ram_total_gb)} GB`;
     $("ramBar").style.width = `${Math.min(100, (ru / m.ram_total_gb) * 100)}%`;
     $("tempTxt").textContent = m.gpu_temp_c != null ? `GPU ${m.gpu_temp_c} °C` : "";
+    $("tempTxt").title = UiLanguage.template`Umbral de HexAnima antes de generar: ${thermalThreshold()} °C`;
     // portátil desenchufado: la gráfica va limitada (GTX 1650 a 20 W, ~3 veces más lento)
     $("battTxt").classList.toggle("hidden", !m.on_battery);
     return m;
@@ -236,28 +387,53 @@ function engineFor(opt) {
   return state.hw?.engine;
 }
 
-async function startEngine(engine) {
-  setStatus("Iniciando motor…");
+function thermalThreshold() {
+  return { bajo: 75, medio: 78, alto: 80 }[state.hw?.profile] ?? 75;
+}
+
+function profileLabel(profile) {
+  if (profile === "alto") return UiLanguage.selected === "en" ? "High" : "Alto";
+  return { bajo: UiLanguage.text("Bajo"), medio: UiLanguage.text("Medio") }[profile] || profile;
+}
+
+function generationEngine(opt, memory) {
+  const preferred = engineFor(opt);
+  if (preferred === "cpu") return { engine: preferred, limitedCpu: true };
+  const threshold = thermalThreshold();
+  const target = state.hw?.gpu_target_temp_c;
+  // nvidia-smi mide la primera NVIDIA. Vulkan tiene su propia enumeración.
+  const knownDevice = preferred === "torch" || preferred === "cuda" && !/--backend\b/.test(store.get("extra", ""));
+  if (knownDevice && target != null && target <= threshold &&
+      memory?.gpu_temp_c != null && memory.gpu_temp_c < threshold) {
+    return { engine: preferred, limitedCpu: false };
+  }
+  const native = (state.engines || []).find((engine) => ["cpu", "cuda", "vulkan"].includes(engine));
+  return { engine: preferred === "torch" ? native : preferred, limitedCpu: true };
+}
+
+async function startEngine(engine, cpuRecovery = false) {
+  setStatus(UiLanguage.text("Iniciando motor…"));
   // ADetailer: el detector elegido se carga al arrancar el motor (uno a la vez).
   const ad = typeof Ad !== "undefined" ? Ad.wanted() : null;
-  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad };
+  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad, cpu_recovery: cpuRecovery };
   const r = await invoke("start_server", { opts, engine: engine || null });
+  state.cpuRecovery = cpuRecovery;
   state.adLoaded = ad;
   state.api = `http://127.0.0.1:${r.port}`;
   state.engine = r.engine; state.device = r.device;
-  if (state.hw) $("hwProfile").textContent = `Perfil: ${({ bajo: "Bajo", medio: "Medio", alto: "Alto" })[state.hw.profile] || state.hw.profile} · ${r.engine === "torch" ? "PYTORCH" : r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
+  if (state.hw) $("hwProfile").textContent = UiLanguage.template`Perfil: ${profileLabel(state.hw.profile)} · ${r.engine === "torch" ? "PYTORCH" : r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
     try { await api("/sdcpp/v1/models/status"); return true; } catch { /* aun arrancando */ }
     const s = await invoke("server_status");
     if (!s.running) {
       $("serverLog").textContent = s.log || "";
-      setStatus("El motor se cerró al iniciar. Revisa Ajustes → Registro del motor.", "err");
+      setStatus(UiLanguage.text("El motor se cerró al iniciar. Revisa Ajustes → Registro del motor."), "err");
       return false;
     }
     await sleep(400);
   }
-  setStatus("El motor no responde.", "err");
+  setStatus(UiLanguage.text("El motor no responde."), "err");
   return false;
 }
 
@@ -333,8 +509,8 @@ async function scanModels() {
   sel.innerHTML = "";
   for (const o of opts) sel.add(new Option(o.label, o.id));
   if (!opts.length) {
-    sel.add(new Option("No hay modelos", ""));
-    setStatus("Copia un checkpoint SDXL a models\\checkpoints o descarga Anima.", "warn");
+    sel.add(new Option(UiLanguage.text("No hay modelos"), ""));
+    setStatus(UiLanguage.text("Copia un checkpoint SDXL a models\\checkpoints o descarga Anima."), "warn");
     return;
   }
   const last = opts.some((o) => o.id === prev) ? prev : store.get("model", null);
@@ -368,11 +544,11 @@ function applyPreset(opt) {
 const TAE = { qwen: "tae_qwen21", anima: "tae_wan21", sdxl: "tae_sdxl" };
 async function taeFor(opt) {
   const kind = TAE[opt.family];
-  if (!kind || state.engine === "torch") return null;
+  if (!kind || state.engine === "torch" || state.cpuRecovery || (state.hw?.gpu?.vram_gb > 0 && state.hw.gpu.vram_gb <= 2)) return null;
   try {
     let a = (await invoke("asset_status")).find((x) => x.kind === kind);
     if (a && !a.installed) {
-      setStatus("Descargando la vista previa nítida (una sola vez)…");
+      setStatus(UiLanguage.text("Descargando la vista previa nítida (una sola vez)…"));
       await invoke("asset_download", { kind });
       await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
       a = { ...a, installed: true };
@@ -381,41 +557,47 @@ async function taeFor(opt) {
   } catch { return null; }
 }
 
-async function loadModel() {
+async function loadModel(plan, reserved = false) {
   const opt = currentOption();
-  if (!opt || state.busy) return;
-  const want = engineFor(opt);
-  if (want && state.engine && want !== state.engine) {
-    setStatus(`Cambiando al motor ${want.toUpperCase()}…`);
-    state.loaded = null;
-    if (!(await startEngine(want))) return;
-    await refreshEngineMenus();
-  }
+  if (!opt || state.busy && !reserved) return;
   state.busy = true;
   $("genBtn").disabled = true; $("loadBtn").disabled = true;
   store.set("model", opt.id);
-  applyPreset(opt);
+  if (state.loaded !== opt.id) applyPreset(opt);
   const t0 = Date.now();
-  const tick = setInterval(() => setStatus(`Cargando ${opt.label}… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
+  let tick;
   try {
+    const { engine, limitedCpu } = plan ?? generationEngine(opt, await refreshMemory());
+    if (!engine) throw new Error(UiLanguage.text("hace falta un motor compatible con CPU para aplicar el perfil térmico"));
+    if (engine !== state.engine || limitedCpu !== !!state.cpuRecovery) {
+      state.loaded = null;
+      if (!(await startEngine(engine, limitedCpu))) return;
+      await refreshEngineMenus();
+    }
+    tick = setInterval(() => setStatus(UiLanguage.template`Cargando ${opt.label}… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
     const models = typeof Vae !== "undefined" ? Vae.modelsFor(opt) : opt.models;
     // Vista previa nítida: el autoencoder diminuto de la familia (solo para ver la imagen mientras se genera)
     const tae = await taeFor(opt);
     if (tae) models.tae = tae;
     state.previewMode = tae ? "tae" : "proj";
-    await api("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify({ recipe: opt.recipe, models }) });
+    const modelRequest = { recipe: opt.recipe, models };
+    await requireResources({}, await invoke("model_bytes", { files: Object.values(models) }));
+    await engineRequest("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify(modelRequest) }, 180000);
+    state.modelRequest = modelRequest;
     state.loaded = opt.id;
-    setStatus(`Listo · ${opt.label} (${Math.round((Date.now() - t0) / 1000)} s)`, "ok");
+    setStatus(UiLanguage.template`Listo · ${opt.label} (${Math.round((Date.now() - t0) / 1000)} s)`, "ok");
   } catch (e) {
     state.loaded = null;
     const s = await invoke("server_status");
     $("serverLog").textContent = s.log || "";
-    setStatus(`No se pudo cargar: ${e.message}`, "err");
+    setStatus(UiLanguage.template`No se pudo cargar: ${e.message}`, "err");
   } finally {
     clearInterval(tick);
-    state.busy = false;
-    $("loadBtn").disabled = false;
-    $("genBtn").disabled = !opt;
+    if (!reserved) {
+      state.busy = false;
+      $("loadBtn").disabled = false;
+      $("genBtn").disabled = !opt;
+    }
   }
 }
 
@@ -429,7 +611,7 @@ const SAMPLER_NAMES = {
 };
 const SCHEDULER_NAMES = {
   discrete: "Discreto", normal: "Normal", karras: "Karras", exponential: "Exponencial", ays: "AYS", gits: "GITS",
-  sgm_uniform: "SGM Uniform", simple: "Simple", smoothstep: "Smoothstep", kl_optimal: "KL óptimo", lcm: "LCM",
+  sgm_uniform: "SGM Uniform", simple: "Simple", smoothstep: "Smoothstep", kl_optimal: UiLanguage.text("KL óptimo"), lcm: "LCM",
   bong_tangent: "Bong tangent", beta: "Beta", logit_normal: "Logit normal",
 };
 function prettyName(n, map) { return map[n] || n.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()); }
@@ -464,27 +646,27 @@ async function refreshEngineMenus() {
 
 
 // ---------- generar ----------
-const STAGE = { loading_control: "Cargando el ControlNet de pose",
-  queued: "En cola", waiting: "Esperando", preparing: "Preparando", conditioning: "Leyendo el prompt",
-  sampling: "Generando", vae_decode: "Decodificando imagen", vae_encode: "Codificando imagen",
-  upscaling: "Ampliando", adetailer: "Corrigiendo detalles", encoding: "Guardando", reference: "Preparando el personaje de referencia",
+const STAGE = { loading_control: UiLanguage.text("Cargando el ControlNet de pose"),
+  queued: UiLanguage.text("En cola"), waiting: UiLanguage.text("Esperando"), preparing: UiLanguage.text("Preparando"), conditioning: UiLanguage.text("Leyendo el prompt"),
+  sampling: UiLanguage.text("Generando"), vae_decode: UiLanguage.text("Decodificando imagen"), vae_encode: UiLanguage.text("Codificando imagen"),
+  upscaling: UiLanguage.text("Ampliando"), adetailer: "Corrigiendo detalles", encoding: UiLanguage.text("Guardando"), reference: UiLanguage.text("Preparando el personaje de referencia"),
 };
 
 function showEstimate() {
   const opt = currentOption();
   const b = opt && store.get("bench:" + opt.id + ":" + currentSize().join("x"), null);
-  $("estimate").textContent = b ? `~${fmtS(b.fixed + b.step * +$("steps").value)} estimados con tu equipo` : "";
+  $("estimate").textContent = b ? UiLanguage.template`~${fmtS(b.fixed + b.step * +$("steps").value)} estimados con tu equipo` : "";
 }
 
 async function waitIfHot() {
+  if (state.device === "cpu") return;
+  const threshold = thermalThreshold();
   let m = await refreshMemory();
-  if (!m || m.gpu_temp_c == null || m.gpu_temp_c < 83) return;
-  const t0 = Date.now();
-  while (!state.stop && Date.now() - t0 < 600000) {
-    $("progStage").textContent = `GPU a ${m.gpu_temp_c} °C: pausa para enfriar…`;
+  if (!m || m.gpu_temp_c == null || m.gpu_temp_c < threshold) return;
+  while (!state.stop && m?.gpu_temp_c != null && m.gpu_temp_c > threshold - 8) {
+    $("progStage").textContent = UiLanguage.template`GPU a ${m.gpu_temp_c} °C: pausa para enfriar…`;
     await sleep(5000);
     m = await refreshMemory();
-    if (!m || m.gpu_temp_c == null || m.gpu_temp_c <= 72) break;
   }
 }
 
@@ -500,7 +682,7 @@ async function runOne(opt, seed, ov = {}) {
   const promptWithTags = await EsEn.apply(expandWildcards($("prompt").value.trim()));
   const negative = await EsEn.apply($("neg").value.trim());
   const loraSpec = Loras.fromPrompt(promptWithTags);
-  if (loraSpec.missing.length) setStatus(`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
+  if (loraSpec.missing.length) setStatus(UiLanguage.template`LoRA no encontrado: ${loraSpec.missing.join(", ")} (se ignora)`, "warn");
   const body = {
     ...(editing ? { init_image: state.editImage.src, strength: clampNum($("editStrength"), 45) / 100 } : {}),
     // «✎ Zona a cambiar»: blanco = se vuelve a generar, negro = se conserva.
@@ -534,21 +716,24 @@ async function runOne(opt, seed, ov = {}) {
   if (ov.cfg != null) body.sample_params.guidance.txt_cfg = ov.cfg;
   if (ov.steps != null) body.sample_params.sample_steps = ov.steps;
   const usedSteps = body.sample_params.sample_steps, usedCfg = body.sample_params.guidance.txt_cfg;
-  const sub = await api("/sdcpp/v1/img_gen", { method: "POST", body: JSON.stringify(body) });
-  state.job = sub.id;
+  const canRecover = ["cuda", "vulkan"].includes(state.engine) && !state.cpuRecovery;
+  const previousLog = canRecover ? await invoke("server_status").then((s) => s.log).catch(() => null) : null;
+  if (state.stop) return null;
+  let sub = await submitImage(body);
   let sampStart = null, sampMs = 0;
   for (;;) {
-    await sleep(400);
-    const j = await api("/sdcpp/v1/jobs/" + sub.id);
-    const p = j.progress || {};
-    const st = STAGE[p.stage] || p.stage || "Trabajando";
-    const cnt = p.unit === "steps" && p.total ? ` ${p.completed}/${p.total}` : "";
-    $("progStage").textContent = st + cnt;
-    $("progTime").textContent = fmtS((p.elapsed_ms || 0) / 1000);
-    $("progBar").style.width = p.total ? `${(100 * (p.completed || 0)) / p.total}%` : "0%";
-    if (p.stage === "sampling" && sampStart == null) sampStart = p.elapsed_ms;
-    if (p.stage !== "sampling" && sampStart != null && !sampMs) sampMs = p.elapsed_ms - sampStart;
-    if (j.preview?.b64_json && p.stage === "sampling") showImage("data:image/png;base64," + j.preview.b64_json, false);
+    const j = await waitForImage(sub.id, () => state.stop, (j) => {
+      const p = j.progress || {};
+      const st = STAGE[p.stage] || p.stage || UiLanguage.text("Trabajando");
+      const cnt = p.unit === "steps" && p.total ? ` ${p.completed}/${p.total}` : "";
+      $("progStage").textContent = st + cnt;
+      $("progTime").textContent = fmtS((p.elapsed_ms || 0) / 1000);
+      $("progBar").style.width = p.total ? `${(100 * (p.completed || 0)) / p.total}%` : "0%";
+      if (p.stage === "sampling" && sampStart == null) sampStart = p.elapsed_ms;
+      if (p.stage !== "sampling" && sampStart != null && !sampMs) sampMs = p.elapsed_ms - sampStart;
+      if (j.preview?.b64_json && p.stage === "sampling") showImage("data:image/png;base64," + j.preview.b64_json, false);
+    });
+    if (state.stop) return null;
     if (j.status === "completed") {
       const img = j.result.images[0].b64_json;
       showImage("data:image/png;base64," + img);
@@ -567,14 +752,42 @@ async function runOne(opt, seed, ov = {}) {
       Session.add({ name: path, src: "data:image/png;base64," + img, meta, before: editing ? state.editImage.src : null });
       return { total, path, src: "data:image/png;base64," + img, meta };
     }
-    if (j.status === "failed") throw new Error(j.error?.message || "falló la generación");
+    if (j.status === "failed") {
+      state.job = null;
+      if (state.stop) return null;
+      const error = UiLanguage.error(j.error?.message) || UiLanguage.text("falló la generación");
+      if (!canRecover || state.cpuRecovery) throw new Error(error);
+      const log = await invoke("server_status").then((s) => s.log).catch(() => null);
+      const memoryFailure = /out of (?:device )?memory|cannot make enough memory available/i;
+      const previousLine = previousLog?.split("\n").at(-1);
+      const previousEnd = previousLine ? log?.lastIndexOf(previousLine) ?? -1 : -1;
+      const newLog = previousEnd < 0 ? log : log.slice(previousEnd + previousLine.length);
+      if (!memoryFailure.test(error) && !memoryFailure.test(newLog || "")) throw new Error(error);
+      if (state.stop) return null;
+      $("progStage").textContent = UiLanguage.text("VRAM insuficiente. Preparando reintento en CPU…");
+      $("progBar").style.width = "0%";
+      state.loaded = null;
+      if (!(await startEngine(state.engine, true))) throw new Error(UiLanguage.text("no se pudo iniciar el reintento en CPU"));
+      if (state.stop) return null;
+      const { tae, ...models } = state.modelRequest.models;
+      await requireResources({}, await invoke("model_bytes", { files: Object.values(models) }));
+      await engineRequest("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify({ ...state.modelRequest, models }) }, 180000);
+      if (state.stop) return null;
+      state.previewMode = "proj";
+      body.preview = "proj";
+      $("progStage").textContent = UiLanguage.text("Reintentando en CPU con pesos mapeados desde disco…");
+      setStatus(UiLanguage.text("VRAM insuficiente · continuando en CPU"), "warn");
+      sub = await submitImage(body);
+      sampStart = null;
+      sampMs = 0;
+    }
     if (j.status === "cancelled") return null;
   }
 }
 
 /** VAE por mosaicos: en Vulkan hace fallar la gráfica (ErrorDeviceLost en la GTX 1650), así que
  *  solo se usa con CUDA en el perfil bajo. Sin mosaicos, Vulkan decodifica 832×1216 en ~23 s. */
-function vaeTiling() { return (state.engine || state.hw.engine) === "cuda" && state.hw.profile === "bajo"; }
+function vaeTiling() { return state.cpuRecovery || (state.engine || state.hw.engine) === "cuda" && state.hw.profile === "bajo"; }
 
 function showImage(src, final = true) {
   $("result").src = src;
@@ -587,7 +800,7 @@ function readFileDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("No se pudo leer la imagen"));
+    reader.onerror = () => reject(new Error(UiLanguage.text("No se pudo leer la imagen")));
     reader.readAsDataURL(file);
   });
 }
@@ -595,7 +808,7 @@ function readFileDataUrl(file) {
 // Ajusta la foto al máximo del perfil y a múltiplos de 64 (lo que pide el motor).
 async function prepareEditImage(src) {
   const image = await new Promise((resolve, reject) => {
-    const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error("formato no válido")); img.src = src;
+    const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error(UiLanguage.text("formato no válido"))); img.src = src;
   });
   const limit = maxSide(currentOption()?.family || "sdxl");
   const scale = Math.min(1, limit / Math.max(image.naturalWidth, image.naturalHeight));
@@ -608,14 +821,18 @@ async function prepareEditImage(src) {
 
 async function setEditImage(src) {
   try {
-    state.editImage = await prepareEditImage(src);
-    if (typeof Mask !== "undefined") Mask.paint = null;
-    state.editMask = null;
-    $("editPreview").src = state.editImage.src;
-    $("editPreview").classList.add("on"); $("editEmpty").classList.add("off");
-    $("editPreview").title = `${state.editImage.w} × ${state.editImage.h}`;
-    setMode("edit");
-  } catch (e) { setStatus("No se pudo abrir la foto: " + e.message, "err"); }
+    usePreparedEditImage(await prepareEditImage(src));
+  } catch (e) { setStatus(UiLanguage.text("No se pudo abrir la foto: ") + e.message, "err"); }
+}
+
+function usePreparedEditImage(image) {
+  state.editImage = image;
+  if (typeof Mask !== "undefined") Mask.paint = null;
+  state.editMask = null;
+  $("editPreview").src = image.src;
+  $("editPreview").classList.add("on"); $("editEmpty").classList.add("off");
+  $("editPreview").title = `${image.w} × ${image.h}`;
+  setMode("edit");
 }
 
 /** Editar una foto está dentro de Crear (como el teléfono): con foto se genera a partir de ella. */
@@ -630,36 +847,36 @@ function setMode(mode) {
   $("editClear").classList.toggle("hidden", !has);
   $("editBox").classList.toggle("on", has);
   if (has && typeof Acc !== "undefined") Acc.open("edit");
-  $("editHint").textContent = !has ? "Elige una foto para generar a partir de ella (imagen a imagen), o márcala como referencia del personaje para copiar su aspecto."
-    : ref ? "Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño»."
-    : `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).`;
+  $("editHint").textContent = !has ? UiLanguage.text("Elige una foto para generar a partir de ella (imagen a imagen), o márcala como referencia del personaje para copiar su aspecto.")
+    : ref ? UiLanguage.text("Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño».")
+    : UiLanguage.template`Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}).`;
   if (!has) state.editMask = null;
   if (typeof Mask !== "undefined") { if (!has) Mask.paint = null; Mask.refresh(); }
   updateGenLabel();
 }
 
 function updateGenLabel() {
-  $("genBtn").textContent = state.mode === "edit" ? "Generar desde la foto" : "Generar";
+  $("genBtn").textContent = state.mode === "edit" ? UiLanguage.text("Generar desde la foto") : UiLanguage.text("Generar");
   const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
-  if (state.mode === "edit" && state.editImage) { $("sizeTxt").textContent = `Editando a ${w} × ${h}: el tamaño de la foto`; if (typeof Hires !== "undefined") Hires.refresh(); }
+  if (state.mode === "edit" && state.editImage) { $("sizeTxt").textContent = UiLanguage.template`Editando a ${w} × ${h}: el tamaño de la foto`; if (typeof Hires !== "undefined") Hires.refresh(); }
   else updateSizeTxt();
 }
 
 async function upscaleCurrent() {
   if (!state.currentImage || state.busy) return;
   state.busy = true; $("upscaleBtn").disabled = true;
-  setStatus("Ampliando imagen…");
+  setStatus(UiLanguage.text("Ampliando imagen…"));
   try {
-    const result = await api("/sdcpp/v1/upscale", { method: "POST", body: JSON.stringify({ image: state.currentImage, upscaler: state.upscaler, repeats: 1, output_format: "png" }) });
+    const result = await submitUpscale({ image: state.currentImage, upscaler: state.upscaler, repeats: 1, output_format: "png" });
     const image = result.images?.[0]?.b64_json;
-    if (!image) throw new Error("El motor no devolvió una imagen ampliada");
+    if (!image) throw new Error(UiLanguage.text("El motor no devolvió una imagen ampliada"));
     const base = Session.cur()?.meta || {};
     const meta = { ...base, width: result.width, height: result.height, upscaled: result.upscaler || "ESRGAN", created: new Date().toISOString() };
     const name = await invoke("save_image", { b64: image, prefix: "upscale", meta });
     Session.add({ name, src: "data:image/png;base64," + image, meta, before: state.currentImage });
-    setStatus(`Ampliación lista · ${result.width} × ${result.height} · ${result.upscaler || "ESRGAN"}`, "ok");
+    setStatus(UiLanguage.template`Ampliación lista · ${result.width} × ${result.height} · ${result.upscaler || "ESRGAN"}`, "ok");
   } catch (e) {
-    setStatus("No se pudo ampliar: " + e.message, "err");
+    setStatus(UiLanguage.text("No se pudo ampliar: ") + e.message, "err");
   } finally {
     state.busy = false; $("upscaleBtn").disabled = false;
     $("genBtn").disabled = !currentOption();
@@ -687,39 +904,45 @@ async function generate(opts = {}) {
   const opt = currentOption();
   if (!opt || state.busy) return;
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
-  if (!(await Ad.ensure())) return;
-  if (typeof Pose !== "undefined" && !(await Pose.ensure())) return;
-  // Con la RAM casi llena el motor tiene que esperar al disco y cada paso tarda el doble o más.
-  try {
-    const m = await invoke("memory");
-    if (m.ram_free_gb != null && m.ram_free_gb < 2.5) toast(`Queda poca RAM libre (${m.ram_free_gb.toFixed(1)} GB): cierra programas como el navegador o Discord para que no vaya más lento.`, 7000);
-  } catch { /* vista previa */ }
-  if (state.loaded !== opt.id) { await loadModel(); if (state.loaded !== opt.id) return; }
-  
-  const saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value, mask: state.editMask } : null;
-  if (opts.init) { state.mode = "edit"; state.editImage = opts.init; state.editMask = opts.mask || null; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
   state.busy = true; state.stop = false;
   $("genBtn").disabled = true; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
-  $("progress").classList.add("on");
-  store.set("params:" + opt.id, { steps: +$("steps").value, cfg: +$("cfg").value, sampler: $("sampler").value, scheduler: $("scheduler").value, neg: $("neg").value });
-  store.set("prompt", $("prompt").value);
-  rememberPrompt($("prompt").value.trim(), $("neg").value.trim());
-  // ⊞ Comparar 2×2: siempre 4 imágenes y el lote no se puede ampliar
-  const grid = opts.grid || 0;
-  state.batchTarget = grid ? 4 : Math.min(999, Math.max(1, opts.count || parseInt($("count").value, 10) || 1));
-  let seed = opts.newSeed ? -1 : parseInt($("seed").value, 10);
-  if (!(seed >= 0)) seed = Math.floor(Math.random() * 2 ** 31);
-  $("extendBatch").disabled = !!grid;
-  const made = [], labels = [];
+  let saved;
   try {
+    if (!(await Ad.ensure(true)) || state.stop) return;
+    if (typeof Pose !== "undefined" && !(await Pose.ensure())) return;
+    // Con la RAM casi llena el motor tiene que esperar al disco y cada paso tarda el doble o más.
+    const memory = await refreshMemory();
+    if (memory?.ram_free_gb != null && memory.ram_free_gb < 2.5) toast(UiLanguage.template`Queda poca RAM libre (${memory.ram_free_gb.toFixed(1)} GB): cierra programas como el navegador o Discord para que no vaya más lento.`, 7000);
+    const plan = generationEngine(opt, memory);
+    if (state.loaded !== opt.id || plan.engine !== state.engine || plan.limitedCpu !== !!state.cpuRecovery) {
+      await loadModel(plan, true);
+      if (state.loaded !== opt.id) return;
+    }
+
+    if (state.stop) return;
+    saved = opts.init ? { mode: state.mode, img: state.editImage, str: $("editStrength").value, mask: state.editMask } : null;
+    if (opts.init) { state.mode = "edit"; state.editImage = opts.init; state.editMask = opts.mask || null; $("editStrength").value = String(Math.round((opts.strength ?? 0.45) * 100)); }
+    $("progress").classList.add("on");
+    store.set("params:" + opt.id, { steps: +$("steps").value, cfg: +$("cfg").value, sampler: $("sampler").value, scheduler: $("scheduler").value, neg: $("neg").value });
+    store.set("prompt", $("prompt").value);
+    rememberPrompt($("prompt").value.trim(), $("neg").value.trim());
+    // ⊞ Comparar 2×2: siempre 4 imágenes y el lote no se puede ampliar
+    const grid = opts.grid || 0;
+    state.batchTarget = grid ? 4 : Math.min(999, Math.max(1, opts.count || parseInt($("count").value, 10) || 1));
+    let seed = opts.newSeed ? -1 : parseInt($("seed").value, 10);
+    if (!(seed >= 0)) seed = Math.floor(Math.random() * 2 ** 31);
+    $("extendBatch").disabled = !!grid;
+    const made = [], labels = [];
     for (let i = 0; i < state.batchTarget && !state.stop; i++) {
-      if (i > 0) await waitIfHot();
+      await waitIfHot();
+      if (state.stop) break;
       const g = grid ? Grids.plan(grid, i, seed) : { seed: seed + i };
-      setStatus(state.batchTarget > 1 ? `Imagen ${i + 1} de ${state.batchTarget} · ${g.label || "seed " + g.seed}` : `Generando · seed ${seed}`);
+      const status = state.batchTarget > 1 ? UiLanguage.template`Imagen ${i + 1} de ${state.batchTarget} · ${g.label || "seed " + g.seed}` : UiLanguage.template`Generando · seed ${seed}`;
+      setStatus(state.cpuRecovery ? UiLanguage.template`${status} · CPU limitada por perfil térmico` : status);
       const r = await runOne(opt, g.seed, g);
-      if (!r) { setStatus("Detenido.", "warn"); break; }
+      if (!r) { setStatus(UiLanguage.text("Detenido."), "warn"); break; }
       made.push(r); if (grid) labels.push(g.label);
-      setStatus(`Lista en ${fmtS(r.total)} · seed ${g.seed} · guardada en outputs`, "ok");
+      setStatus(UiLanguage.template`Lista en ${fmtS(r.total)} · seed ${g.seed} · guardada en outputs`, "ok");
     }
     // Lote de 2 o más: hojas de contacto; comparación: la cuadrícula 2×2 (no si se detuvo)
     if (!state.stop && typeof Grids !== "undefined") await Grids.finish(grid, made, labels);
@@ -745,12 +968,11 @@ $("extendBatch").onclick = () => {
   const previous = state.batchTarget;
   state.batchTarget = Math.min(999, previous + add);
   $("count").value = String(state.batchTarget - previous);
-  setStatus(`Cola ampliada: ${state.batchTarget} imágenes · se añadirán con la seed siguiente.`, "ok");
+  setStatus(UiLanguage.template`Cola ampliada: ${state.batchTarget} imágenes · se añadirán con la seed siguiente.`, "ok");
 };
 
-$("stopBtn").onclick = async () => {
+$("stopBtn").onclick = () => {
   state.stop = true;
-  if (state.job) { try { await api(`/sdcpp/v1/jobs/${state.job}/cancel`, { method: "POST" }); } catch { /* ya terminó */ } }
 };
 
 // ---------- controles ----------
@@ -780,8 +1002,8 @@ $("saveTemplate").onclick = async () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) { $("prompt").focus(); return; }
   const r = await ask({
-    title: "Guardar plantilla", input: { value: prompt.slice(0, 32), placeholder: "Nombre de la plantilla" },
-    buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }],
+    title: UiLanguage.text("Guardar plantilla"), input: { value: prompt.slice(0, 32), placeholder: UiLanguage.text("Nombre de la plantilla") },
+    buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Guardar"), value: "@input", primary: true }],
   });
   const name = r?.input;
   if (!name?.trim()) return;
@@ -830,9 +1052,9 @@ $("model").onchange = () => {
   if (!opt) return;
   applyPreset(opt);
   $("genBtn").disabled = false;
-  if (state.loaded !== opt.id) setStatus("No está en memoria · se carga al generar");
+  if (state.loaded !== opt.id) setStatus(UiLanguage.text("No está en memoria · se carga al generar"));
 };
-$("loadBtn").onclick = loadModel;
+$("loadBtn").onclick = () => loadModel();
 $("genBtn").onclick = () => generate();
 $("prompt").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.ctrlKey) generate(); });
 // (la barra de la imagen la maneja session.js)
@@ -847,15 +1069,29 @@ for (const n of document.querySelectorAll(".nav")) {
 }
 
 $("optOffload").checked = store.get("offload", true);
+$("optLanguage").onchange = () => {
+  if (state.busy) {
+    $("optLanguage").value = UiLanguage.selected;
+    return toast(UiLanguage.text("Espera a que termine la generación para cambiar el idioma."));
+  }
+  try {
+    UiLanguage.set($("optLanguage").value);
+    store.set("prompt", $("prompt").value);
+    location.reload();
+  } catch {
+    $("optLanguage").value = UiLanguage.selected;
+    toast(UiLanguage.text("No se pudo guardar el idioma."));
+  }
+};
 $("optEngine").value = store.get("enginePref", "auto");
-$("optEngine").onchange = () => { store.set("enginePref", $("optEngine").value); toast("Se aplica al pulsar Reiniciar motor (o al cargar otro modelo)", 4000); };
+$("optEngine").onchange = () => { store.set("enginePref", $("optEngine").value); toast(UiLanguage.text("Se aplica al pulsar Reiniciar motor (o al cargar otro modelo)"), 4000); };
 $("optExtra").value = store.get("extra", "");
 $("optHideConsole").checked = store.get("hideConsole", true);
 $("optHideConsole").onchange = async () => {
   const hide = $("optHideConsole").checked;
   store.set("hideConsole", hide);
   try { await invoke("set_console_visible", { visible: !hide }); }
-  catch (e) { setStatus(`No se pudo cambiar la ventana CMD: ${e.message || e}`, "warn"); }
+  catch (e) { setStatus(UiLanguage.template`No se pudo cambiar la ventana CMD: ${e.message || e}`, "warn"); }
 };
 $("restartBtn").onclick = async () => {
   if (state.busy) return;
@@ -899,15 +1135,15 @@ $("restartBtn").onclick = async () => {
     await Loras.refresh();
     const opt = currentOption();
     // no se carga al abrir (llenaba la RAM sin generar): se carga al pulsar Generar o «Cargar modelo»
-    if (opt) { applyPreset(opt); $("genBtn").disabled = false; setStatus("No está en memoria · se carga al generar"); }
+    if (opt) { applyPreset(opt); $("genBtn").disabled = false; setStatus(UiLanguage.text("No está en memoria · se carga al generar")); }
   } catch (e) {
-    setStatus("Error al iniciar: " + (e.message || e), "err");
+    setStatus(UiLanguage.text("Error al iniciar: ") + (e.message || e), "err");
   }
 })();
 
 // ---------- ↻ Actualizar: modelos / LoRAs / ampliadores / detectores copiados a mano ----------
 async function refreshAll() {
-  if (state.busy) return toast("Espera a que termine la generación");
+  if (state.busy) return toast(UiLanguage.text("Espera a que termine la generación"));
   const btns = [$("refreshBtn"), $("lpRefresh")];
   for (const b of btns) b?.classList.add("spinning");
   try {
@@ -923,12 +1159,12 @@ async function refreshAll() {
     let upNote = "";
     try {
       const st = await invoke("upscaler_status");
-      if (st.some((u) => u.installed && !state.upscalers.includes(u.stem))) upNote = "\nAmpliador nuevo: aparecerá al reiniciar el motor (Ajustes → Reiniciar motor).";
+      if (st.some((u) => u.installed && !state.upscalers.includes(u.stem))) upNote = UiLanguage.text("\nAmpliador nuevo: aparecerá al reiniciar el motor (Ajustes → Reiniciar motor).");
     } catch { /* vista previa */ }
     const dm = state.options.length - before.models, dl = Loras.lib.length - before.loras;
     const diff = (n, a, b) => (n > 0 ? ` (+${n} ${n === 1 ? a : b})` : n < 0 ? ` (${n})` : "");
-    toast(`Actualizado · ${state.options.length} modelos${diff(dm, "nuevo", "nuevos")} · ${Loras.lib.length} LoRAs${diff(dl, "nuevo", "nuevos")}${upNote}`, 4500);
-  } catch (e) { toast("No se pudo actualizar: " + (e.message || e), 5000); }
+    toast(UiLanguage.template`Actualizado · ${state.options.length} modelos${diff(dm, UiLanguage.text("nuevo"), UiLanguage.text("nuevos"))} · ${Loras.lib.length} LoRAs${diff(dl, UiLanguage.text("nuevo"), UiLanguage.text("nuevos"))}${upNote}`, 4500);
+  } catch (e) { toast(UiLanguage.text("No se pudo actualizar: ") + (e.message || e), 5000); }
   finally { for (const b of btns) b?.classList.remove("spinning"); }
 }
 $("refreshBtn").onclick = refreshAll;
@@ -947,7 +1183,7 @@ async function unloadModel() {
   // ControlNet, el objeto se libera pero el proceso sigue en 5,4 GB. Un motor anterior a la 0.2.1 no dice
   // cuánto ocupa (sin rss_mb): también se reinicia.
   if (state.engine === "torch" && !(r?.rss_mb <= ENGINE_IDLE_MB)) {
-    setStatus(r?.rss_mb ? `El motor seguía ocupando ${(r.rss_mb / 1024).toFixed(1)} GB: reiniciándolo para devolver la RAM…` : "Reiniciando el motor para devolver la RAM…");
+    setStatus(r?.rss_mb ? UiLanguage.template`El motor seguía ocupando ${(r.rss_mb / 1024).toFixed(1)} GB: reiniciándolo para devolver la RAM…` : UiLanguage.text("Reiniciando el motor para devolver la RAM…"));
     await startEngine("torch");
   }
   refreshMemory();
@@ -965,7 +1201,7 @@ const Idle = {
     if (!mins || !state.loaded || state.busy || Date.now() - this.last < mins * 60000) return;
     try {
       await unloadModel();
-      setStatus(`Modelo liberado tras ${mins} min sin generar · se carga al generar`, "");
+      setStatus(UiLanguage.template`Modelo liberado tras ${mins} min sin generar · se carga al generar`, "");
     } catch { /* motor ocupado o reiniciándose: se intenta en el siguiente minuto */ }
     this.touch();
   },

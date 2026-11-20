@@ -36,7 +36,7 @@ const Session = {
     if (!state.busy) showImage(c.src);
     $("imgFav").textContent = c.meta?.fav ? "★" : "☆";
     $("imgFav").classList.toggle("on", !!c.meta?.fav);
-    $("resSeed").textContent = sheet ? `Cuadrícula · ${c.meta.count || ""} imágenes`
+    $("resSeed").textContent = sheet ? UiLanguage.template`Cuadrícula · ${c.meta.count || ""} imágenes`
       : c.meta?.seed != null ? `seed ${c.meta.seed}${c.meta.width ? ` · ${c.meta.width} × ${c.meta.height}` : ""}` : "";
     $("resCompare").classList.toggle("hidden", !c.before);
   },
@@ -52,7 +52,7 @@ const Session = {
   async fav() {
     const c = this.cur(); if (!c) return;
     const fav = !c.meta?.fav;
-    try { await invoke("gallery_fav", { name: c.name, fav }); c.meta = { ...(c.meta || {}), fav }; this.render(); toast(fav ? "★ Favorita" : "Quitada de favoritas"); }
+    try { await invoke("gallery_fav", { name: c.name, fav }); c.meta = { ...(c.meta || {}), fav }; this.render(); toast(fav ? UiLanguage.text("★ Favorita") : UiLanguage.text("Quitada de favoritas")); }
     catch (e) { toast(String(e.message || e)); }
   },
 
@@ -61,8 +61,8 @@ const Session = {
     try {
       const blob = await (await fetch(c.src)).blob();
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      toast("Imagen copiada: pégala con Ctrl+V en otra app");
-    } catch { toast("No se pudo copiar la imagen; usa «Mostrar en la carpeta»", 4000); }
+      toast(UiLanguage.text("Imagen copiada: pégala con Ctrl+V en otra app"));
+    } catch { toast(UiLanguage.text("No se pudo copiar la imagen; usa «Mostrar en la carpeta»"), 4000); }
   },
 
   /** ↻ Otra vez: mismo prompt con una seed nueva. */
@@ -73,10 +73,10 @@ const Session = {
     const c = this.cur();
     let n = Math.max(1, Math.min(16, store.get("varCount", 4)));
     const r = await ask({
-      title: "Variaciones",
-      msg: "«Parecidas» parte de esta imagen y cambia poco (img2img); «semillas nuevas» repite el prompt desde cero.",
-      input: { value: String(n), placeholder: "Cuántas (1–16)" },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Con semillas nuevas", value: "seeds" }, ...(c ? [{ label: "Parecidas a esta imagen", value: "close", primary: true }] : [])],
+      title: UiLanguage.text("Variaciones"),
+      msg: UiLanguage.text("«Parecidas» parte de esta imagen y cambia poco (img2img); «semillas nuevas» repite el prompt desde cero."),
+      input: { value: String(n), placeholder: UiLanguage.text("Cuántas (1–16)") },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Con semillas nuevas"), value: "seeds" }, ...(c ? [{ label: UiLanguage.text("Parecidas a esta imagen"), value: "close", primary: true }] : [])],
     });
     if (!r) return;
     n = Math.max(1, Math.min(16, parseInt($("askInput").value, 10) || n));
@@ -88,8 +88,7 @@ const Session = {
 
   edit() {
     const c = this.cur(); if (!c) return;
-    setEditImage(c.src).then(() => setMode("edit"));
-    toast("Imagen lista en Editar foto: escribe qué cambiar y pulsa Generar desde la foto", 4000);
+    return Mask.openImage(c.src);
   },
 };
 
@@ -117,11 +116,11 @@ const Viewer = {
     $("vImg").src = it.src;
     $("vCount").textContent = `${this.i + 1} / ${this.items.length}`;
     const m = it.meta || {};
-    const date = m.created ? new Date(m.created).toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : "";
+    const date = m.created ? new Date(m.created).toLocaleString(UiLanguage.selected, { dateStyle: "short", timeStyle: "short" }) : "";
     $("vInfo").textContent = [m.model_label, m.width && m.height ? `${m.width} × ${m.height}` : "", m.seed != null ? `seed ${m.seed}` : "", date, m.seconds ? `${m.seconds} s` : ""].filter(Boolean).join(" · ");
     $("vPrompt").textContent = m.prompt || "";
     $("vPrompt").classList.toggle("hidden", !m.prompt);
-    $("vFav").textContent = m.fav ? "★ Favorita" : "☆ Favorita";
+    $("vFav").textContent = m.fav ? UiLanguage.text("★ Favorita") : UiLanguage.text("☆ Favorita");
     $("vPrev").disabled = this.i <= 0;
     $("vNext").disabled = this.i >= this.items.length - 1;
   },
@@ -151,7 +150,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") Viewer.step(-1);
   if (e.key === "ArrowRight") Viewer.step(1);
 }, true);
-$("vPrompt").onclick = async () => { const p = Viewer.it()?.meta?.prompt; if (p) { await copyText(p); toast("Prompt copiado"); } };
+$("vPrompt").onclick = async () => { const p = Viewer.it()?.meta?.prompt; if (p) { await copyText(p); toast(UiLanguage.text("Prompt copiado")); } };
 const vItem = () => Viewer.it();
 const vHist = (it) => History.items.find((h) => h.name === it.name) || { name: it.name, path: it.path, meta: it.meta };
 $("vFav").onclick = async () => {
@@ -169,13 +168,13 @@ async function asDataUrl(it) { return it.src.startsWith("data:") ? it.src : "dat
 $("vEdit").onclick = async () => {
   const it = vItem(); if (!it) return;
   Viewer.close();
-  await setEditImage(await asDataUrl(it)); setMode("edit");
-  document.querySelector('.nav[data-page="gen"]').click();
+  try { await Mask.openImage(await asDataUrl(it)); }
+  catch (e) { toast(UiLanguage.text("No se pudo abrir la imagen: ") + (e.message || e)); }
 };
 $("vCopy").onclick = async () => {
   const it = vItem(); if (!it) return;
-  try { const blob = await (await fetch(await asDataUrl(it))).blob(); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); toast("Imagen copiada"); }
-  catch { toast("No se pudo copiar la imagen", 3000); }
+  try { const blob = await (await fetch(await asDataUrl(it))).blob(); await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); toast(UiLanguage.text("Imagen copiada")); }
+  catch { toast(UiLanguage.text("No se pudo copiar la imagen"), 3000); }
 };
 $("vReveal").onclick = () => { const it = vItem(); if (it) invoke("gallery_reveal", { name: it.name }); };
 $("vTrash").onclick = async () => {
@@ -209,7 +208,7 @@ const Compare = {
     const cv = document.createElement("canvas"); cv.width = wa + wb; cv.height = h;
     const g = cv.getContext("2d"); g.drawImage(a, 0, 0, wa, h); g.drawImage(b, wa, 0, wb, h);
     const name = await invoke("save_image", { b64: cv.toDataURL("image/png"), prefix: "comparacion", meta: { ...(Session.cur()?.meta || {}), comparison: true } });
-    toast("Guardada lado a lado: " + name);
+    toast(UiLanguage.text("Guardada lado a lado: ") + name);
   },
 };
 let cmpDrag = false;
@@ -250,14 +249,15 @@ Session.render();
 
 // ---------- Ampliar: Rápido · Real-ESRGAN / Detallado · UltraSharp, ×2 / ×4 (como el teléfono) ----------
 const UP_INFO = {
-  fast: { label: "Rápido · Real-ESRGAN", desc: "Para anime e ilustración; el más ligero.", mb: 18 },
-  detail: { label: "Detallado · UltraSharp", desc: "Conserva mejor texturas, ojos y líneas finas; más lento.", mb: 67 },
+  fast: { label: UiLanguage.text("Rápido · Real-ESRGAN"), desc: UiLanguage.text("Para anime e ilustración; el más ligero."), mb: 18 },
+  detail: { label: UiLanguage.text("Detallado · UltraSharp"), desc: UiLanguage.text("Conserva mejor texturas, ojos y líneas finas; más lento."), mb: 67 },
 };
 const Upscale = {
   kind: store.get("upKind", "fast"),
   status: [],
   src: null, w: 0, h: 0,
   busy: false,
+  stop: false,
 
   async open(src) {
     this.src = src || Session.cur()?.src || state.currentImage;
@@ -281,12 +281,12 @@ const Upscale = {
       row.className = "up-opt" + (this.kind === kind ? " on" : "");
       row.innerHTML = '<input type="radio" name="upk"><div><div class="t"></div><div class="d"></div></div>';
       row.querySelector(".t").textContent = info.label;
-      row.querySelector(".d").textContent = ok ? info.desc : `${info.desc} Hay que descargarlo una vez (${info.mb} MB).`;
+      row.querySelector(".d").textContent = ok ? info.desc : UiLanguage.template`${info.desc} Hay que descargarlo una vez (${info.mb} MB).`;
       const r = row.querySelector("input"); r.checked = this.kind === kind;
       r.onchange = () => { this.kind = kind; store.set("upKind", kind); this.render(); };
       if (!ok) {
         const b = document.createElement("button");
-        b.className = "ghost sm"; b.textContent = `Descargar ${info.mb} MB`;
+        b.className = "ghost sm"; b.textContent = UiLanguage.template`Descargar ${info.mb} MB`;
         b.onclick = (e) => { e.preventDefault(); this.download(kind, b); };
         row.appendChild(b);
       }
@@ -295,17 +295,17 @@ const Upscale = {
     const ok = this.installed(this.kind);
     const lim = 8192;
     for (const [id, f] of [["up2", 2], ["up4", 4]]) {
-      const W = this.w * f, H = this.h * f, big = W > lim || H > lim;
+      const W = this.w * f, H = this.h * f, big = W > lim || H > lim || W * H > 24000000;
       $(id).textContent = big ? `×${f} · demasiado grande` : `×${f} · ${W} × ${H}`;
       $(id).disabled = !ok || big || this.busy;
     }
   },
 
   async download(kind, btn) {
-    btn.disabled = true; btn.textContent = "Descargando…";
+    btn.disabled = true; btn.textContent = UiLanguage.text("Descargando…");
     const off = await window.__TAURI__.event.listen("dl-progress", (ev) => {
       const p = ev.payload; if (p.id !== "up-" + kind) return;
-      btn.textContent = p.total ? `${Math.round((100 * p.done) / p.total)} %` : "Descargando…";
+      btn.textContent = p.total ? `${Math.round((100 * p.done) / p.total)} %` : UiLanguage.text("Descargando…");
     });
     try {
       await invoke("upscaler_download", { kind });
@@ -314,39 +314,36 @@ const Upscale = {
       await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
       await refreshEngineMenus();
       if (!state.upscalers.includes(this.stem(kind)) && !state.busy) {
-        $("upMsg").textContent = "Reiniciando el motor para que vea el ampliador…";
+        $("upMsg").textContent = UiLanguage.text("Reiniciando el motor para que vea el ampliador…");
         if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await loadModel(); }
       }
-      $("upMsg").textContent = state.upscalers.includes(this.stem(kind)) ? "✓ Listo para ampliar" : "Descargado; reinicia el motor desde Ajustes si no aparece.";
-    } catch (e) { $("upMsg").textContent = "Falló la descarga: " + (e.message || e); }
+      $("upMsg").textContent = state.upscalers.includes(this.stem(kind)) ? UiLanguage.text("✓ Listo para ampliar") : UiLanguage.text("Descargado; reinicia el motor desde Ajustes si no aparece.");
+    } catch (e) { $("upMsg").textContent = UiLanguage.text("Falló la descarga: ") + (e.message || e); }
     finally { off(); this.render(); }
   },
 
   async run(f) {
     if (this.busy || state.busy) return;
-    this.busy = true; this.render();
-    $("upMsg").textContent = "Ampliando… (por trozos; puede tardar en equipos modestos)";
+    this.busy = true; this.stop = false; this.render();
+    $("upStop").classList.remove("hidden");
+    $("upMsg").textContent = UiLanguage.text("Ampliando… (por trozos; puede tardar en equipos modestos)");
     state.busy = true;
     try {
-      const r = await api("/sdcpp/v1/upscale", { method: "POST", body: JSON.stringify({ image: this.src, upscaler: this.stem(this.kind), repeats: 1, output_format: "png" }) });
-      let b64 = r.images?.[0]?.b64_json;
-      if (!b64) throw new Error("El motor no devolvió una imagen");
-      let W = r.width, H = r.height;
-      if (f === 2) { // el modelo amplía ×4: para ×2 se reduce a la mitad con buena calidad
-        const im = await new Promise((ok) => { const i = new Image(); i.onload = () => ok(i); i.src = "data:image/png;base64," + b64; });
-        W = this.w * 2; H = this.h * 2;
-        const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
-        const g = cv.getContext("2d"); g.imageSmoothingQuality = "high"; g.drawImage(im, 0, 0, W, H);
-        b64 = cv.toDataURL("image/png").split(",")[1];
-      }
+      const r = await submitUpscale({ image: this.src, upscaler: this.stem(this.kind), output_format: "png" },
+        () => this.stop, f, (done, total) => { $("upMsg").textContent = UiLanguage.template`Ampliando en CPU · mosaico ${done}/${total}`; });
+      if (this.stop) return;
+      const b64 = r.images?.[0]?.b64_json;
+      if (!b64) throw new Error(UiLanguage.text("El motor no devolvió una imagen"));
+      const W = r.width, H = r.height;
       const meta = { ...(Session.cur()?.meta || {}), width: W, height: H, upscaled: `${UP_INFO[this.kind].label} ×${f}`, created: new Date().toISOString() };
       const name = await invoke("save_image", { b64, prefix: "ampliada", meta });
       Session.add({ name, src: "data:image/png;base64," + b64, meta, before: this.src });
       closeModal("upDlg");
-      toast(`Ampliada ×${f} · ${W} × ${H} · guardada en el Historial`, 4000);
-    } catch (e) { $("upMsg").textContent = "No se pudo ampliar: " + (e.message || e); }
-    finally { this.busy = false; state.busy = false; this.render(); }
+      toast(UiLanguage.template`Ampliada ×${f} · ${W} × ${H} · guardada en el Historial`, 4000);
+    } catch (e) { $("upMsg").textContent = UiLanguage.text("No se pudo ampliar: ") + (e.message || e); }
+    finally { this.busy = false; state.busy = false; $("upStop").classList.add("hidden"); this.render(); }
   },
 };
 $("up2").onclick = () => Upscale.run(2);
 $("up4").onclick = () => Upscale.run(4);
+$("upStop").onclick = () => { Upscale.stop = true; };

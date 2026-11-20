@@ -97,8 +97,8 @@ const LoraPage = {
     const count = (f) => lib.filter((l) => (l.folder || "") === f).length;
     const lc = !this.coll;
     fl.appendChild(flistItem("all", "Todas", lib.length, lc && this.folder === "*" && !this.favOnly, () => { this.coll = null; this.folder = "*"; this.favOnly = false; this.render(); }));
-    fl.appendChild(flistItem("star", "Favoritas", lib.filter((l) => l.fav).length, lc && this.favOnly, () => { this.coll = null; this.favOnly = true; this.folder = "*"; this.render(); }));
-    if (this.folders.length) fl.appendChild(flistItem("folder", "Sin carpeta", count(""), lc && this.folder === "" && !this.favOnly, () => { this.coll = null; this.folder = ""; this.favOnly = false; this.render(); }));
+    fl.appendChild(flistItem("star", UiLanguage.text("Favoritas"), lib.filter((l) => l.fav).length, lc && this.favOnly, () => { this.coll = null; this.favOnly = true; this.folder = "*"; this.render(); }));
+    if (this.folders.length) fl.appendChild(flistItem("folder", UiLanguage.text("Sin carpeta"), count(""), lc && this.folder === "" && !this.favOnly, () => { this.coll = null; this.folder = ""; this.favOnly = false; this.render(); }));
     for (const f of this.folders) {
       const depth = f.split("/").length - 1;
       const it = flistItem("folder", f.split("/").pop(), count(f), lc && this.folder === f && !this.favOnly, () => { this.coll = null; this.folder = f; this.favOnly = false; this.render(); });
@@ -107,11 +107,11 @@ const LoraPage = {
     }
     // Presets
     const pl = $("lpPresets"); pl.innerHTML = "";
-    if (!this.presets.length) pl.innerHTML = '<div class="lbl fempty">Activa LoRAs y pulsa «+ Guardar» para crear un preset.</div>';
+    if (!this.presets.length) pl.innerHTML = UiLanguage.text('<div class="lbl fempty">Activa LoRAs y pulsa «+ Guardar» para crear un preset.</div>');
     this.presets.forEach((p, i) => {
       const it = flistItem("preset", p.name, p.loras.length, false, () => this.applyPreset(p, false),
         (e) => { e.preventDefault(); this.presetMenu(i, e.clientX, e.clientY); });
-      it.title = p.loras.map((l) => `${l.stem}:${l.w}`).join(", ") + "\nClic: aplicar (reemplaza) · clic derecho: más opciones";
+      it.title = p.loras.map((l) => `${l.stem}:${l.w}`).join(", ") + UiLanguage.text("\nClic: aplicar (reemplaza) · clic derecho: más opciones");
       pl.appendChild(it);
     });
     // Chips de base y categoría (solo los presentes)
@@ -127,12 +127,12 @@ const LoraPage = {
         el.appendChild(b);
       }
     };
-    chipRow($("lpBase"), [{ key: "all", label: `Todas  ${lib.length}` }, ...Object.keys(bases).sort().map((k) => ({ key: k, label: `${k === "?" ? "Sin datos" : k}  ${bases[k]}` }))], this.base, (k) => (this.base = k));
+    chipRow($("lpBase"), [{ key: "all", label: `Todas  ${lib.length}` }, ...Object.keys(bases).sort().map((k) => ({ key: k, label: `${k === "?" ? UiLanguage.text("Sin datos") : k}  ${bases[k]}` }))], this.base, (k) => (this.base = k));
     const cats = {}; let none = 0; for (const l of lib) { if (l.cat) cats[l.cat] = (cats[l.cat] || 0) + 1; else none++; }
     chipRow($("lpCats"), [
       { key: "all", label: "Todas", icon: "all" },
       ...CAT_ORDER.map((c) => ({ key: c, label: `${CAT_LABEL[c]}${cats[c] ? "  " + cats[c] : ""}`, icon: c })),
-      { key: "none", label: `Sin categoría  ${none}`, icon: "none" },
+      { key: "none", label: UiLanguage.template`Sin categoría  ${none}`, icon: "none" },
     ], this.cat, (k) => (this.cat = k));
 
     const c = this.coll && Collections.byId(this.coll);
@@ -145,25 +145,25 @@ const LoraPage = {
 
     const shown = this.filtered();
     const active = Loras.tags();
-    $("lpCount").textContent = `${shown.length} de ${lib.length} LoRAs${active.size ? ` · activos en el prompt: ${active.size}` : ""}`;
+    $("lpCount").textContent = `${shown.length} de ${lib.length} LoRAs${active.size ? UiLanguage.template` · activos en el prompt: ${active.size}` : ""}`;
     $("lpBulk").classList.toggle("hidden", !this.selecting);
-    $("lpSelect").textContent = this.selecting ? "Hecho" : "Seleccionar";
-    $("lpSelCount").textContent = `Seleccionados: ${this.sel.size}`;
+    $("lpSelect").textContent = this.selecting ? "Hecho" : UiLanguage.text("Seleccionar");
+    $("lpSelCount").textContent = UiLanguage.template`Seleccionados: ${this.sel.size}`;
 
     const grid = $("lpGrid"); grid.innerHTML = "";
-    if (!lib.length) grid.innerHTML = '<div class="lbl empty-lib">Vacía: importa un archivo .safetensors o descarga LoRAs desde la sección Civitai.</div>';
-    else if (!shown.length) grid.innerHTML = '<div class="lbl empty-lib">Ningún LoRA coincide con los filtros.</div>';
+    if (!lib.length) grid.innerHTML = UiLanguage.text('<div class="lbl empty-lib">Vacía: importa un archivo .safetensors o descarga LoRAs desde la sección Civitai.</div>');
+    else if (!shown.length) grid.innerHTML = UiLanguage.text('<div class="lbl empty-lib">Ningún LoRA coincide con los filtros.</div>');
     for (const l of shown) grid.appendChild(this.card(l, active.get(l.stem.toLowerCase())));
   },
 
   /** Barra lateral: colecciones de Civitai, como carpetas. */
   renderColls() {
     const el = $("lpColls"); el.innerHTML = "";
-    if (!Collections.list.length) el.innerHTML = '<div class="lbl fempty">Guarda modelos de Civitai con ☆ para tenerlos a mano y descargarlos cuando quieras.</div>';
+    if (!Collections.list.length) el.innerHTML = UiLanguage.text('<div class="lbl fempty">Guarda modelos de Civitai con ☆ para tenerlos a mano y descargarlos cuando quieras.</div>');
     for (const c of Collections.list) {
       const it = flistItem("folder", c.name, c.items.length, this.coll === c.id, () => { this.coll = c.id; this.render(); },
         (e) => { e.preventDefault(); Collections.sideMenu(c, e.clientX, e.clientY); });
-      it.title = "Clic: abrir · clic derecho: descargar las que faltan, cambiar nombre, eliminar";
+      it.title = UiLanguage.text("Clic: abrir · clic derecho: descargar las que faltan, cambiar nombre, eliminar");
       el.appendChild(it);
     }
   },
@@ -171,17 +171,17 @@ const LoraPage = {
   /** Contenido de una colección: tarjetas de Civitai (descarga con un clic). */
   renderCollection(c) {
     const have = c.items.filter((s) => Civitai.isDownloaded(s, s.modelVersions?.[0])).length;
-    $("lpCount").textContent = `Colección «${c.name}» · ${c.items.length} modelos · ${have} descargados`;
+    $("lpCount").textContent = UiLanguage.template`Colección «${c.name}» · ${c.items.length} modelos · ${have} descargados`;
     $("lpBulk").classList.add("hidden");
     const q = $("lpSearch").value.trim().toLowerCase();
     const shown = c.items.filter((s) => !q || `${s.name} ${(s.modelVersions?.[0]?.trainedWords || []).join(" ")} ${s.creator?.username || ""}`.toLowerCase().includes(q));
     const grid = $("lpGrid"); grid.innerHTML = "";
-    if (!c.items.length) grid.innerHTML = '<div class="lbl empty-lib">Colección vacía. En la sección Civitai pulsa ☆ en una tarjeta y elige esta colección.</div>';
-    else if (!shown.length) grid.innerHTML = '<div class="lbl empty-lib">Nada coincide con la búsqueda.</div>';
+    if (!c.items.length) grid.innerHTML = UiLanguage.text('<div class="lbl empty-lib">Colección vacía. En la sección Civitai pulsa ☆ en una tarjeta y elige esta colección.</div>');
+    else if (!shown.length) grid.innerHTML = UiLanguage.text('<div class="lbl empty-lib">Nada coincide con la búsqueda.</div>');
     for (const s of shown) {
       const card = Civitai.card(s);
       const save = card.querySelector(".csave");
-      save.textContent = "✕"; save.title = "Quitar de la colección"; save.classList.remove("on");
+      save.textContent = "✕"; save.title = UiLanguage.text("Quitar de la colección"); save.classList.remove("on");
       save.onclick = async (e) => { e.stopPropagation(); await Collections.toggle(c, s); };
       card.onclick = () => Civitai.openModel(s.id, s.modelVersions?.[0]?.id || null, null);
       grid.appendChild(card);
@@ -192,11 +192,11 @@ const LoraPage = {
     const c = document.createElement("div");
     c.className = "lcard" + (t ? " on" : "") + (this.sel.has(l.file) ? " sel" : "");
     const src = assetUrl(l.preview_local) || (l.preview && !l.nsfw ? String(l.preview).replace(/\/(width=\d+|original=true)\//, "/width=320/") : null);
-    c.innerHTML = `
+    c.innerHTML = UiLanguage.template`
       <div class="lthumb">${src ? '<img loading="lazy" alt="">' : svgIcon(l.cat || "none", 28)}
         <button class="lfav" title="Favorita" aria-label="Favorita"></button>
-        ${this.selecting ? '<input type="checkbox" class="lsel" aria-label="Seleccionar">' : ""}
-        ${t ? '<span class="luse">En uso</span>' : ""}</div>
+        ${this.selecting ? UiLanguage.text('<input type="checkbox" class="lsel" aria-label="Seleccionar">') : ""}
+        ${t ? UiLanguage.text('<span class="luse">En uso</span>') : ""}</div>
       <div class="lbody">
         <div class="ltitle-row"><div class="ltitle"></div><button class="mini lmore" title="Más opciones" aria-label="Más opciones">⋯</button></div>
         <div class="lmeta"><span class="lbase"></span><span>${fmtMB(l.bytes)}</span></div>
@@ -211,19 +211,19 @@ const LoraPage = {
     c.querySelector(".lfav").textContent = l.fav ? "★" : "☆";
     c.querySelector(".lfav").classList.toggle("on", !!l.fav);
     c.querySelector(".ltitle").textContent = l.title;
-    c.querySelector(".ltitle").title = `${l.title}\n<lora:${l.stem}>${l.folder ? "\nCarpeta: " + l.folder : ""}${l.note ? "\nNota: " + l.note : ""}`;
+    c.querySelector(".ltitle").title = `${l.title}\n<lora:${l.stem}>${l.folder ? UiLanguage.text("\nCarpeta: ") + l.folder : ""}${l.note ? "\nNota: " + l.note : ""}`;
     const fam = currentOption()?.family;
     const bk = this.baseKey(l);
     const mismatch = l.base && fam && ((fam === "anima") !== /anima/i.test(l.base));
     const base = c.querySelector(".lbase");
-    base.textContent = (bk === "?" ? "Sin datos" : bk) + (l.cat ? " · " + CAT_LABEL[l.cat] : "");
+    base.textContent = (bk === "?" ? UiLanguage.text("Sin datos") : bk) + (l.cat ? " · " + CAT_LABEL[l.cat] : "");
     base.classList.toggle("warn", !!mismatch);
-    if (mismatch) base.title = "Para otro modelo: puede no funcionar con el modelo cargado";
-    c.querySelector(".lwords").textContent = l.words.length ? l.words.join(", ") : "Sin palabras activadoras";
+    if (mismatch) base.title = UiLanguage.text("Para otro modelo: puede no funcionar con el modelo cargado");
+    c.querySelector(".lwords").textContent = l.words.length ? l.words.join(", ") : UiLanguage.text("Sin palabras activadoras");
     const w = c.querySelector(".lora-num");
-    w.value = t ? String(t.w) : "1.0"; w.setAttribute("aria-label", "Fuerza de " + l.title);
+    w.value = t ? String(t.w) : "1.0"; w.setAttribute("aria-label", UiLanguage.text("Fuerza de ") + l.title);
     const use = c.querySelector(".luse-btn");
-    use.textContent = t ? "Quitar" : "Usar";
+    use.textContent = t ? UiLanguage.text("Quitar") : UiLanguage.text("Usar");
     use.onclick = () => { if (t) Loras.removeTag(l.stem); else Loras.setTag(l.stem, readNum(w) || 1); this.render(); };
     w.onchange = () => { const v = clampNum(w, 1); if (t) { Loras.setTag(l.stem, v); this.render(); } };
     w.onkeydown = (e) => { if (e.key === "Enter") w.blur(); };
@@ -245,34 +245,34 @@ const LoraPage = {
   menu(l, x, y) {
     const after = () => this.show();
     showMenu(x, y, l.title, [
-      { label: `Categoría: ${l.cat ? CAT_LABEL[l.cat] : "Sin categoría"}…`, run: () => Loras.category(l).then(after) },
-      { label: "Copiar palabras activadoras", run: async () => {
-          if (!l.words.length) return toast("No declara palabras activadoras");
-          await copyText(l.words.join(", ")); toast("Copiado: " + l.words.join(", "));
+      { label: UiLanguage.template`Categoría: ${l.cat ? CAT_LABEL[l.cat] : UiLanguage.text("Sin categoría")}…`, run: () => Loras.category(l).then(after) },
+      { label: UiLanguage.text("Copiar palabras activadoras"), run: async () => {
+          if (!l.words.length) return toast(UiLanguage.text("No declara palabras activadoras"));
+          await copyText(l.words.join(", ")); toast(UiLanguage.text("Copiado: ") + l.words.join(", "));
         } },
       { label: "Editar palabras activadoras…", run: () => Loras.editWords(l).then(after) },
-      { label: "Añadir activadoras al prompt", run: () => { Loras.addWords(l); this.render(); } },
-      { label: "Cambiar nombre…", run: () => Loras.rename(l).then(after) },
-      { label: l.note ? "Editar nota…" : "Añadir nota…", run: () => this.note(l) },
-      { label: "Mover a carpeta…", run: () => this.moveTo([l.file]) },
-      { label: "Mostrar en la carpeta", run: () => invoke("reveal_file", { path: "loras/" + l.file }).catch((e) => toast(String(e))) },
-      { label: l.civitai_checked === "ok" || l.model_id ? "Actualizar datos de Civitai" : "Buscar datos en Civitai", run: () => this.fetchInfo([l.file]) },
-      ...(l.model_id ? [{ label: "Abrir en Civitai", run: () => invoke("open_url", { url: `https://civitai.red/models/${l.model_id}${l.version_id ? "?modelVersionId=" + l.version_id : ""}` }) }] : []),
-      { label: "Eliminar", danger: true, run: () => Loras.remove(l).then(after) },
+      { label: UiLanguage.text("Añadir activadoras al prompt"), run: () => { Loras.addWords(l); this.render(); } },
+      { label: UiLanguage.text("Cambiar nombre…"), run: () => Loras.rename(l).then(after) },
+      { label: l.note ? "Editar nota…" : UiLanguage.text("Añadir nota…"), run: () => this.note(l) },
+      { label: UiLanguage.text("Mover a carpeta…"), run: () => this.moveTo([l.file]) },
+      { label: UiLanguage.text("Mostrar en la carpeta"), run: () => invoke("reveal_file", { path: "loras/" + l.file }).catch((e) => toast(String(e))) },
+      { label: l.civitai_checked === "ok" || l.model_id ? UiLanguage.text("Actualizar datos de Civitai") : UiLanguage.text("Buscar datos en Civitai"), run: () => this.fetchInfo([l.file]) },
+      ...(l.model_id ? [{ label: UiLanguage.text("Abrir en Civitai"), run: () => invoke("open_url", { url: `https://civitai.red/models/${l.model_id}${l.version_id ? "?modelVersionId=" + l.version_id : ""}` }) }] : []),
+      { label: UiLanguage.text("Eliminar"), danger: true, run: () => Loras.remove(l).then(after) },
     ]);
   },
 
   async note(l) {
-    const r = await ask({ title: `Nota: ${l.title}`, input: { value: l.note || "", placeholder: "p. ej. mejor a 0.6, usar con estilo X" },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }] });
+    const r = await ask({ title: `Nota: ${l.title}`, input: { value: l.note || "", placeholder: UiLanguage.text("p. ej. mejor a 0.6, usar con estilo X") },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Guardar"), value: "@input", primary: true }] });
     if (!r) return;
     await invoke("lora_set_meta", { file: l.file, patch: { note: r.input } });
     await this.show();
   },
 
   async moveTo(files) {
-    const list = [{ label: "Sin carpeta (raíz)", value: "@root" }, ...this.folders.map((f) => ({ label: f, value: f })), { label: "+ Nueva carpeta…", value: "@new" }];
-    let dest = await ask({ title: files.length > 1 ? `Mover ${files.length} LoRAs a…` : "Mover a carpeta", list, buttons: [{ label: "Cancelar", value: null }] });
+    const list = [{ label: UiLanguage.text("Sin carpeta (raíz)"), value: "@root" }, ...this.folders.map((f) => ({ label: f, value: f })), { label: UiLanguage.text("+ Nueva carpeta…"), value: "@new" }];
+    let dest = await ask({ title: files.length > 1 ? UiLanguage.template`Mover ${files.length} LoRAs a…` : UiLanguage.text("Mover a carpeta"), list, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }] });
     if (!dest) return;
     if (dest === "@new") dest = await this.newFolder();
     if (!dest) return;
@@ -284,15 +284,15 @@ const LoraPage = {
   },
 
   async newFolder() {
-    const r = await ask({ title: "Nueva carpeta", input: { value: "", placeholder: "p. ej. Personajes/Anime" },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Crear", value: "@input", primary: true }] });
+    const r = await ask({ title: UiLanguage.text("Nueva carpeta"), input: { value: "", placeholder: "p. ej. Personajes/Anime" },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: "Crear", value: "@input", primary: true }] });
     if (!r?.input?.trim()) return null;
     try { const f = await invoke("lora_make_folder", { name: r.input }); this.folders = await invoke("lora_folders"); this.render(); return f; }
     catch (e) { toast(String(e)); return null; }
   },
 
   async fetchInfo(files) {
-    if (!files.length) return toast("Todos los LoRAs ya tienen datos");
+    if (!files.length) return toast(UiLanguage.text("Todos los LoRAs ya tienen datos"));
     let found = 0, missing = 0;
     for (let i = 0; i < files.length; i++) {
       toast(`Consultando Civitai… ${i + 1} / ${files.length}`, 60000);
@@ -300,7 +300,7 @@ const LoraPage = {
       catch (e) { toast("Civitai: " + (e.message || e), 5000); break; }
       await sleep(400); // sin saturar la API
     }
-    toast(`Datos de Civitai: ${found} encontrados${missing ? `, ${missing} no están en Civitai` : ""}`, 4500);
+    toast(UiLanguage.template`Datos de Civitai: ${found} encontrados${missing ? UiLanguage.template`, ${missing} no están en Civitai` : ""}`, 4500);
     await this.show();
   },
 
@@ -315,13 +315,13 @@ const LoraPage = {
     } else {
       loras = [...Loras.tags().values()].map((t) => ({ stem: t.stem, w: t.w }));
     }
-    if (!loras.length) return toast("No hay LoRAs activos en el prompt para guardar");
-    const r = await ask({ title: "Guardar preset", msg: loras.map((l) => `<lora:${l.stem}:${l.w}>`).join("  "),
-      input: { value: "", placeholder: "Nombre del preset" }, buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }] });
+    if (!loras.length) return toast(UiLanguage.text("No hay LoRAs activos en el prompt para guardar"));
+    const r = await ask({ title: UiLanguage.text("Guardar preset"), msg: loras.map((l) => `<lora:${l.stem}:${l.w}>`).join("  "),
+      input: { value: "", placeholder: UiLanguage.text("Nombre del preset") }, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Guardar"), value: "@input", primary: true }] });
     if (!r?.input?.trim()) return;
     this.presets.push({ name: r.input.trim(), loras });
     await this.savePresets();
-    toast("Preset guardado: " + r.input.trim());
+    toast(UiLanguage.text("Preset guardado: ") + r.input.trim());
   },
 
   applyPreset(p, add) {
@@ -329,31 +329,31 @@ const LoraPage = {
     const missing = [];
     for (const l of p.loras) { if (Loras.byStem(l.stem)) Loras.setTag(l.stem, l.w); else missing.push(l.stem); }
     this.render();
-    toast(`Preset «${p.name}» ${add ? "añadido" : "aplicado"}${missing.length ? ` · faltan: ${missing.join(", ")}` : ""}`, 4000);
+    toast(`Preset «${p.name}» ${add ? UiLanguage.text("añadido") : "aplicado"}${missing.length ? ` · faltan: ${missing.join(", ")}` : ""}`, 4000);
   },
 
   presetMenu(i, x, y) {
     const p = this.presets[i];
     showMenu(x, y, p.name, [
-      { label: "Aplicar (reemplaza los activos)", run: () => this.applyPreset(p, false) },
-      { label: "Añadir a los activos", run: () => this.applyPreset(p, true) },
-      { label: "Sobrescribir con los activos", run: async () => { p.loras = [...Loras.tags().values()].map((t) => ({ stem: t.stem, w: t.w })); await this.savePresets(); toast("Preset actualizado"); } },
-      { label: "Cambiar nombre…", run: async () => {
-          const r = await ask({ title: "Cambiar nombre", input: { value: p.name }, buttons: [{ label: "Cancelar", value: null }, { label: "OK", value: "@input", primary: true }] });
+      { label: UiLanguage.text("Aplicar (reemplaza los activos)"), run: () => this.applyPreset(p, false) },
+      { label: UiLanguage.text("Añadir a los activos"), run: () => this.applyPreset(p, true) },
+      { label: UiLanguage.text("Sobrescribir con los activos"), run: async () => { p.loras = [...Loras.tags().values()].map((t) => ({ stem: t.stem, w: t.w })); await this.savePresets(); toast(UiLanguage.text("Preset actualizado")); } },
+      { label: UiLanguage.text("Cambiar nombre…"), run: async () => {
+          const r = await ask({ title: UiLanguage.text("Cambiar nombre"), input: { value: p.name }, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: "OK", value: "@input", primary: true }] });
           if (r?.input?.trim()) { p.name = r.input.trim(); await this.savePresets(); }
         } },
-      { label: "Eliminar", danger: true, run: async () => { this.presets.splice(i, 1); await this.savePresets(); } },
+      { label: UiLanguage.text("Eliminar"), danger: true, run: async () => { this.presets.splice(i, 1); await this.savePresets(); } },
     ]);
   },
 
   async exportPresets() {
     await copyText(JSON.stringify(this.presets, null, 2));
-    toast("Presets copiados al portapapeles (JSON). Pégalos en un archivo o en otra PC.", 4500);
+    toast(UiLanguage.text("Presets copiados al portapapeles (JSON). Pégalos en un archivo o en otra PC."), 4500);
   },
 
   async importPresets() {
-    const r = await ask({ title: "Importar presets", msg: "Pega el JSON exportado desde HexAnima PC.", input: { value: "", placeholder: '[{"name":"…","loras":[{"stem":"…","w":0.8}]}]' },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Importar", value: "@input", primary: true }] });
+    const r = await ask({ title: "Importar presets", msg: UiLanguage.text("Pega el JSON exportado desde HexAnima PC."), input: { value: "", placeholder: '[{"name":"…","loras":[{"stem":"…","w":0.8}]}]' },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: "Importar", value: "@input", primary: true }] });
     if (!r) return;
     try {
       const arr = JSON.parse(r.input);
@@ -361,7 +361,7 @@ const LoraPage = {
       this.presets.push(...ok.map((p) => ({ name: p.name, loras: p.loras.filter((l) => l && l.stem).map((l) => ({ stem: String(l.stem), w: +l.w || 1 })) })));
       await this.savePresets();
       toast(`Importados: ${ok.length} presets`);
-    } catch { toast("El texto no es un JSON válido de presets", 4000); }
+    } catch { toast(UiLanguage.text("El texto no es un JSON válido de presets"), 4000); }
   },
 };
 
@@ -390,7 +390,7 @@ $("lpBulkUse").onclick = () => { for (const l of selLibs()) if (!Loras.tags().ha
 $("lpBulkOff").onclick = () => { for (const l of selLibs()) Loras.removeTag(l.stem); LoraPage.render(); };
 $("lpBulkCat").onclick = async () => {
   const items = selLibs(); if (!items.length) return;
-  const v = await ask({ title: `Categoría de ${items.length} LoRAs`, list: [{ label: "Sin categoría", value: "none" }, ...CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: c }))], buttons: [{ label: "Cancelar", value: null }] });
+  const v = await ask({ title: UiLanguage.template`Categoría de ${items.length} LoRAs`, list: [{ label: UiLanguage.text("Sin categoría"), value: "none" }, ...CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: c }))], buttons: [{ label: UiLanguage.text("Cancelar"), value: null }] });
   if (!v) return;
   for (const l of items) await invoke("lora_set_meta", { file: l.file, patch: { cat: v } });
   await LoraPage.show();
@@ -400,7 +400,7 @@ $("lpBulkInfo").onclick = () => LoraPage.fetchInfo([...LoraPage.sel]);
 $("lpBulkPreset").onclick = () => { if (LoraPage.sel.size) LoraPage.savePreset([...LoraPage.sel]); };
 $("lpBulkTrash").onclick = async () => {
   const items = selLibs(); if (!items.length) return;
-  const ok = await ask({ title: `¿Eliminar ${items.length} LoRAs?`, msg: "Se envían a la Papelera de reciclaje con su .json y su vista previa (se pueden recuperar).", buttons: [{ label: "Cancelar", value: false }, { label: "Eliminar", value: true, primary: true }] });
+  const ok = await ask({ title: UiLanguage.template`¿Eliminar ${items.length} LoRAs?`, msg: UiLanguage.text("Se envían a la Papelera de reciclaje con su .json y su vista previa (se pueden recuperar)."), buttons: [{ label: UiLanguage.text("Cancelar"), value: false }, { label: UiLanguage.text("Eliminar"), value: true, primary: true }] });
   if (!ok) return;
   for (const l of items) { try { await invoke("lora_trash", { file: l.file }); Loras.removeTag(l.stem); } catch (e) { toast(String(e)); } }
   LoraPage.sel.clear();

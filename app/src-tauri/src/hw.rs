@@ -28,6 +28,7 @@ pub struct Hardware {
     pub engine_candidates: Vec<String>,
     pub backend_device: Option<String>, // p.ej. "vulkan1"
     pub profile: String,          // bajo | medio | alto
+    pub gpu_target_temp_c: Option<i64>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -221,6 +222,18 @@ pub fn detect(root: &Path) -> Hardware {
         .cloned()
         .unwrap_or_else(|| candidates[0].clone());
     let device = engine_device(root, &engine, gpu.as_ref());
+    let gpu_target_temp_c = gpu.as_ref().filter(|g| g.vendor == "nvidia").and_then(|_| {
+        let devices = run("nvidia-smi", &["--query-gpu=uuid", "--format=csv,noheader"])?;
+        if devices.lines().filter(|line| !line.trim().is_empty()).count() != 1 {
+            return None;
+        }
+        let report = run("nvidia-smi", &["-q", "-i", "0", "-d", "TEMPERATURE"])?;
+        let (_, value) = report.lines().find_map(|line| {
+            let (label, value) = line.split_once(':')?;
+            (label.trim() == "GPU Target Temperature").then_some((label, value))
+        })?;
+        value.split_whitespace().next()?.parse().ok()
+    });
     Hardware {
         profile: profile_for(gpu.as_ref(), ram_total),
         gpu,
@@ -228,6 +241,7 @@ pub fn detect(root: &Path) -> Hardware {
         engine,
         engine_candidates: candidates,
         backend_device: device,
+        gpu_target_temp_c,
     }
 }
 

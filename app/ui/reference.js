@@ -13,23 +13,23 @@ async function downloadAssets(kinds, title, msg, onText) {
   if (!missing.length) return true;
   const mb = missing.reduce((n, a) => n + a.mb, 0);
   const size = mb >= 1024 ? (mb / 1024).toFixed(1).replace(".", ",") + " GB" : mb + " MB";
-  const go = await ask({ title, msg: `${msg}\n\nDescarga: ${size}, una sola vez (si se corta, sigue donde se quedó).`,
-    buttons: [{ label: "Cancelar", value: false }, { label: `Descargar (${size})`, value: true, primary: true }] });
+  const go = await ask({ title, msg: UiLanguage.template`${msg}\n\nDescarga: ${size}, una sola vez (si se corta, sigue donde se quedó).`,
+    buttons: [{ label: UiLanguage.text("Cancelar"), value: false }, { label: UiLanguage.template`Descargar (${size})`, value: true, primary: true }] });
   if (!go) return false;
   let base = 0;
   const total = mb * 1048576;
   const off = await window.__TAURI__.event.listen("dl-progress", (ev) => {
     const p = ev.payload;
     if (!missing.some((a) => p.id === "asset-" + a.kind)) return;
-    const txt = `Descargando… ${Math.min(100, Math.round((100 * (base + p.done)) / total))} % · ${((base + p.done) / 1e9).toFixed(2).replace(".", ",")} de ${(total / 1e9).toFixed(1).replace(".", ",")} GB`;
+    const txt = UiLanguage.template`Descargando… ${Math.min(100, Math.round((100 * (base + p.done)) / total))} % · ${((base + p.done) / 1e9).toFixed(2).replace(".", ",")} de ${(total / 1e9).toFixed(1).replace(".", ",")} GB`;
     onText ? onText(txt) : setStatus(txt);
   });
   try {
     for (const a of missing) { await invoke("asset_download", { kind: a.kind }); base += a.mb * 1048576; }
-    toast("✓ Descargado", 2500);
+    toast(UiLanguage.text("✓ Descargado"), 2500);
     return true;
   } catch (e) {
-    toast("No se pudo descargar: " + (e.message || e), 6000);
+    toast(UiLanguage.text("No se pudo descargar: ") + (e.message || e), 6000);
     return false;
   } finally { off(); }
 }
@@ -43,10 +43,10 @@ const Ref = {
     const box = $("refUse");
     if (box.checked) {
       box.checked = false;
-      if (!state.editImage) { toast("Primero elige la imagen del personaje (Elegir o ↳ Última imagen)", 4000); return this.render(); }
-      if (!this.supported(currentOption())) { toast("La referencia funciona con el motor rápido (NVIDIA) y modelos SDXL, Illustrious o Pony", 5000); return this.render(); }
-      box.checked = await downloadAssets(["ipadapter", "clip_vision"], "Personaje de referencia",
-        "Necesita el IP-Adapter para NoobAI / Illustrious (noobIPA Mark1) y el codificador de imágenes CLIP ViT-bigG. La primera imagen con cada personaje tarda unos segundos más (se prepara una vez y se guarda).",
+      if (!state.editImage) { toast(UiLanguage.text("Primero elige la imagen del personaje (Elegir o ↳ Última imagen)"), 4000); return this.render(); }
+      if (!this.supported(currentOption())) { toast(UiLanguage.text("La referencia funciona con el motor rápido (NVIDIA) y modelos SDXL, Illustrious o Pony"), 5000); return this.render(); }
+      box.checked = await downloadAssets(["ipadapter", "clip_vision"], UiLanguage.text("Personaje de referencia"),
+        UiLanguage.text("Necesita el IP-Adapter para NoobAI / Illustrious (noobIPA Mark1) y el codificador de imágenes CLIP ViT-bigG. La primera imagen con cada personaje tarda unos segundos más (se prepara una vez y se guarda)."),
         (t) => { $("refInfo").textContent = t; });
     }
     this.render();
@@ -63,8 +63,8 @@ const Ref = {
     const on = this.on();
     $("refBox").classList.toggle("hidden", !on);
     $("refWeightTxt").textContent = Number($("refWeight").value).toFixed(2).replace(".", ",");
-    if (on && !this.supported(currentOption())) $("refInfo").textContent = "Este modelo o motor no admite referencia: se usará como imagen a imagen.";
-    else if (on) $("refInfo").textContent = "Toma pelo, ojos, ropa y colores del personaje, no la pose ni el fondo. Escribe en el prompt el estilo, la pose o el lugar (por ejemplo: singing, holding sword).";
+    if (on && !this.supported(currentOption())) $("refInfo").textContent = UiLanguage.text("Este modelo o motor no admite referencia: se usará como imagen a imagen.");
+    else if (on) $("refInfo").textContent = UiLanguage.text("Toma pelo, ojos, ropa y colores del personaje, no la pose ni el fondo. Escribe en el prompt el estilo, la pose o el lugar (por ejemplo: singing, holding sword).");
     setMode("edit");
     if (typeof Acc !== "undefined") Acc.summaries();
   },
@@ -154,21 +154,44 @@ const PicPrompt = {
   kind() { return store.get("tagSentence", false) ? "sentence" : "tags"; },
   len() { return store.get("tagLen", 1); },
 
+  translateUi() {
+    $("picTitle").textContent = UiLanguage.text("Prompt desde una imagen");
+    const labels = { picHelp: "Puedes editar el texto antes de usarlo. Anima, Illustrious y Pony entienden mejor las etiquetas.",
+      picOther: "Otra imagen", picCopy: "Copiar", picAdd: "Añadir", picUse: "Usar" };
+    for (const [id, source] of Object.entries(labels)) $(id).textContent = UiLanguage.text(source);
+    const kind = ["Etiquetas", "Frase"], len = ["Corto", "Medio", "Largo"];
+    [...$("picKind").children].forEach((b, i) => { b.textContent = UiLanguage.text(kind[i]); });
+    [...$("picLen").children].forEach((b, i) => { b.textContent = UiLanguage.text(len[i]); });
+    const label = $("picOnly").parentElement;
+    const text = [...label.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+    if (text) text.data = " " + UiLanguage.text("Solo el personaje (sin pose ni fondo): añade tú el estilo, la pose o el lugar");
+    $("picWaitTitle").textContent = UiLanguage.text("Obteniendo etiquetas de la imagen…");
+    $("picWaitHelp").textContent = UiLanguage.text("Analizando la imagen. Esto puede tardar unos segundos.");
+  },
+
   async open(src) {
-    if (!(await downloadAssets(["tagger", "tagger_tags"], "Prompt desde una imagen",
-      "Lee una imagen y escribe su prompt: etiquetas (1girl, silver hair…) o una frase. Usa WD ViT Tagger v3 de SmilingWolf (Apache-2.0), el mismo que el teléfono."))) return;
+    if (!(await downloadAssets(["tagger", "tagger_tags"], UiLanguage.text("Prompt desde una imagen"),
+      UiLanguage.text("Lee una imagen y escribe su prompt: etiquetas (1girl, silver hair…) o una frase. Usa WD ViT Tagger v3 de SmilingWolf (Apache-2.0), el mismo que el teléfono.")))) return;
     src = src || (await pickImage());
     if (!src) return;
     this.img = src;
-    setStatus("Leyendo la imagen…");
+    this.translateUi();
+    openModal("picWaitDlg");
+    setStatus(UiLanguage.text("Leyendo la imagen…"));
     try {
       // El ayudante (Python del motor rápido en la CPU): funciona con cualquier modelo cargado, no solo con SDXL
       const t0 = performance.now();
       const raw = await invoke("image_tags", { image: src, general: 0.35 });
       this.tags = raw.map(([name, score, category]) => ({ name, score, category })).filter((t) => t.category !== 9);
-      $("picCount").textContent = `${this.tags.length} etiquetas en ${((performance.now() - t0) / 1000).toFixed(1).replace(".", ",")} s`;
+      const seconds = ((performance.now() - t0) / 1000).toFixed(1).replace(".", UiLanguage.selected === "en" ? "." : ",");
+      $("picCount").textContent = UiLanguage.template`${this.tags.length} etiquetas en ${seconds} s`;
       setStatus("");
-    } catch (e) { return toast("No se pudo leer la imagen: " + (e.message || e), 6000); }
+    } catch (e) {
+      closeModal("picWaitDlg");
+      setStatus("");
+      return toast(UiLanguage.text("No se pudo leer la imagen: ") + (e.message || e), 6000);
+    }
+    closeModal("picWaitDlg");
     $("picImg").src = src;
     $("picOnly").checked = store.get("tagCharOnly", false);
     this.paint();
@@ -190,7 +213,7 @@ for (const b of $("picKind").children) b.onclick = () => { store.set("tagSentenc
 for (const b of $("picLen").children) b.onclick = () => { store.set("tagLen", Number(b.dataset.v)); PicPrompt.paint(); };
 $("picOnly").onchange = () => { store.set("tagCharOnly", $("picOnly").checked); PicPrompt.fill(); };
 $("picOther").onclick = () => { closeModal("picDlg"); PicPrompt.open(); };
-$("picCopy").onclick = async () => { try { await navigator.clipboard.writeText($("picOut").value); toast("Copiado", 1500); } catch { toast("No se pudo copiar", 2500); } };
+$("picCopy").onclick = async () => { try { await navigator.clipboard.writeText($("picOut").value); toast(UiLanguage.text("Copiado"), 1500); } catch { toast(UiLanguage.text("No se pudo copiar"), 2500); } };
 $("picAdd").onclick = () => {
   const t = $("prompt"), add = $("picOut").value.trim();
   if (add) t.value = t.value.trim() ? t.value.replace(/[,\s]*$/, "") + ", " + add : add;

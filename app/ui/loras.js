@@ -3,8 +3,8 @@
 "use strict";
 
 const CAT_LABEL = {
-  character: "Personaje", clothing: "Ropa", poses: "Pose", style: "Estilo",
-  concept: "Concepto", background: "Fondo", objects: "Objeto",
+  character: UiLanguage.text("Personaje"), clothing: UiLanguage.text("Ropa"), poses: "Pose", style: UiLanguage.text("Estilo"),
+  concept: UiLanguage.text("Concepto"), background: UiLanguage.text("Fondo"), objects: UiLanguage.text("Objeto"),
 };
 const CAT_ORDER = ["character", "clothing", "poses", "style", "concept", "background", "objects"];
 const TAG_RE = /<lora:([^:>]+)(?::\s*(-?[\d.,]+))?\s*>/gi;
@@ -57,7 +57,7 @@ function ask(opts) {
       list.appendChild(b);
     }
     const btns = $("askBtns"); btns.innerHTML = "";
-    for (const it of opts.buttons || [{ label: "Cancelar", value: null }]) {
+    for (const it of opts.buttons || [{ label: UiLanguage.text("Cancelar"), value: null }]) {
       const b = document.createElement("button");
       b.className = it.primary ? "primary sm" : "ghost";
       b.textContent = it.label;
@@ -163,14 +163,14 @@ const Loras = {
       const l = this.byStem(t.stem);
       const d = document.createElement("div");
       d.className = "lora" + (l ? "" : " missing");
-      d.innerHTML = `<div class="row"><span class="name"></span><span class="lora-ctl">
+      d.innerHTML = UiLanguage.template`<div class="row"><span class="name"></span><span class="lora-ctl">
         <input class="field lora-num" type="number" min="-2" max="2" step="0.05" inputmode="decimal">
         <button class="x" aria-label="Quitar">×</button></span></div>`;
       const name = d.querySelector(".name");
-      name.textContent = l ? l.title : t.stem + " (no está)";
-      name.title = l ? `<lora:${l.stem}> · ${l.words.join(", ") || "sin palabras activadoras"}` : "Este LoRA no está en la carpeta loras";
+      name.textContent = l ? l.title : t.stem + UiLanguage.text(" (no está)");
+      name.title = l ? `<lora:${l.stem}> · ${l.words.join(", ") || UiLanguage.text("sin palabras activadoras")}` : UiLanguage.text("Este LoRA no está en la carpeta loras");
       const inp = d.querySelector("input");
-      inp.value = String(t.w); inp.setAttribute("aria-label", "Fuerza de " + (l ? l.title : t.stem));
+      inp.value = String(t.w); inp.setAttribute("aria-label", UiLanguage.text("Fuerza de ") + (l ? l.title : t.stem));
       inp.onchange = () => this.setTag(t.stem, clampNum(inp, 1));
       inp.onkeydown = (e) => { if (e.key === "Enter") inp.blur(); };
       d.querySelector(".x").onclick = () => this.removeTag(t.stem);
@@ -203,7 +203,7 @@ const Loras = {
       };
       chip("all", `Todas  ${this.lib.length}`);
       for (const c of present) chip(c, `${CAT_LABEL[c]}  ${counts[c]}`);
-      if (none) chip("none", `Sin categoría  ${none}`);
+      if (none) chip("none", UiLanguage.template`Sin categoría  ${none}`);
     } else this.cat = "all";
     cats.classList.toggle("hidden", !present.length);
 
@@ -213,14 +213,14 @@ const Loras = {
       (this.cat === "all" || (this.cat === "none" ? !l.cat : l.cat === this.cat)) &&
       (!q || `${l.stem} ${l.title} ${l.words.join(" ")}`.toLowerCase().includes(q)));
     if (!this.lib.length) {
-      rows.innerHTML = '<div class="lbl empty-lib">Vacía: descarga LoRAs de Civitai o importa un archivo.</div>';
+      rows.innerHTML = UiLanguage.text('<div class="lbl empty-lib">Vacía: descarga LoRAs de Civitai o importa un archivo.</div>');
     }
     const fam = currentOption()?.family;
     for (const l of shown) {
       const t = tags.get(l.stem.toLowerCase());
       const r = document.createElement("div");
       r.className = "lora-row" + (t ? " on" : "");
-      r.innerHTML = `<input type="checkbox" class="lora-chk">
+      r.innerHTML = UiLanguage.template`<input type="checkbox" class="lora-chk">
         <div class="lora-txt"><div class="lora-title"></div><div class="lora-sub"></div></div>
         <span class="badge"></span>
         <button class="mini lora-edit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button>
@@ -233,10 +233,10 @@ const Loras = {
       badge.textContent = l.base || "";
       const mismatch = l.base && fam && ((fam === "anima") !== /anima/i.test(l.base));
       badge.classList.toggle("warn", !!mismatch);
-      badge.title = mismatch ? "Este LoRA es para otro modelo: puede no funcionar con el modelo cargado" : "";
+      badge.title = mismatch ? UiLanguage.text("Este LoRA es para otro modelo: puede no funcionar con el modelo cargado") : "";
       if (!l.base) badge.remove();
       const w = r.querySelector(".lora-num");
-      w.value = t ? String(t.w) : "1.0"; w.setAttribute("aria-label", "Fuerza de " + l.title);
+      w.value = t ? String(t.w) : "1.0"; w.setAttribute("aria-label", UiLanguage.text("Fuerza de ") + l.title);
       const toggle = (on) => { if (on) this.setTag(l.stem, readNum(w) || 1); else this.removeTag(l.stem); this.renderLib(); this.renderPanel(); };
       chk.onchange = () => toggle(chk.checked);
       r.onclick = (e) => { if (e.target.closest("input,button")) return; chk.checked = !chk.checked; toggle(chk.checked); };
@@ -247,26 +247,26 @@ const Loras = {
       r.oncontextmenu = (e) => { e.preventDefault(); this.menu(l, e.clientX, e.clientY); };
       rows.appendChild(r);
     }
-    $("loraHint").textContent = this.lib.length ? "Clic derecho o ⋯ para más opciones" : "";
+    $("loraHint").textContent = this.lib.length ? UiLanguage.text("Clic derecho o ⋯ para más opciones") : "";
   },
 
   menu(l, x, y) {
     showMenu(x, y, l.title, [
-      { label: `Categoría: ${l.cat ? CAT_LABEL[l.cat] : "Sin categoría"}…`, run: () => this.category(l) },
-      { label: "Copiar palabras activadoras", run: async () => {
-          if (!l.words.length) return toast("No declara palabras activadoras");
-          await copyText(l.words.join(", ")); toast("Copiado: " + l.words.join(", "));
+      { label: UiLanguage.template`Categoría: ${l.cat ? CAT_LABEL[l.cat] : UiLanguage.text("Sin categoría")}…`, run: () => this.category(l) },
+      { label: UiLanguage.text("Copiar palabras activadoras"), run: async () => {
+          if (!l.words.length) return toast(UiLanguage.text("No declara palabras activadoras"));
+          await copyText(l.words.join(", ")); toast(UiLanguage.text("Copiado: ") + l.words.join(", "));
         } },
       { label: "Editar palabras activadoras…", run: () => this.editWords(l) },
-      { label: "Añadir activadoras al prompt", run: () => this.addWords(l) },
-      { label: "Cambiar nombre…", run: () => this.rename(l) },
-      { label: "Eliminar", danger: true, run: () => this.remove(l) },
+      { label: UiLanguage.text("Añadir activadoras al prompt"), run: () => this.addWords(l) },
+      { label: UiLanguage.text("Cambiar nombre…"), run: () => this.rename(l) },
+      { label: UiLanguage.text("Eliminar"), danger: true, run: () => this.remove(l) },
     ]);
   },
 
   async category(l) {
-    const list = [{ label: "Sin categoría", value: "none", on: !l.cat }, ...CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: c, on: l.cat === c }))];
-    const v = await ask({ title: "Categoría", list, buttons: [{ label: "Cancelar", value: null }] });
+    const list = [{ label: UiLanguage.text("Sin categoría"), value: "none", on: !l.cat }, ...CAT_ORDER.map((c) => ({ label: CAT_LABEL[c], value: c, on: l.cat === c }))];
+    const v = await ask({ title: UiLanguage.text("Categoría"), list, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }] });
     if (!v) return;
     await invoke("lora_set_meta", { file: l.file, patch: { cat: v } });
     await this.refresh();
@@ -275,9 +275,9 @@ const Loras = {
   async editWords(l) {
     const r = await ask({
       title: `Activadoras: ${l.title}`,
-      msg: "Palabras o frase que activan la LoRA, separadas por comas. Se añaden al prompt con «Añadir activadoras al prompt».",
-      input: { value: l.words.join(", "), placeholder: "p. ej. estilo3d, personaje x" },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }],
+      msg: UiLanguage.text("Palabras o frase que activan la LoRA, separadas por comas. Se añaden al prompt con «Añadir activadoras al prompt»."),
+      input: { value: l.words.join(", "), placeholder: UiLanguage.text("p. ej. estilo3d, personaje x") },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Guardar"), value: "@input", primary: true }],
     });
     if (!r) return;
     await invoke("lora_set_meta", { file: l.file, patch: { words: r.input.split(",") } });
@@ -285,18 +285,18 @@ const Loras = {
   },
 
   addWords(l) {
-    if (!l.words.length) return toast("Sin palabras activadoras: usa «Editar palabras activadoras…»");
+    if (!l.words.length) return toast(UiLanguage.text("Sin palabras activadoras: usa «Editar palabras activadoras…»"));
     const p = $("prompt").value;
     const have = new Set(p.split(",").map((x) => x.trim().toLowerCase()));
     const add = l.words.filter((w) => !have.has(w.trim().toLowerCase()));
     if (add.length) this.setPrompt(p.trim() ? p.replace(/[,\s]*$/, "") + ", " + add.join(", ") : add.join(", "));
-    toast("Palabras activadoras de la LoRA añadidas al prompt");
+    toast(UiLanguage.text("Palabras activadoras de la LoRA añadidas al prompt"));
   },
 
   async rename(l) {
     const r = await ask({
-      title: "Cambiar nombre", input: { value: l.title },
-      buttons: [{ label: "Cancelar", value: null }, { label: "Restablecer", value: "reset" }, { label: "OK", value: "@input", primary: true }],
+      title: UiLanguage.text("Cambiar nombre"), input: { value: l.title },
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Restablecer"), value: "reset" }, { label: "OK", value: "@input", primary: true }],
     });
     if (!r) return;
     await invoke("lora_set_meta", { file: l.file, patch: { alias: r === "reset" ? "" : r.input } });
@@ -305,8 +305,8 @@ const Loras = {
 
   async remove(l) {
     const ok = await ask({
-      title: `¿Eliminar ${l.title}?`, msg: "Se envía a la Papelera de reciclaje junto con su .json (se puede recuperar).",
-      buttons: [{ label: "Cancelar", value: false }, { label: "Eliminar", value: true, primary: true }],
+      title: UiLanguage.template`¿Eliminar ${l.title}?`, msg: UiLanguage.text("Se envía a la Papelera de reciclaje junto con su .json (se puede recuperar)."),
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: false }, { label: UiLanguage.text("Eliminar"), value: true, primary: true }],
     });
     if (!ok) return;
     try {
@@ -322,12 +322,12 @@ const Loras = {
       const r = await invoke("lora_import");
       await this.refresh();
       await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
-      for (const f of r.failed) toast(`El LoRA «${f.file}» no sirve: ${f.error}`, 5000);
+      for (const f of r.failed) toast(UiLanguage.template`El LoRA «${f.file}» no sirve: ${f.error}`, 5000);
       if (r.imported.length) {
         const last = r.imported[r.imported.length - 1];
-        toast(`✓ ${r.imported.length === 1 ? last.stem : r.imported.length + " LoRAs"} · En el prompt: <lora:${last.stem}:1.0>`, 4500);
+        toast(UiLanguage.template`✓ ${r.imported.length === 1 ? last.stem : r.imported.length + " LoRAs"} · En el prompt: <lora:${last.stem}:1.0>`, 4500);
       }
-    } catch (e) { toast("No se pudo importar: " + (e.message || e), 5000); }
+    } catch (e) { toast(UiLanguage.text("No se pudo importar: ") + (e.message || e), 5000); }
   },
 };
 
@@ -345,9 +345,9 @@ const FAMILIES = [
   { key: "sdxl", label: "SDXL", base: ["SDXL 1.0"] },
 ];
 const SORTS = [
-  { key: "Most Downloaded", label: "Más descargados" },
-  { key: "Highest Rated", label: "Mejor valorados" },
-  { key: "Newest", label: "Más recientes" },
+  { key: "Most Downloaded", label: UiLanguage.text("Más descargados") },
+  { key: "Highest Rated", label: UiLanguage.text("Mejor valorados") },
+  { key: "Newest", label: UiLanguage.text("Más recientes") },
 ];
 
 const Civitai = {
@@ -371,11 +371,11 @@ const Civitai = {
       el.innerHTML = "";
       for (const o of opts) el.appendChild(flistItem(o.icon, o.label, null, cur === o.key, () => { set(o.key); this.renderChips(); this.search(); }));
     };
-    group($("civType"), [{ key: "LORA", label: "LoRA", icon: "preset" }, { key: "Checkpoint", label: "Modelos (checkpoints)", icon: "objects" }], this.type, (k) => (this.type = k));
+    group($("civType"), [{ key: "LORA", label: "LoRA", icon: "preset" }, { key: "Checkpoint", label: UiLanguage.text("Modelos (checkpoints)"), icon: "objects" }], this.type, (k) => (this.type = k));
     group($("civFamily"), FAMILIES.map((f) => ({ ...f, icon: null })), this.family, (k) => (this.family = k));
     group($("civCat"), [{ key: "", label: "Todas", icon: "all" }, ...CAT_ORDER.map((c) => ({ key: c, label: CAT_LABEL[c], icon: c }))], this.cat, (k) => (this.cat = k));
     const fam = FAMILIES.find((f) => f.key === this.family)?.label;
-    $("civFilterTxt").textContent = [this.type === "LORA" ? "LoRA" : "Modelos", fam, this.cat ? CAT_LABEL[this.cat] : "", $("civNsfw").checked ? "+18" : ""].filter(Boolean).join(" · ");
+    $("civFilterTxt").textContent = [this.type === "LORA" ? "LoRA" : UiLanguage.text("Modelos"), fam, this.cat ? CAT_LABEL[this.cat] : "", $("civNsfw").checked ? "+18" : ""].filter(Boolean).join(" · ");
   },
 
   /** Enlace o id de civitai.com / civitai.red -> abre la ficha directamente. */
@@ -391,7 +391,7 @@ const Civitai = {
     const link = !more && this.parseLink(q);
     if (link) return this.openModel(link.id, link.version);
     if (!more) { this.cursor = null; this.items = []; $("civGrid").innerHTML = ""; }
-    $("civInfo").textContent = "Buscando…";
+    $("civInfo").textContent = UiLanguage.text("Buscando…");
     $("civMore").classList.add("hidden");
     try {
       [this.index] = await Promise.all([invoke("downloaded_index"), Promise.resolve()]);
@@ -404,7 +404,7 @@ const Civitai = {
       this.items.push(...items);
       this.cursor = r.metadata?.nextCursor || null;
       for (const m of items) $("civGrid").appendChild(this.card(m));
-      $("civInfo").textContent = this.items.length ? `Encontrados: ${this.items.length}` : "No se encontraron resultados";
+      $("civInfo").textContent = this.items.length ? UiLanguage.template`Encontrados: ${this.items.length}` : UiLanguage.text("No se encontraron resultados");
       $("civMore").classList.toggle("hidden", !this.cursor);
     } catch (e) { $("civInfo").textContent = "Error: " + (e.message || e); }
   },
@@ -444,8 +444,8 @@ const Civitai = {
     c.className = "ccard";
     const src = this.thumb(m);
     const done = this.isDownloaded(m);
-    c.innerHTML = `<div class="cthumb">${src ? '<img loading="lazy" alt="">' : '<span class="lbl">sin vista previa</span>'}
-        ${done ? '<span class="cok">✓ Descargada</span>' : ""}${m.nsfw ? '<span class="c18">18+</span>' : ""}
+    c.innerHTML = UiLanguage.template`<div class="cthumb">${src ? '<img loading="lazy" alt="">' : UiLanguage.text('<span class="lbl">sin vista previa</span>')}
+        ${done ? UiLanguage.text('<span class="cok">✓ Descargada</span>') : ""}${m.nsfw ? '<span class="c18">18+</span>' : ""}
         <button class="csave" title="Guardar en una colección" aria-label="Guardar en una colección"></button></div>
       <div class="cbody"><div class="cname"></div>
         <div class="lmeta"><span class="cbase"></span><span class="csize"></span></div>
@@ -454,14 +454,14 @@ const Civitai = {
     if (src) c.querySelector("img").src = src;
     c.querySelector(".cname").textContent = m.name;
     const tw = v.trainedWords || [];
-    c.title = [m.name, [m.type, v.baseModel].filter(Boolean).join(" · "), tw.length ? "Activadoras: " + tw.join(", ") : "", "Clic: ver versiones y descargar"].filter(Boolean).join("\n");
+    c.title = [m.name, [m.type, v.baseModel].filter(Boolean).join(" · "), tw.length ? "Activadoras: " + tw.join(", ") : "", UiLanguage.text("Clic: ver versiones y descargar")].filter(Boolean).join("\n");
     c.querySelector(".cbase").textContent = [m.type === "LORA" ? "LoRA" : m.type, v.baseModel].filter(Boolean).join(" · ");
     const f = this.mainFile(v);
     c.querySelector(".csize").textContent = f?.sizeKB ? fmtMB(f.sizeKB * 1024) : "";
-    c.querySelector(".cby").textContent = `${m.creator?.username || ""} · ⬇ ${(m.stats?.downloadCount || 0).toLocaleString("es")}`;
+    c.querySelector(".cby").textContent = `${m.creator?.username || ""} · ⬇ ${(m.stats?.downloadCount || 0).toLocaleString(UiLanguage.selected)}`;
     const words = v.trainedWords || [];
-    c.querySelector(".ctrig").textContent = words.length ? "Activador: " + words[0] + (words.length > 1 ? "…" : "") : "";
-    c.querySelector(".cbtn").textContent = done ? "Ver · ya la tienes" : "Ver y descargar";
+    c.querySelector(".ctrig").textContent = words.length ? UiLanguage.text("Activador: ") + words[0] + (words.length > 1 ? "…" : "") : "";
+    c.querySelector(".cbtn").textContent = done ? UiLanguage.text("Ver · ya la tienes") : UiLanguage.text("Ver y descargar");
     const save = c.querySelector(".csave");
     const mark = () => { const on = Collections.inAny(m.id); save.textContent = on ? "★" : "☆"; save.classList.toggle("on", on); };
     mark();
@@ -493,18 +493,18 @@ const Civitai = {
     if (!v) return;
     const f = this.mainFile(v);
     const done = this.isDownloaded(m, v);
-    $("sheetInfo").textContent = [done ? "✓ Esta versión ya está descargada" : "", [m.type, v.baseModel, f ? `${(f.sizeKB / 1024).toFixed(0)} MB` : ""].filter(Boolean).join(" · ")].filter(Boolean).join("\n");
+    $("sheetInfo").textContent = [done ? UiLanguage.text("✓ Esta versión ya está descargada") : "", [m.type, v.baseModel, f ? `${(f.sizeKB / 1024).toFixed(0)} MB` : ""].filter(Boolean).join(" · ")].filter(Boolean).join("\n");
     const words = v.trainedWords || [];
     const w = $("sheetWords"); w.innerHTML = "";
     if (words.length) {
       const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = "Palabras activadoras:"; w.appendChild(lbl);
       const chips = document.createElement("div"); chips.className = "chips";
-      for (const t of words) { const b = document.createElement("button"); b.className = "chip"; b.textContent = t; b.title = "Copiar"; b.onclick = async () => { await copyText(t); toast("Copiado: " + t); }; chips.appendChild(b); }
+      for (const t of words) { const b = document.createElement("button"); b.className = "chip"; b.textContent = t; b.title = UiLanguage.text("Copiar"); b.onclick = async () => { await copyText(t); toast(UiLanguage.text("Copiado: ") + t); }; chips.appendChild(b); }
       w.appendChild(chips);
     }
     const busy = !!this.dl;
     $("sheetDl").disabled = busy || !f;
-    $("sheetDl").textContent = f ? (done ? "Descargar de nuevo" : "Descargar") : "Esta versión no contiene ningún archivo";
+    $("sheetDl").textContent = f ? (done ? UiLanguage.text("Descargar de nuevo") : UiLanguage.text("Descargar")) : UiLanguage.text("Esta versión no contiene ningún archivo");
     $("sheetCancel").classList.toggle("hidden", !busy);
     $("sheetProgress").classList.toggle("hidden", !busy);
   },
@@ -528,30 +528,30 @@ const Civitai = {
     const m = this.model, v = this.version(), r = v && this.request(m, v);
     if (!r || this.dl || Collections.dl) return;
     if (m.nsfw && !this.key()) {
-      toast("Este modelo es +18: añade tu clave API de Civitai en Ajustes", 4500);
+      toast(UiLanguage.text("Este modelo es +18: añade tu clave API de Civitai en Ajustes"), 4500);
       return;
     }
     const { isLora, meta } = r;
     this.dl = r.req.id;
     this.renderSheet();
-    $("sheetProgTxt").textContent = "Descargando…";
+    $("sheetProgTxt").textContent = UiLanguage.text("Descargando…");
     try {
       const file = await invoke("civitai_download", { req: r.req, key: this.key() });
       this.index = await invoke("downloaded_index");
       if (isLora) {
         await Loras.refresh();
         const stem = file.replace(/^.*\//, "").replace(/\.(safetensors|gguf)$/i, "");
-        toast(`✓ ${m.name}\nEn el prompt: <lora:${stem}:1.0>${meta.words.length ? "\nPalabras activadoras: " + meta.words.join(", ") : ""}`, 6000);
+        toast(UiLanguage.template`✓ ${m.name}\nEn el prompt: <lora:${stem}:1.0>${meta.words.length ? "\nPalabras activadoras: " + meta.words.join(", ") : ""}`, 6000);
       } else {
         await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
         await scanModels();
-        toast(`✓ ${m.name}: ya aparece en Modelo`, 5000);
+        toast(UiLanguage.template`✓ ${m.name}: ya aparece en Modelo`, 5000);
       }
       // Volver a dibujar las tarjetas para marcar "✓ Descargada".
       this.redraw();
       if (LoraPage.visible()) LoraPage.render();
     } catch (e) {
-      if (!/cancelada/i.test(String(e))) toast("Falló la descarga: " + (e.message || e), 5000);
+      if (!/cancelada|cancelled/i.test(String(e))) toast(UiLanguage.text("Falló la descarga: ") + (e.message || e), 5000);
     } finally {
       this.dl = null;
       this.renderSheet();
@@ -571,7 +571,7 @@ $("civMore").onclick = () => Civitai.search(true);
 $("civNsfw").onchange = () => {
   if ($("civNsfw").checked && !Civitai.key()) {
     $("civNsfw").checked = false;
-    toast("Para ver +18 añade tu clave API de Civitai en Ajustes", 4000);
+    toast(UiLanguage.text("Para ver +18 añade tu clave API de Civitai en Ajustes"), 4000);
     return;
   }
   store.set("civitaiNsfw", $("civNsfw").checked);
@@ -595,7 +595,7 @@ window.__TAURI__?.event?.listen?.("dl-progress", (ev) => {
   if (!Civitai.dl || p.id !== Civitai.dl) return;
   const mb = (b) => (b / 1048576).toFixed(0);
   $("sheetProgTxt").textContent = p.state === "downloading"
-    ? `Descargando · ${mb(p.done)}${p.total ? " / " + mb(p.total) : ""} MB` : p.state === "done" ? "✓ Descargado" : p.state === "cancelled" ? "Cancelada" : "Falló la descarga";
+    ? UiLanguage.template`Descargando · ${mb(p.done)}${p.total ? " / " + mb(p.total) : ""} MB` : p.state === "done" ? UiLanguage.text("✓ Descargado") : p.state === "cancelled" ? UiLanguage.text("Cancelada") : UiLanguage.text("Falló la descarga");
   $("sheetBar").style.width = p.total ? `${(100 * p.done) / p.total}%` : "0%";
 });
 

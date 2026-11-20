@@ -46,11 +46,11 @@ const MageRefs = {
   },
 
   async add() {
-    if (!state.editImage) return toast("Primero elige la imagen 1 (Elegir o ↳ Última imagen)", 3500);
-    if (this.all().length >= this.MAX) return toast(this.name() + " admite hasta 3 imágenes de referencia", 3000);
+    if (!state.editImage) return toast(UiLanguage.text("Primero elige la imagen 1 (Elegir o ↳ Última imagen)"), 3500);
+    if (this.all().length >= this.MAX) return toast(this.name() + UiLanguage.text(" admite hasta 3 imágenes de referencia"), 3000);
     const src = await pickImage();
     if (!src) return;
-    try { this.extra.push(await prepareEditImage(src)); } catch (e) { return toast("No se pudo abrir la imagen: " + (e.message || e), 4000); }
+    try { this.extra.push(await prepareEditImage(src)); } catch (e) { return toast(UiLanguage.text("No se pudo abrir la imagen: ") + (e.message || e), 4000); }
     this.render();
   },
 
@@ -58,23 +58,23 @@ const MageRefs = {
    *  imagen 2 tal cual. En vez de eso, WD Tagger lee la imagen 2, sus etiquetas de ropa o de pose van a un prompt
    *  «cambia solo la ropa / la pose…» y se edita solo la foto 1, a tamaño completo. */
   async template(kind) {
-    if (this.all().length < 2) return toast("Añade primero la imagen 2 con «＋ Otra imagen de referencia»", 3500);
+    if (this.all().length < 2) return toast(UiLanguage.text("Añade primero la imagen 2 con «＋ Otra imagen de referencia»"), 3500);
     const clothes = kind === "outfit";
-    if (!(await downloadAssets(["tagger", "tagger_tags"], clothes ? "👗 Copiar ropa" : "🧍 Copiar pose",
-      "WD Tagger lee la imagen 2 y saca su " + (clothes ? "ropa" : "pose") + " para escribir el prompt (SmilingWolf, Apache-2.0)."))) return;
-    setStatus("Leyendo la imagen 2…");
+    if (!(await downloadAssets(["tagger", "tagger_tags"], clothes ? UiLanguage.text("👗 Copiar ropa") : UiLanguage.text("🧍 Copiar pose"),
+      UiLanguage.text("WD Tagger lee la imagen 2 y saca su ") + (clothes ? "ropa" : "pose") + UiLanguage.text(" para escribir el prompt (SmilingWolf, Apache-2.0).")))) return;
+    setStatus(UiLanguage.text("Leyendo la imagen 2…"));
     let tags;
     try { tags = await invoke("image_tags", { image: this.extra[0].src, general: 0.25 }); }
-    catch (e) { setStatus(""); return toast("No se pudo leer la imagen 2: " + (e.message || e), 7000); }
+    catch (e) { setStatus(""); return toast(UiLanguage.text("No se pudo leer la imagen 2: ") + (e.message || e), 7000); }
     const got = CopyTags.pick(tags, clothes, clothes ? 14 : 8);
-    if (!got.length) { setStatus(""); return toast(clothes ? "No encontré ropa en la imagen 2" : "No encontré una pose clara en la imagen 2", 5000); }
+    if (!got.length) { setStatus(""); return toast(clothes ? UiLanguage.text("No encontré ropa en la imagen 2") : UiLanguage.text("No encontré una pose clara en la imagen 2"), 5000); }
     const list = got.join(", ");
     $("prompt").value = clothes
       ? `Change only the outfit of the person in the picture to: ${list}. Keep the face, hair, body, pose and background exactly the same.`
       : `Change only the pose of the person in the picture to: ${list}. Keep the face, hair, outfit and background exactly the same, with natural anatomy and hands.`;
     $("prompt").dispatchEvent(new Event("input"));
     this.extra = []; this.render(); // solo la foto 1, a tamaño completo
-    setStatus(clothes ? "Listo: para no tocar la cara ni el fondo, pinta la ropa con «✎ Zona a cambiar» y genera." : "Listo: genera para cambiar la pose. Puedes retocar el prompt.", "ok");
+    setStatus(clothes ? UiLanguage.text("Listo: para no tocar la cara ni el fondo, pinta la ropa con «✎ Zona a cambiar» y genera.") : UiLanguage.text("Listo: genera para cambiar la pose. Puedes retocar el prompt."), "ok");
   },
 
   render() {
@@ -82,7 +82,7 @@ const MageRefs = {
     box.innerHTML = "";
     this.extra.forEach((r, i) => {
       const d = document.createElement("div"); d.className = "mage-ref";
-      d.innerHTML = `<img alt="Imagen ${i + 2}"><span>${i + 2}</span><button title="Quitar" aria-label="Quitar imagen ${i + 2}">✕</button>`;
+      d.innerHTML = UiLanguage.template`<img alt="Imagen ${i + 2}"><span>${i + 2}</span><button title="Quitar" aria-label="Quitar imagen ${i + 2}">✕</button>`;
       d.querySelector("img").src = r.src;
       d.querySelector("button").onclick = () => { this.extra.splice(i, 1); this.render(); };
       box.appendChild(d);
@@ -90,8 +90,8 @@ const MageRefs = {
     $("mageAdd").disabled = !state.editImage || this.all().length >= this.MAX;
     if (this.isMage()) {
       $("editHint").textContent = state.editImage
-        ? `${this.name()}: ${this.all().length === 1 ? "1 imagen" : this.all().length + " imágenes"} de referencia. Escribe lo que quieres en una frase (en inglés va mejor): «the character from image 1 singing on a stage, holding a sword».`
-        : `${this.name()} edita con una orden en frase. Elige la imagen 1 (o genera sin imágenes, desde cero).`;
+        ? UiLanguage.template`${this.name()}: ${this.all().length === 1 ? UiLanguage.text("1 imagen") : this.all().length + UiLanguage.text(" imágenes")} de referencia. Escribe lo que quieres en una frase (en inglés va mejor): «the character from image 1 singing on a stage, holding a sword».`
+        : UiLanguage.template`${this.name()} edita con una orden en frase. Elige la imagen 1 (o genera sin imágenes, desde cero).`;
     }
   },
 };

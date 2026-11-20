@@ -44,6 +44,13 @@ class WDTagger(nn.Module):
             out[k] = v
         self.load_state_dict(out)
         self.eval()
+        # WD Tagger runs on CPU on PCs so it does not compete with the diffusion
+        # model for scarce VRAM. Dynamic int8 linear layers use optimized CPU
+        # kernels and make the large ViT projections much lighter. The downloaded
+        # checkpoint remains unchanged.
+        qengine = torch.backends.quantized.engine
+        if qengine in torch.backends.quantized.supported_engines and qengine != "none":
+            torch.ao.quantization.quantize_dynamic(self, {nn.Linear}, dtype=torch.qint8, inplace=True)
         with open(tags_csv, encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
         self.names = [r["name"] for r in rows]

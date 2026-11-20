@@ -87,14 +87,14 @@ const EsEn = {
   },
 
   async ensure() {
-    return downloadAssets(this.KINDS, "🌐 ES→EN", "Traduce el prompt y el negativo de español a inglés sin internet, con OPUS-MT (Helsinki-NLP, Apache-2.0). Funciona con el Python del motor rápido (NVIDIA).");
+    return downloadAssets(this.KINDS, "🌐 ES→EN", UiLanguage.text("Traduce el prompt y el negativo de español a inglés sin internet, con OPUS-MT (Helsinki-NLP, Apache-2.0). Funciona con el Python del motor rápido (NVIDIA)."));
   },
 
   async toggle() {
     if (!this.on()) {
       if (!(await this.ensure())) return;
       store.set("esen", true);
-      setStatus("🌐 ES→EN encendido: abriendo el traductor (la primera vez tarda un poco)…");
+      setStatus(UiLanguage.text("🌐 ES→EN encendido: abriendo el traductor (la primera vez tarda un poco)…"));
     } else store.set("esen", false);
     this.render();
     this.preview(true);
@@ -109,9 +109,11 @@ const EsEn = {
       try {
         await this.fill([p, n]);
         this.show("promptEn", p); this.show("negEn", n);
-        if (/abriendo el traductor/.test($("modelStatus")?.textContent || "")) setStatus("🌐 ES→EN listo", "ok");
+        if ($("modelStatus")?.textContent === UiLanguage.text("🌐 ES→EN encendido: abriendo el traductor (la primera vez tarda un poco)…")) {
+          setStatus(UiLanguage.text("🌐 ES→EN listo"), "ok");
+        }
       } catch (e) {
-        $("promptEn").textContent = "No se pudo traducir: " + (e.message || e);
+        $("promptEn").textContent = UiLanguage.text("No se pudo traducir: ") + (e.message || e);
         $("promptEn").classList.remove("hidden");
       }
     }, now ? 0 : 700);
@@ -120,14 +122,14 @@ const EsEn = {
   show(id, text) {
     const en = this.build(text), changed = en !== text;
     $(id).classList.toggle("hidden", !changed);
-    if (changed) $(id).textContent = "En inglés: " + en;
+    if (changed) $(id).textContent = UiLanguage.text("En inglés: ") + en;
   },
 
   render() {
     const b = $("esenBtn"), on = this.on();
     b.classList.toggle("on", on);
     b.setAttribute("aria-pressed", String(on));
-    b.title = on ? "ES→EN encendido: escribe en español y se genera en inglés (clic para apagar)" : "ES→EN apagado: el prompt se manda tal cual (clic para encender)";
+    b.title = on ? UiLanguage.text("ES→EN encendido: escribe en español y se genera en inglés (clic para apagar)") : UiLanguage.text("ES→EN apagado: el prompt se manda tal cual (clic para encender)");
   },
 };
 

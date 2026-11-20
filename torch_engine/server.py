@@ -12,6 +12,8 @@ import threading
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from queue import Full
+from uuid import uuid4
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import ARGS, STATUS, JOBS, QUEUE, LOCK, RUN, EXTS, SAMPLERS, SCHEDULERS, log, now_ms, decode_image, png_b64, model_files, upscalers  # noqa: E402
@@ -120,10 +122,18 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, {"ok": True})
             if p == "/sdcpp/v1/img_gen":
                 body = self.body()
-                jid = f"job_{now_ms():x}_{len(JOBS):04d}"
-                JOBS[jid] = {"id": jid, "kind": "img_gen", "status": "queued", "created": now_ms(),
-                             "progress": {"stage": "queued", "elapsed_ms": 0}}
-                QUEUE.put((jid, body))
+                jid = f"job_{uuid4().hex}"
+                with LOCK:
+                    JOBS[jid] = {"id": jid, "kind": "img_gen", "status": "queued", "created": now_ms(),
+                                 "progress": {"stage": "queued", "elapsed_ms": 0}}
+                    try:
+                        QUEUE.put_nowait((jid, body))
+                    except Full:
+                        del JOBS[jid]
+                        return self.send(429, {"message": "El motor ya tiene una generación en espera"})
+                    completed = [key for key, job in JOBS.items() if job["status"] in ("completed", "cancelled", "failed")]
+                    for key in completed[:-16]:
+                        del JOBS[key]
                 return self.send(200, {"id": jid, "kind": "img_gen", "status": "queued", "poll_url": f"/sdcpp/v1/jobs/{jid}"})
             if p.startswith("/sdcpp/v1/jobs/") and p.endswith("/cancel"):
                 j = JOBS.get(p.split("/")[-2])

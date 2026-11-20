@@ -11,12 +11,12 @@ const Grids = {
   KINDS: [
     { value: 1, label: "4 seeds" },
     { value: 2, label: "CFG  1 · 3 · 5 · 7" },
-    { value: 3, label: "Pasos  4 · 8 · 12 · 20" },
+    { value: 3, label: UiLanguage.text("Pasos  4 · 8 · 12 · 20") },
   ],
 
   async menu() {
     if (state.busy || !currentOption()) return;
-    const k = await ask({ title: "Comparar (cuadrícula 2×2)", msg: "Genera 4 imágenes cambiando una sola cosa y las junta en una cuadrícula rotulada.", list: this.KINDS });
+    const k = await ask({ title: UiLanguage.text("Comparar (cuadrícula 2×2)"), msg: UiLanguage.text("Genera 4 imágenes cambiando una sola cosa y las junta en una cuadrícula rotulada."), list: this.KINDS });
     if (k) generate({ grid: k });
   },
 
@@ -24,11 +24,11 @@ const Grids = {
   plan(kind, i, seed) {
     if (kind === 1) return { seed: seed + i, label: `seed ${seed + i}` };
     if (kind === 2) return { seed, cfg: this.CFG[i], label: `CFG ${this.CFG[i]}` };
-    return { seed, steps: this.STEPS[i], label: `${this.STEPS[i]} pasos` };
+    return { seed, steps: this.STEPS[i], label: UiLanguage.template`${this.STEPS[i]} pasos` };
   },
 
   img(src) {
-    return new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => bad(new Error("imagen no válida")); im.src = src; });
+    return new Promise((ok, bad) => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => bad(new Error(UiLanguage.text("imagen no válida"))); im.src = src; });
   },
 
   async save(cv, meta) {
@@ -109,14 +109,14 @@ const Grids = {
       if (kind) {
         const g = await this.saveCompare(made, labels, { ...base, seed: m.seed });
         Session.add(g);
-        setStatus("Cuadrícula guardada en el historial · ‹ › para ver las imágenes", "ok");
+        setStatus(UiLanguage.text("Cuadrícula guardada en el historial · ‹ › para ver las imágenes"), "ok");
       } else {
         const gs = await this.saveSheets(made, base);
         for (const g of gs) Session.add(g);
         if (gs.length) Session.i = Session.list.length - gs.length, Session.render();
-        setStatus(gs.length > 1 ? `Cuadrícula 1/${gs.length} · ${made.length} imágenes · ‹ › para ver más` : `Cuadrícula · ${made.length} imágenes · ‹ › para recorrerlas`, "ok");
+        setStatus(gs.length > 1 ? UiLanguage.template`Cuadrícula 1/${gs.length} · ${made.length} imágenes · ‹ › para ver más` : UiLanguage.template`Cuadrícula · ${made.length} imágenes · ‹ › para recorrerlas`, "ok");
       }
-    } catch (e) { toast("No se pudo guardar la cuadrícula: " + (e.message || e), 5000); }
+    } catch (e) { toast(UiLanguage.text("No se pudo guardar la cuadrícula: ") + (e.message || e), 5000); }
   },
 };
 

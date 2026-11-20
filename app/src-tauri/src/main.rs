@@ -67,6 +67,24 @@ fn memory() -> hw::Memory {
     hw::memory()
 }
 
+#[tauri::command]
+fn model_bytes(state: State<AppState>, files: Vec<String>) -> Result<u64, String> {
+    let root = state.root.join("models").canonicalize().map_err(|e| e.to_string())?;
+    files.into_iter().collect::<std::collections::HashSet<_>>().into_iter().try_fold(0u64, |total, file| {
+        let path = root.join(&file).canonicalize().map_err(|_| format!("No se pudo comprobar el tamaño de {file}"))?;
+        if !path.starts_with(&root) || !path.is_file() {
+            return Err(format!("Archivo de modelo inválido: {file}"));
+        }
+        Ok(total.saturating_add(path.metadata().map_err(|e| e.to_string())?.len()))
+    })
+}
+
+#[tauri::command]
+fn stop_server(state: State<AppState>) {
+    if let Some(mut server) = state.server.lock().unwrap().take() {
+        server.stop();
+    }
+}
 /// Arranca (o reinicia) el motor. Devuelve el puerto local.
 #[tauri::command]
 fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine: Option<String>) -> Result<serde_json::Value, String> {
@@ -92,7 +110,9 @@ fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine
     if let Some(mut s) = srv.take() {
         s.stop();
     }
-    let s = server::Server::start(&state.root, &eng, device.as_deref(), &opts.unwrap_or_default())?;
+    let opts = opts.unwrap_or_default();
+    let device = if opts.cpu_recovery == Some(true) && eng != "torch" { Some("cpu".into()) } else { device };
+    let s = server::Server::start(&state.root, &eng, device.as_deref(), &opts)?;
     let port = s.port;
     *srv = Some(s);
     Ok(json!({ "port": port, "engine": eng, "device": device }))
@@ -797,6 +817,8 @@ fn main() {
             app_info,
             memory,
             start_server,
+            stop_server,
+            model_bytes,
             server_status,
             save_image,
             output_files,

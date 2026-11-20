@@ -31,18 +31,18 @@ const Acc = {
     const put = (key, txt, on) => { const s = $("sum-" + key); if (s && s.textContent !== txt) s.textContent = txt; s?.classList.toggle("on", !!on); };
     const opt = (sel) => sel.options[sel.selectedIndex]?.text || "";
     const fastOn = typeof Fast !== "undefined" && Fast.on();
-    put("sampling", fastOn ? `⚡ Rápido · ${$("fastSteps").value} pasos · CFG 1` : `${opt($("sampler"))} · ${$("steps").value} pasos · CFG ${$("cfg").value}`, fastOn);
+    put("sampling", fastOn ? UiLanguage.template`⚡ Rápido · ${$("fastSteps").value} pasos · CFG 1` : UiLanguage.template`${opt($("sampler"))} · ${$("steps").value} pasos · CFG ${$("cfg").value}`, fastOn);
     const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
     put("size", `${w} × ${h}`);
     const n = Loras.tags().size;
-    put("loras", n ? `${n} activo${n > 1 ? "s" : ""}` : "ninguno", n);
+    put("loras", n ? UiLanguage.template`${n} activo${n > 1 ? "s" : ""}` : UiLanguage.text("ninguno"), n);
     const pon = typeof Pose !== "undefined" && Pose.on();
-    put("pose", pon ? `fuerza ${$("poseStrength").value}` : typeof Pose !== "undefined" && Pose.skel ? "elegida, sin usar" : "apagada", pon);
+    put("pose", pon ? UiLanguage.template`fuerza ${$("poseStrength").value}` : typeof Pose !== "undefined" && Pose.skel ? UiLanguage.text("elegida, sin usar") : UiLanguage.text("apagada"), pon);
     const hon = $("hiresOn").checked;
-    put("hires", hon ? `×${$("hiresScale").value} · denoise ${$("hiresDen").value}` : "apagado", hon);
-    put("ad", Ad.mode === "face" ? "caras" : Ad.mode === "hand" ? "manos" : "apagado", Ad.mode !== "off");
+    put("hires", hon ? `×${$("hiresScale").value} · denoise ${$("hiresDen").value}` : UiLanguage.text("apagado"), hon);
+    put("ad", Ad.mode === "face" ? UiLanguage.text("caras") : Ad.mode === "hand" ? UiLanguage.text("manos") : UiLanguage.text("apagado"), Ad.mode !== "off");
     const refOn = typeof Ref !== "undefined" && Ref.on();
-    put("edit", state.editImage ? (refOn ? "personaje de referencia" : state.editMask ? "con zona pintada" : "con foto") : "sin foto", state.editImage);
+    put("edit", state.editImage ? (refOn ? UiLanguage.text("personaje de referencia") : state.editMask ? UiLanguage.text("con zona pintada") : UiLanguage.text("con foto")) : UiLanguage.text("sin foto"), state.editImage);
   },
 };
 

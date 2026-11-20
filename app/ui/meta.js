@@ -165,7 +165,7 @@ const Meta = {
       const res = this.parse(await this.texts(buf));
       const src = URL.createObjectURL(new Blob([buf], { type: file.type || "image/png" }));
       this.show(res ? { ...res, src, name: file.name } : { src, name: file.name, none: true });
-    } catch (e) { toast("No se pudo leer la imagen: " + (e.message || e), 5000); }
+    } catch (e) { toast(UiLanguage.text("No se pudo leer la imagen: ") + (e.message || e), 5000); }
   },
 
   show(r) {
@@ -179,21 +179,21 @@ const Meta = {
     $("metaImg").src = r.src;
     $("metaName").textContent = r.name + (r.source ? ` · ${r.source}` : "");
     const box = $("metaFields"); box.innerHTML = "";
-    if (r.none) { box.innerHTML = '<div class="lbl">Esta imagen no tiene ajustes guardados (prompt, pasos, seed…). Las redes sociales y algunos programas los borran al guardar o comprimir.</div>'; $("metaRaw").textContent = ""; return; }
+    if (r.none) { box.innerHTML = UiLanguage.text('<div class="lbl">Esta imagen no tiene ajustes guardados (prompt, pasos, seed…). Las redes sociales y algunos programas los borran al guardar o comprimir.</div>'); $("metaRaw").textContent = ""; return; }
     const f = r.fields, rows = [
-      ["Pasos", f.steps], ["CFG", f.cfg], ["Sampler", f.sampler_label || f.sampler], ["Scheduler", f.scheduler_label || f.scheduler],
-      ["Seed", f.seed], ["Tamaño", f.width && f.height ? `${f.width} × ${f.height}` : null], ["Clip skip", f.clip_skip], ["Modelo", f.model_label], ...r.extra,
+      [UiLanguage.text("Pasos"), f.steps], ["CFG", f.cfg], ["Sampler", f.sampler_label || f.sampler], ["Scheduler", f.scheduler_label || f.scheduler],
+      ["Seed", f.seed], [UiLanguage.text("Tamaño"), f.width && f.height ? `${f.width} × ${f.height}` : null], ["Clip skip", f.clip_skip], [UiLanguage.text("Modelo"), f.model_label], ...r.extra,
     ].filter(([, v]) => v != null && v !== "");
     const add = (label, value, copy) => {
       const d = document.createElement("div"); d.className = copy ? "meta-block" : "meta-row";
       const k = document.createElement("span"); k.className = "lbl"; k.textContent = label;
       const v = document.createElement(copy ? "div" : "span"); v.className = copy ? "meta-text" : "meta-val"; v.textContent = value;
       d.append(k);
-      if (copy) { const b = document.createElement("button"); b.className = "link"; b.textContent = "Copiar"; b.onclick = async () => { await copyText(value); toast(label + " copiado"); }; k.append(" ", b); }
+      if (copy) { const b = document.createElement("button"); b.className = "link"; b.textContent = UiLanguage.text("Copiar"); b.onclick = async () => { await copyText(value); toast(label + " copiado"); }; k.append(" ", b); }
       d.append(v); box.append(d);
     };
     if (f.prompt) add("Prompt", f.prompt, true);
-    if (f.negative) add("Negativo", f.negative, true);
+    if (f.negative) add(UiLanguage.text("Negativo"), f.negative, true);
     for (const [k, v] of rows) add(k, String(v));
     $("metaRaw").textContent = r.raw || "";
   },
@@ -227,7 +227,7 @@ $("metaPick").onclick = () => $("metaFile").click();
 $("metaOther").onclick = () => $("metaFile").click();
 $("metaFile").onchange = (e) => { Meta.load(e.target.files[0]); e.target.value = ""; };
 $("metaUse").onclick = () => Meta.use();
-$("metaCopyAll").onclick = async () => { if (Meta.cur?.raw) { await copyText(Meta.cur.raw); toast("Metadatos copiados"); } };
+$("metaCopyAll").onclick = async () => { if (Meta.cur?.raw) { await copyText(Meta.cur.raw); toast(UiLanguage.text("Metadatos copiados")); } };
 for (const ev of ["dragover", "dragenter"]) $("metaDlg").addEventListener(ev, (e) => { e.preventDefault(); $("metaDlg").classList.add("dragging"); });
 $("metaDlg").addEventListener("dragleave", (e) => { if (e.target === $("metaDlg")) $("metaDlg").classList.remove("dragging"); });
 $("metaDlg").addEventListener("drop", (e) => { e.preventDefault(); $("metaDlg").classList.remove("dragging"); Meta.load(e.dataTransfer.files[0]); });

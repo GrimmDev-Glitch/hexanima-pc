@@ -10,14 +10,34 @@ const Mask = {
   undo: [], redo: [],
   drawing: false, panning: null, last: null,
 
-  /** t (opcional, p. ej. Correcciones): {img: {src, w, h}, paint, title, hint, done(paint|null)}.
+  async openImage(src) {
+    try {
+      const img = await prepareEditImage(src);
+      this.open({
+        img,
+        title: UiLanguage.text("✎ Área a cambiar"),
+        hint: UiLanguage.text("Pinta la zona que quieres editar."),
+        confirm: UiLanguage.text("Área a cambiar"),
+        done: (paint) => {
+          $("refUse").checked = false;
+          document.querySelector('.nav[data-page="gen"]').click();
+          usePreparedEditImage(img);
+          this.editDone(paint, false);
+          if (typeof Ref !== "undefined") Ref.render();
+        },
+      });
+    } catch (e) { toast(UiLanguage.text("No se pudo abrir la imagen: ") + (e.message || e)); }
+  },
+
+  /** t (opcional, p. ej. Correcciones): {img: {src, w, h}, paint, title, hint, confirm, done(paint|null)}.
    *  Sin t: la foto de «Editar una foto». */
   open(t) {
-    if (!t && !state.editImage) return toast("Elige primero una foto");
-    this.t = t || { img: state.editImage, paint: this.paint, title: "✎ Zona a cambiar", hint: "Pinta lo que se debe volver a generar; el resto de la foto se conserva.", done: (p) => this.editDone(p) };
+    if (!t && !state.editImage) return toast(UiLanguage.text("Elige primero una foto"));
+    this.t = t || { img: state.editImage, paint: this.paint, title: UiLanguage.text("✎ Zona a cambiar"), hint: UiLanguage.text("Pinta lo que se debe volver a generar; el resto de la foto se conserva."), done: (p) => this.editDone(p) };
     const im = this.t.img;
     $("maskTitle").textContent = this.t.title;
     $("maskHint").textContent = this.t.hint;
+    $("maskDone").textContent = this.t.confirm || UiLanguage.text("Listo");
     $("maskImg").src = im.src;
     const cv = $("maskCanvas");
     cv.width = im.w; cv.height = im.h;
@@ -175,13 +195,16 @@ const Mask = {
     return out;
   },
 
-  editDone(paint) {
+  editDone(paint, showStrengthNotice = true) {
     this.paint = paint;
     if (!paint) state.editMask = null;
     else {
       state.editMask = { src: this.maskCanvas(paint, paint.width, paint.height).toDataURL("image/png") };
       // Para rehacer una zona hace falta cambiar bastante: sube "Cuánto cambia" si está bajo.
-      if (clampNum($("editStrength"), 45) < 60) { $("editStrength").value = "75"; toast("Zona pintada: «Cuánto cambia» sube a 75 % para que la zona cambie de verdad", 4500); }
+      if (clampNum($("editStrength"), 45) < 60) {
+        $("editStrength").value = "75";
+        if (showStrengthNotice) toast(UiLanguage.text("Zona pintada: «Cuánto cambia» sube a 75 % para que la zona cambie de verdad"), 4500);
+      }
     }
     this.refresh();
   },
@@ -192,13 +215,13 @@ const Mask = {
   refresh() {
     const has = !!state.editImage, m = !!state.editMask;
     $("maskRow").classList.toggle("hidden", !has);
-    $("maskBtn").textContent = m ? "✎ Zona pintada · editar" : "✎ Zona a cambiar";
+    $("maskBtn").textContent = m ? UiLanguage.text("✎ Zona pintada · editar") : UiLanguage.text("✎ Zona a cambiar");
     $("maskBtn").classList.toggle("on", m);
     $("maskClear").classList.toggle("hidden", !m);
-    if (has && typeof Ref !== "undefined" && Ref.on()) $("editHint").textContent = "Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño».";
+    if (has && typeof Ref !== "undefined" && Ref.on()) $("editHint").textContent = UiLanguage.text("Personaje de referencia: se copia su aspecto, no la foto. El tamaño es el de «Tamaño».");
     else if (has) $("editHint").textContent = m
-      ? `Solo se redibuja la zona pintada; el resto de la foto se conserva (${state.editImage.w} × ${state.editImage.h}).`
-      : `Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}). Usa «✎ Zona a cambiar» para cambiar solo una parte.`;
+      ? UiLanguage.template`Solo se redibuja la zona pintada; el resto de la foto se conserva (${state.editImage.w} × ${state.editImage.h}).`
+      : UiLanguage.template`Se genera a partir de esta foto (${state.editImage.w} × ${state.editImage.h}). Usa «✎ Zona a cambiar» para cambiar solo una parte.`;
   },
 };
 
@@ -253,7 +276,7 @@ const Hires = {
   fillUpscalers(cur) {
     const sel = $("hiresUp"), keep = cur || sel.value || "Latent";
     sel.innerHTML = "";
-    sel.add(new Option("Latent (rápido)", "Latent"));
+    sel.add(new Option(UiLanguage.text("Latent (rápido)"), "Latent"));
     sel.add(new Option("Lanczos", "Lanczos"));
     for (const u of state.upscalers || []) sel.add(new Option(u, u));
     sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "Latent";
@@ -270,7 +293,7 @@ const Hires = {
     $("hiresBox").classList.toggle("on", on);
     const [w, h] = state.mode === "edit" && state.editImage ? [state.editImage.w, state.editImage.h] : currentSize();
     const [tw, th] = this.target(w, h);
-    $("hiresSum").textContent = on ? `${w}×${h} → ${tw}×${th} · más lento` : "Un segundo paso a mayor tamaño (más lento)";
+    $("hiresSum").textContent = on ? UiLanguage.template`${w}×${h} → ${tw}×${th} · más lento` : UiLanguage.text("Un segundo paso a mayor tamaño (más lento)");
   },
   /** Parte "hires" del cuerpo de /sdcpp/v1/img_gen (o nada). */
   body(w, h) {
@@ -313,25 +336,25 @@ const Ad = {
     const on = this.mode !== "off";
     $("adOpts").classList.toggle("hidden", !on);
     $("adBox").classList.toggle("on", on);
-    $("adSum").textContent = on ? (this.mode === "face" ? "Caras: se redibujan al terminar cada imagen" : "Manos: se redibujan al terminar cada imagen") : "Redibuja caras o manos con más detalle";
+    $("adSum").textContent = on ? (this.mode === "face" ? UiLanguage.text("Caras: se redibujan al terminar cada imagen") : UiLanguage.text("Manos: se redibujan al terminar cada imagen")) : UiLanguage.text("Redibuja caras o manos con más detalle");
   },
 
   /** Descarga y convierte el detector si falta (pregunta antes). */
   async install(mode) {
     if (this.installed[mode]) return true;
     {
-      const name = mode === "face" ? "caras" : "manos";
-      const ok = await ask({ title: `Detector de ${name}`, msg: `ADetailer necesita un detector de ${name} (YOLOv8, unos 6 MB, de huggingface.co/Bingsu/adetailer). Se descarga una sola vez y se guarda en models\\detectors.`,
-        buttons: [{ label: "Cancelar", value: false }, { label: "Descargar", value: true, primary: true }] });
+      const name = mode === "face" ? "caras" : UiLanguage.text("manos");
+      const ok = await ask({ title: `Detector de ${name}`, msg: UiLanguage.template`ADetailer necesita un detector de ${name} (YOLOv8, unos 6 MB, de huggingface.co/Bingsu/adetailer). Se descarga una sola vez y se guarda en models\\detectors.`,
+        buttons: [{ label: UiLanguage.text("Cancelar"), value: false }, { label: UiLanguage.text("Descargar"), value: true, primary: true }] });
       if (!ok) return false;
       try {
         this.dl = "det-" + mode;
-        toast(`Descargando el detector de ${name}…`, 60000);
+        toast(UiLanguage.template`Descargando el detector de ${name}…`, 60000);
         await invoke("detector_install", { kind: mode });
         this.installed[mode] = true;
-        toast(`✓ Detector de ${name} listo`, 3000);
+        toast(UiLanguage.template`✓ Detector de ${name} listo`, 3000);
         return true;
-      } catch (e) { toast("No se pudo instalar el detector: " + (e.message || e), 6000); return false; }
+      } catch (e) { toast(UiLanguage.text("No se pudo instalar el detector: ") + (e.message || e), 6000); return false; }
       finally { this.dl = null; }
     }
   },
@@ -346,7 +369,7 @@ const Ad = {
       state.loaded = null;
       if (!(await startEngine(engineFor(currentOption())))) return false;
       await refreshEngineMenus();
-      await loadModel();
+      await loadModel(undefined, state.busy);
       return state.adLoaded === kind && !!state.loaded;
     } finally { this.force = null; }
   },
@@ -356,15 +379,15 @@ const Ad = {
     if (mode !== "off" && !(await this.install(mode))) return;
     this.mode = mode;
     this.save();
-    if (mode !== "off" && state.adLoaded !== mode && state.engine !== "torch") setStatus(`ADetailer (${mode === "face" ? "caras" : "manos"}): el motor se reinicia al generar para cargar el detector.`);
+    if (mode !== "off" && state.adLoaded !== mode && state.engine !== "torch") setStatus(UiLanguage.template`ADetailer (${mode === "face" ? "caras" : UiLanguage.text("manos")}): el motor se reinicia al generar para cargar el detector.`);
   },
 
   /** Antes de generar: si el detector cargado no es el elegido, reinicia el motor y recarga el modelo. */
-  async ensure() {
+  async ensure(reserved = false) {
     if (state.engine === "torch") return this.mode === "off" || (await this.install(this.mode));  // ADetailer propio
     if (this.mode === "off" || state.adLoaded === this.mode) return true;
-    if (state.busy) return false;
-    setStatus("Reiniciando el motor para cargar el detector de ADetailer…");
+    if (state.busy && !reserved) return false;
+    setStatus(UiLanguage.text("Reiniciando el motor para cargar el detector de ADetailer…"));
     state.loaded = null;
     if (!(await startEngine(engineFor(currentOption())))) return false;
     await refreshEngineMenus();
@@ -376,6 +399,6 @@ $("adDen").addEventListener("change", () => Ad.save());
 window.__TAURI__?.event?.listen?.("dl-progress", (ev) => {
   const p = ev.payload;
   if (!Ad.dl || p.id !== Ad.dl || p.state !== "downloading") return;
-  toast(`Descargando el detector… ${(p.done / 1048576).toFixed(1)}${p.total ? " / " + (p.total / 1048576).toFixed(1) : ""} MB`, 60000);
+  toast(UiLanguage.template`Descargando el detector… ${(p.done / 1048576).toFixed(1)}${p.total ? " / " + (p.total / 1048576).toFixed(1) : ""} MB`, 60000);
 });
 Ad.load();

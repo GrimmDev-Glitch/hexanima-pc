@@ -12,13 +12,13 @@ const modelTitle = (o) => modelNames[o.id] || o.label;
 // ---------- chip del modelo y Cargar / Liberar ----------
 function syncModelUi() {
   const o = currentOption();
-  $("modelName").textContent = o ? modelTitle(o) : "Sin modelo";
+  $("modelName").textContent = o ? modelTitle(o) : UiLanguage.text("Sin modelo");
   const loaded = !!o && state.loaded === o.id;
   $("modelDot").className = "dot" + (loaded ? " on" : "");
-  $("loadBtn").textContent = loaded ? "Liberar modelo" : "Cargar modelo";
+  $("loadBtn").textContent = loaded ? UiLanguage.text("Liberar modelo") : UiLanguage.text("Cargar modelo");
   $("loadBtn").disabled = !o || state.busy;
-  if (!state.busy && o && !/Cargando|Error|No se pudo|motor/i.test($("modelStatus").textContent)) {
-    setStatus(loaded ? "En memoria · lista" : "No está en memoria · se carga al generar", loaded ? "ok" : "");
+  if (!state.busy && o && !/Cargando|Loading|Error|No se pudo|Could not|motor|engine/i.test($("modelStatus").textContent)) {
+    setStatus(loaded ? UiLanguage.text("En memoria · lista") : UiLanguage.text("No está en memoria · se carga al generar"), loaded ? "ok" : "");
   }
 }
 setInterval(syncModelUi, 1000);
@@ -26,8 +26,8 @@ setInterval(syncModelUi, 1000);
 $("loadBtn").onclick = async () => {
   const o = currentOption(); if (!o || state.busy) return;
   if (state.loaded === o.id) {
-    try { await unloadModel(); setStatus("Modelo liberado: la RAM y la VRAM quedan libres", "ok"); }
-    catch (e) { setStatus("No se pudo liberar: " + e.message, "err"); }
+    try { await unloadModel(); setStatus(UiLanguage.text("Modelo liberado: la RAM y la VRAM quedan libres"), "ok"); }
+    catch (e) { setStatus(UiLanguage.text("No se pudo liberar: ") + e.message, "err"); }
     refreshMemory(); syncModelUi();
   } else { await loadModel(); syncModelUi(); }
 };
@@ -43,22 +43,22 @@ const ModelPicker = {
   bytes(o) { return Object.values(o.models).reduce((a, f) => a + (this.sizes[f] || 0), 0); },
   render() {
     const box = $("modelCards"); box.innerHTML = "";
-    $("modelCount").textContent = state.options.length ? `${state.options.length} instalados` : "";
-    if (!state.options.length) box.innerHTML = '<div class="lbl empty-lib">No hay modelos: usa ＋ Catálogo, ＋ Civitai o ＋ Importar.</div>';
+    $("modelCount").textContent = state.options.length ? UiLanguage.template`${state.options.length} instalados` : "";
+    if (!state.options.length) box.innerHTML = UiLanguage.text('<div class="lbl empty-lib">No hay modelos: usa ＋ Catálogo, ＋ Civitai o ＋ Importar.</div>');
     for (const o of state.options) {
       const p = FAMILY[o.preset || o.family];
       const sel = $("model").value === o.id, loaded = state.loaded === o.id;
       const est = Object.entries(localStorageSafe()).filter(([k]) => k.startsWith("hx.bench:" + o.id + ":")).map(([, v]) => { try { const b = JSON.parse(v); return b.fixed + b.step * p.steps; } catch { return null; } }).filter(Boolean)[0];
       const c = document.createElement("div");
       c.className = "mcard" + (sel ? " on" : "");
-      c.innerHTML = `<div class="mtop"><span class="mname"></span>${sel ? '<span class="mcheck">✓</span>' : ""}<button class="mini mreveal" title="Mostrar el archivo en la carpeta" aria-label="Mostrar en la carpeta">⌕</button><button class="mini medit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button></div>
+      c.innerHTML = UiLanguage.template`<div class="mtop"><span class="mname"></span>${sel ? '<span class="mcheck">✓</span>' : ""}<button class="mini mreveal" title="Mostrar el archivo en la carpeta" aria-label="Mostrar en la carpeta">⌕</button><button class="mini medit" title="Cambiar nombre" aria-label="Cambiar nombre">✎</button></div>
         <div class="mbadges"></div><div class="lbl mfile"></div>`;
       c.querySelector(".mname").textContent = modelTitle(o);
       const fam = { anima: "Anima", mage: "Mage", qwen: "Qwen-Image", moss: "MOSS" }[o.family] || "SDXL";
-      const badges = [fam, o.preset === "anima" || o.preset === "qwen" ? `Turbo · ${p.steps}` : `CFG ${p.cfg} · ${p.steps} pasos`];
+      const badges = [fam, o.preset === "anima" || o.preset === "qwen" ? `Turbo · ${p.steps}` : UiLanguage.template`CFG ${p.cfg} · ${p.steps} pasos`];
       const gb = this.bytes(o); if (gb) badges.push((gb / 1073741824).toFixed(1) + " GB");
       if (est) badges.push("~" + fmtS(est));
-      if (loaded) badges.push("En memoria");
+      if (loaded) badges.push(UiLanguage.text("En memoria"));
       for (const b of badges) { const s = document.createElement("span"); s.className = "badge" + (b === "En memoria" ? " ok" : ""); s.textContent = b; c.querySelector(".mbadges").appendChild(s); }
       c.querySelector(".mfile").textContent = Object.values(o.models)[0];
       c.onclick = (e) => {
@@ -68,8 +68,8 @@ const ModelPicker = {
       };
       c.querySelector(".mreveal").onclick = () => invoke("reveal_file", { path: "models/" + Object.values(o.models)[0] }).catch((e) => toast(String(e)));
       c.querySelector(".medit").onclick = async () => {
-        const r = await ask({ title: "Cambiar nombre", input: { value: modelTitle(o) },
-          buttons: [{ label: "Cancelar", value: null }, { label: "Restablecer", value: "reset" }, { label: "OK", value: "@input", primary: true }] });
+        const r = await ask({ title: UiLanguage.text("Cambiar nombre"), input: { value: modelTitle(o) },
+          buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Restablecer"), value: "reset" }, { label: "OK", value: "@input", primary: true }] });
         if (!r) return;
         if (r === "reset" || !r.input.trim()) delete modelNames[o.id]; else modelNames[o.id] = r.input.trim();
         await invoke("store_set", { key: "model-names", value: modelNames });
@@ -84,14 +84,14 @@ $("modelBtn").onclick = () => ModelPicker.open();
 $("mdFolders").onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   const open = (w) => invoke("open_folder", { which: w }).catch((er) => toast(String(er)));
-  showMenu(r.left, r.top - 8, "Abrir carpeta", [
+  showMenu(r.left, r.top - 8, UiLanguage.text("Abrir carpeta"), [
     { label: "Checkpoints (SDXL / Illustrious / Pony)", run: () => open("models/checkpoints") },
     { label: "Anima (diffusion_models)", run: () => open("models/diffusion_models") },
     { label: "Codificadores de texto", run: () => open("models/text_encoders") },
     { label: "VAE", run: () => open("models/vae") },
-    { label: "Ampliadores", run: () => open("models/upscalers") },
+    { label: UiLanguage.text("Ampliadores"), run: () => open("models/upscalers") },
     { label: "Detectores (ADetailer)", run: () => open("models/detectors") },
-    { label: "Toda la carpeta models", run: () => open("models") },
+    { label: UiLanguage.text("Toda la carpeta models"), run: () => open("models") },
   ]);
 };
 // ＋ Catálogo: el catálogo predeterminado (Anima, Mage, Qwen, MOSS y los MiaoMiao), el mismo de la bienvenida
@@ -103,7 +103,7 @@ $("mdCivitai").onclick = () => {
 };
 // ＋ Importar: detecta la familia por los tensores del archivo y deja confirmarla o cambiarla.
 const IMPORT_KINDS = [
-  { value: "sdxl", label: "SDXL · Illustrious · Pony (checkpoint completo)" },
+  { value: "sdxl", label: UiLanguage.text("SDXL · Illustrious · Pony (checkpoint completo)") },
   { value: "anima", label: "Anima" },
   { value: "qwen-image", label: "Qwen-Image 2.1" },
   { value: "moss", label: "MOSS-Image" },
@@ -113,40 +113,40 @@ $("mdImport").onclick = async () => {
   try {
     const f = await invoke("model_pick");
     if (!f) return;
-    if (f.kind === "lora") return toast("Ese archivo es una LoRA: impórtalo desde LoRAs → Importar.", 6000);
+    if (f.kind === "lora") return toast(UiLanguage.text("Ese archivo es una LoRA: impórtalo desde LoRAs → Importar."), 6000);
     const found = IMPORT_KINDS.find((k) => k.value === f.kind);
-    const gb = (f.bytes / 1e9).toLocaleString("es", { maximumFractionDigits: 1 });
+    const gb = (f.bytes / 1e9).toLocaleString(UiLanguage.selected, { maximumFractionDigits: 1 });
     const kind = await ask({
       title: "Importar " + f.name,
-      msg: (found ? `Parece un modelo ${found.label} (${gb} GB). Confírmalo o elige otra familia:` : `No se reconoce la familia de este modelo (${gb} GB). Elige cuál es:`),
-      list: IMPORT_KINDS.map((k) => ({ ...k, label: k.label + (k.value === f.kind ? "  ✓ detectado" : ""), on: k.value === f.kind })),
+      msg: (found ? UiLanguage.template`Parece un modelo ${found.label} (${gb} GB). Confírmalo o elige otra familia:` : UiLanguage.template`No se reconoce la familia de este modelo (${gb} GB). Elige cuál es:`),
+      list: IMPORT_KINDS.map((k) => ({ ...k, label: k.label + (k.value === f.kind ? UiLanguage.text("  ✓ detectado") : ""), on: k.value === f.kind })),
     });
     if (!kind) return;
-    setStatus(`Copiando ${f.name}…`);
+    setStatus(UiLanguage.template`Copiando ${f.name}…`);
     const dst = await invoke("model_import", { path: f.path, kind });
     await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
     await scanModels();
     ModelPicker.render();
     const shown = state.options.some((o) => o.models && Object.values(o.models).some((id) => String(id).includes(dst.split("/").pop())));
-    setStatus(shown ? "Modelo importado: " + dst : `Importado en ${dst}, pero faltan archivos de la familia (codificador de texto o VAE) para usarlo: descárgalos desde ⋯ → Descargar modelos.`, shown ? "ok" : "warn");
-  } catch (e) { toast("No se pudo importar: " + (e.message || e), 5000); }
+    setStatus(shown ? UiLanguage.text("Modelo importado: ") + dst : UiLanguage.template`Importado en ${dst}, pero faltan archivos de la familia (codificador de texto o VAE) para usarlo: descárgalos desde ⋯ → Descargar modelos.`, shown ? "ok" : "warn");
+  } catch (e) { toast(UiLanguage.text("No se pudo importar: ") + (e.message || e), 5000); }
 };
 
 // ---------- menú ⋯ (como el del teléfono) ----------
 $("menuBtn").onclick = (e) => {
   const r = e.currentTarget.getBoundingClientRect();
   showMenu(r.right - 250, r.bottom + 4, "HexAnima", [
-    { label: "Modelos", run: () => ModelPicker.open() },
+    { label: UiLanguage.text("Modelos"), run: () => ModelPicker.open() },
     { label: "Civitai", run: () => document.querySelector('.nav[data-page="civitai"]').click() },
-    { label: "Plantillas de configuración", run: () => CfgTemplates.open() },
-    { label: "Ampliar una imagen de la galería", run: () => pickImage().then((src) => src && Upscale.open(src)) },
-    { label: "Prompt desde una imagen", run: () => PicPrompt.open() },
-    { label: "Catálogo de modelos", run: () => Packs.open() },
-    { label: "Leer metadatos de una imagen", run: () => Meta.open() },
+    { label: UiLanguage.text("Plantillas de configuración"), run: () => CfgTemplates.open() },
+    { label: UiLanguage.text("Ampliar una imagen de la galería"), run: () => pickImage().then((src) => src && Upscale.open(src)) },
+    { label: UiLanguage.text("Prompt desde una imagen"), run: () => PicPrompt.open() },
+    { label: UiLanguage.text("Catálogo de modelos"), run: () => Packs.open() },
+    { label: UiLanguage.text("Leer metadatos de una imagen"), run: () => Meta.open() },
     { label: "Almacenamiento", run: () => Storage.open() },
     { label: "Info", run: () => Info.open() },
-    { label: "Buscar actualizaciones", run: () => Update.check(true) },
-    { label: "Ajustes", run: () => document.querySelector('.nav[data-page="settings"]').click() },
+    { label: UiLanguage.text("Buscar actualizaciones"), run: () => Update.check(true) },
+    { label: UiLanguage.text("Ajustes"), run: () => document.querySelector('.nav[data-page="settings"]').click() },
   ]);
 };
 
@@ -184,18 +184,18 @@ const CfgTemplates = {
   async save() { await invoke("store_set", { key: "config-templates", value: this.list }); this.render(); },
   render() {
     const box = $("cfgList"); box.innerHTML = "";
-    if (!this.list.length) box.innerHTML = '<div class="lbl">Todavía no hay plantillas.</div>';
+    if (!this.list.length) box.innerHTML = UiLanguage.text('<div class="lbl">Todavía no hay plantillas.</div>');
     this.list.forEach((t, i) => {
       const b = document.createElement("button");
       b.className = "ask-item"; b.textContent = t.name;
-      b.title = `${t.data.prompt.slice(0, 120)}\n${t.data.steps} pasos · CFG ${t.data.cfg}`;
-      b.onclick = () => { this.apply(t.data); closeModal("cfgDlg"); toast("Plantilla cargada: " + t.name); };
+      b.title = UiLanguage.template`${t.data.prompt.slice(0, 120)}\n${t.data.steps} pasos · CFG ${t.data.cfg}`;
+      b.onclick = () => { this.apply(t.data); closeModal("cfgDlg"); toast(UiLanguage.text("Plantilla cargada: ") + t.name); };
       b.oncontextmenu = (e) => {
         e.preventDefault();
         showMenu(e.clientX, e.clientY, t.name, [
-          { label: "Sobrescribir con la configuración actual", run: async () => { t.data = this.snapshot(); await this.save(); toast("Plantilla actualizada"); } },
-          { label: "Cambiar nombre…", run: async () => { const r = await ask({ title: "Cambiar nombre", input: { value: t.name }, buttons: [{ label: "Cancelar", value: null }, { label: "OK", value: "@input", primary: true }] }); if (r?.input?.trim()) { t.name = r.input.trim(); await this.save(); } } },
-          { label: "Eliminar", danger: true, run: async () => { this.list.splice(i, 1); await this.save(); } },
+          { label: UiLanguage.text("Sobrescribir con la configuración actual"), run: async () => { t.data = this.snapshot(); await this.save(); toast(UiLanguage.text("Plantilla actualizada")); } },
+          { label: UiLanguage.text("Cambiar nombre…"), run: async () => { const r = await ask({ title: UiLanguage.text("Cambiar nombre"), input: { value: t.name }, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: "OK", value: "@input", primary: true }] }); if (r?.input?.trim()) { t.name = r.input.trim(); await this.save(); } } },
+          { label: UiLanguage.text("Eliminar"), danger: true, run: async () => { this.list.splice(i, 1); await this.save(); } },
         ]);
       };
       box.appendChild(b);
@@ -203,7 +203,7 @@ const CfgTemplates = {
   },
 };
 $("cfgSave").onclick = async () => {
-  const r = await ask({ title: "Guardar plantilla", input: { value: "", placeholder: "Nombre de la plantilla" }, buttons: [{ label: "Cancelar", value: null }, { label: "Guardar", value: "@input", primary: true }] });
+  const r = await ask({ title: UiLanguage.text("Guardar plantilla"), input: { value: "", placeholder: UiLanguage.text("Nombre de la plantilla") }, buttons: [{ label: UiLanguage.text("Cancelar"), value: null }, { label: UiLanguage.text("Guardar"), value: "@input", primary: true }] });
   if (!r?.input?.trim()) return CfgTemplates.open();
   CfgTemplates.list.push({ name: r.input.trim(), data: CfgTemplates.snapshot() });
   await CfgTemplates.save();
@@ -212,12 +212,12 @@ $("cfgSave").onclick = async () => {
 
 // ---------- # Etiquetas (paleta del teléfono) ----------
 const PALETTE = [
-  ["Calidad", "masterpiece", "best quality", "very aesthetic", "absurdres", "highres", "newest", "detailed", "score_9"],
-  ["Encuadre", "portrait", "upper body", "cowboy shot", "full body", "close-up", "looking at viewer", "from above", "from below", "from side", "dutch angle", "wide shot"],
+  [UiLanguage.text("Calidad"), "masterpiece", "best quality", "very aesthetic", "absurdres", "highres", "newest", "detailed", "score_9"],
+  [UiLanguage.text("Encuadre"), "portrait", "upper body", "cowboy shot", "full body", "close-up", "looking at viewer", "from above", "from below", "from side", "dutch angle", "wide shot"],
   ["Luz", "soft lighting", "cinematic lighting", "dramatic lighting", "rim light", "backlighting", "sunlight", "golden hour", "volumetric lighting", "neon lights", "night"],
-  ["Estilo", "anime coloring", "flat color", "watercolor (medium)", "oil painting (medium)", "sketch", "3d", "realistic", "pixel art", "chibi", "retro artstyle"],
-  ["Expresión", "smile", "blush", "open mouth", "closed eyes", "serious", "smug", "surprised", "angry", "crying", "wink"],
-  ["Fondo", "simple background", "white background", "outdoors", "indoors", "city", "forest", "beach", "sky", "bedroom", "cherry blossoms"],
+  [UiLanguage.text("Estilo"), "anime coloring", "flat color", "watercolor (medium)", "oil painting (medium)", "sketch", "3d", "realistic", "pixel art", "chibi", "retro artstyle"],
+  [UiLanguage.text("Expresión"), "smile", "blush", "open mouth", "closed eyes", "serious", "smug", "surprised", "angry", "crying", "wink"],
+  [UiLanguage.text("Fondo"), "simple background", "white background", "outdoors", "indoors", "city", "forest", "beach", "sky", "bedroom", "cherry blossoms"],
 ];
 const promptTokens = () => $("prompt").value.split(",").map((t) => t.trim()).filter(Boolean);
 function toggleTag(tag) {
@@ -246,7 +246,7 @@ $("tagsBtn").onclick = () => { renderTags(); openModal("tagsDlg"); };
 $("clearPrompt").onclick = () => {
   const old = $("prompt").value; if (!old) return;
   Loras.setPrompt("");
-  toast("Prompt borrado · Ctrl+Z lo recupera");
+  toast(UiLanguage.text("Prompt borrado · Ctrl+Z lo recupera"));
   $("prompt").focus();
 };
 
@@ -334,20 +334,20 @@ invoke("store_get", { key: "negatives" }).then((v) => { if (v && typeof v === "o
 function fillNeg() {
   const sel = $("negPick"); sel.innerHTML = "";
   sel.add(new Option("Plantillas", ""));
-  sel.add(new Option("＋ Guardar el negativo actual", "@save"));
+  sel.add(new Option(UiLanguage.text("＋ Guardar el negativo actual"), "@save"));
   negStore.saved.forEach((n, i) => sel.add(new Option("★ " + n.slice(0, 60), "s" + i)));
   negStore.recent.forEach((n, i) => sel.add(new Option("↺ " + n.slice(0, 60), "r" + i)));
-  if (negStore.saved.length) sel.add(new Option("Quitar una guardada…", "@del"));
+  if (negStore.saved.length) sel.add(new Option(UiLanguage.text("Quitar una guardada…"), "@del"));
 }
 const saveNeg = () => invoke("store_set", { key: "negatives", value: negStore }).catch(() => {});
 $("negPick").onchange = async () => {
   const v = $("negPick").value; $("negPick").value = "";
   if (v === "@save") {
-    const n = $("neg").value.trim(); if (!n) return toast("El negativo está vacío");
+    const n = $("neg").value.trim(); if (!n) return toast(UiLanguage.text("El negativo está vacío"));
     if (!negStore.saved.includes(n)) negStore.saved.unshift(n);
-    await saveNeg(); fillNeg(); toast("Negativo guardado");
+    await saveNeg(); fillNeg(); toast(UiLanguage.text("Negativo guardado"));
   } else if (v === "@del") {
-    const r = await ask({ title: "Quitar un negativo guardado", list: negStore.saved.map((n, i) => ({ label: n.slice(0, 90), value: String(i) })), buttons: [{ label: "Cancelar", value: null }] });
+    const r = await ask({ title: UiLanguage.text("Quitar un negativo guardado"), list: negStore.saved.map((n, i) => ({ label: n.slice(0, 90), value: String(i) })), buttons: [{ label: UiLanguage.text("Cancelar"), value: null }] });
     if (r != null) { negStore.saved.splice(+r, 1); await saveNeg(); fillNeg(); }
   } else if (v) {
     $("neg").value = (v[0] === "s" ? negStore.saved : negStore.recent)[+v.slice(1)] || "";
@@ -368,7 +368,7 @@ $("resetSampling").onclick = () => {
   const p = FAMILY[o.preset || o.family];
   $("steps").value = p.steps; $("cfg").value = p.cfg; $("sampler").value = p.sampler; $("scheduler").value = p.scheduler;
   store.set("params:" + o.id, null);
-  showEstimate(); toast(`Muestreo del modelo: ${p.steps} pasos · CFG ${p.cfg}`);
+  showEstimate(); toast(UiLanguage.template`Muestreo del modelo: ${p.steps} pasos · CFG ${p.cfg}`);
 };
 
 $("model").addEventListener("change", syncModelUi);

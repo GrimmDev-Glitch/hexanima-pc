@@ -10,7 +10,7 @@ const History = {
   sel: new Set(),
 
   async show() {
-    try { this.items = await invoke("gallery_list"); } catch (e) { this.items = []; toast("No se pudo leer outputs: " + (e.message || e)); }
+    try { this.items = await invoke("gallery_list"); } catch (e) { this.items = []; toast(UiLanguage.text("No se pudo leer outputs: ") + (e.message || e)); }
     this.buildFilters();
     this.render();
     if (this.cur && !this.items.some((i) => i.name === this.cur)) this.cur = null;
@@ -34,8 +34,8 @@ const History = {
       for (const v of vals) el.add(new Option(v, v));
       if (vals.includes(cur)) el.value = cur;
     };
-    fill($("hModel"), "Todos los modelos", models);
-    fill($("hLora"), "Todas las LoRA", loras);
+    fill($("hModel"), UiLanguage.text("Todos los modelos"), models);
+    fill($("hLora"), UiLanguage.text("Todas las LoRA"), loras);
   },
 
   visible() {
@@ -53,11 +53,11 @@ const History = {
     $("hCountFav").textContent = this.items.filter((i) => i.meta?.fav).length;
     for (const t of document.querySelectorAll("[data-htab]")) t.classList.toggle("on", t.dataset.htab === this.tab);
     $("hBulk").classList.toggle("hidden", !this.selecting);
-    $("hSelect").textContent = this.selecting ? "Hecho" : "Seleccionar";
-    $("hSelCount").textContent = `Seleccionadas: ${this.sel.size}`;
+    $("hSelect").textContent = this.selecting ? "Hecho" : UiLanguage.text("Seleccionar");
+    $("hSelCount").textContent = UiLanguage.template`Seleccionadas: ${this.sel.size}`;
     const grid = $("hGrid"); grid.innerHTML = "";
     const list = this.visible();
-    if (!list.length) grid.innerHTML = `<div class="lbl empty-lib">${this.items.length ? "Ninguna imagen coincide con los filtros." : "Todavía no hay imágenes: genera la primera en Generar."}</div>`;
+    if (!list.length) grid.innerHTML = `<div class="lbl empty-lib">${this.items.length ? UiLanguage.text("Ninguna imagen coincide con los filtros.") : UiLanguage.text("Todavía no hay imágenes: genera la primera en Generar.")}</div>`;
     for (const it of list) {
       const b = document.createElement("button");
       b.className = "hcell" + (it.name === this.cur ? " on" : "") + (this.sel.has(it.name) ? " sel" : "");
@@ -91,9 +91,9 @@ const History = {
     $("hImg").src = assetUrl(it.path);
     const date = m.created ? new Date(m.created) : new Date((it.modified || 0) * 1000);
     $("hInfo").textContent = [m.model_label, m.width && m.height ? `${m.width} × ${m.height}` : "", m.seed != null ? `seed ${m.seed}` : "",
-      date.toLocaleString("es", { dateStyle: "short", timeStyle: "short" }), m.seconds ? `${m.seconds} s` : ""].filter(Boolean).join(" · ");
+      date.toLocaleString(UiLanguage.selected, { dateStyle: "short", timeStyle: "short" }), m.seconds ? `${m.seconds} s` : ""].filter(Boolean).join(" · ");
     $("hPrompt").textContent = m.prompt || "";
-    $("hFav").textContent = m.fav ? "★ Favorita" : "☆ Favorita";
+    $("hFav").textContent = m.fav ? UiLanguage.text("★ Favorita") : UiLanguage.text("☆ Favorita");
     $("hFav").classList.toggle("on", !!m.fav);
     $("hUpscale").classList.remove("hidden");
     $("hUse").disabled = !m.prompt;
@@ -140,34 +140,31 @@ const History = {
     }
     let note = "";
     if (m.model && state.options.some((o) => o.id === m.model)) {
-      if ($("model").value !== m.model) { $("model").value = m.model; $("model").dispatchEvent(new Event("change")); note = " · pulsa Cargar para usar ese modelo"; }
-    } else if (m.model_label) note = ` · el modelo «${m.model_label}» no está instalado`;
+      if ($("model").value !== m.model) { $("model").value = m.model; $("model").dispatchEvent(new Event("change")); note = UiLanguage.text(" · pulsa Cargar para usar ese modelo"); }
+    } else if (m.model_label) note = UiLanguage.template` · el modelo «${m.model_label}» no está instalado`;
     document.querySelector('.nav[data-page="gen"]').click();
-    toast("Ajustes cargados" + note, 4000);
+    toast(UiLanguage.text("Ajustes cargados") + note, 4000);
   },
 
   async edit(it) {
     try {
-      await setEditImage(await this.dataUrl(it));
-      setMode("edit");
-      document.querySelector('.nav[data-page="gen"]').click();
-      toast("Imagen lista para editar: escribe qué cambiar y pulsa Generar desde la foto", 4500);
-    } catch (e) { toast("No se pudo abrir la imagen: " + (e.message || e)); }
+      await Mask.openImage(await this.dataUrl(it));
+    } catch (e) { toast(UiLanguage.text("No se pudo abrir la imagen: ") + (e.message || e)); }
   },
 
   async copyImage(it) {
     try {
       const blob = await (await fetch(await this.dataUrl(it))).blob();
       await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      toast("Imagen copiada al portapapeles");
-    } catch { toast("No se pudo copiar la imagen; usa «Mostrar en la carpeta»", 4000); }
+      toast(UiLanguage.text("Imagen copiada al portapapeles"));
+    } catch { toast(UiLanguage.text("No se pudo copiar la imagen; usa «Mostrar en la carpeta»"), 4000); }
   },
 
   async trash(names) {
     const ok = await ask({
-      title: names.length > 1 ? `¿Mover ${names.length} imágenes a la papelera?` : "¿Mover a la papelera?",
-      msg: "Van a la Papelera de reciclaje de Windows con sus ajustes; desde ahí se pueden restaurar.",
-      buttons: [{ label: "Cancelar", value: false }, { label: "Mover a la papelera", value: true, primary: true }],
+      title: names.length > 1 ? UiLanguage.template`¿Mover ${names.length} imágenes a la papelera?` : UiLanguage.text("¿Mover a la papelera?"),
+      msg: UiLanguage.text("Van a la Papelera de reciclaje de Windows con sus ajustes; desde ahí se pueden restaurar."),
+      buttons: [{ label: UiLanguage.text("Cancelar"), value: false }, { label: UiLanguage.text("Mover a la papelera"), value: true, primary: true }],
     });
     if (!ok) return;
     try { await invoke("gallery_trash", { names }); } catch (e) { return toast(String(e.message || e), 4500); }
@@ -177,7 +174,7 @@ const History = {
     await this.show();
     const next = this.visible()[Math.min(i, this.visible().length - 1)];
     if (next) this.open(next.name);
-    toast(names.length > 1 ? `${names.length} imágenes en la papelera` : "Imagen en la papelera");
+    toast(names.length > 1 ? UiLanguage.template`${names.length} imágenes en la papelera` : UiLanguage.text("Imagen en la papelera"));
   },
 };
 
@@ -194,18 +191,18 @@ $("hBulkFav").onclick = async () => {
   await History.show();
 };
 $("hBulkZip").onclick = async () => {
-  if (!History.sel.size) return toast("Selecciona primero las imágenes");
+  if (!History.sel.size) return toast(UiLanguage.text("Selecciona primero las imágenes"));
   try {
-    toast(`Creando ZIP con ${History.sel.size} imágenes…`, 60000);
+    toast(UiLanguage.template`Creando ZIP con ${History.sel.size} imágenes…`, 60000);
     const path = await invoke("gallery_zip", { names: [...History.sel] });
-    toast(path ? "ZIP guardado: " + path : "Exportación cancelada", 5000);
-  } catch (e) { toast("No se pudo exportar: " + (e.message || e), 5000); }
+    toast(path ? UiLanguage.text("ZIP guardado: ") + path : UiLanguage.text("Exportación cancelada"), 5000);
+  } catch (e) { toast(UiLanguage.text("No se pudo exportar: ") + (e.message || e), 5000); }
 };
 $("hBulkTrash").onclick = () => { if (History.sel.size) History.trash([...History.sel]); };
 $("hFav").onclick = async () => { const it = History.item(); if (!it) return; await invoke("gallery_fav", { name: it.name, fav: !it.meta?.fav }); await History.show(); };
 $("hUse").onclick = () => { const it = History.item(); if (it) History.useSettings(it); };
 $("hEdit").onclick = () => { const it = History.item(); if (it) History.edit(it); };
-$("hCopyPrompt").onclick = async () => { const p = History.item()?.meta?.prompt; if (!p) return toast("Esta imagen no tiene prompt guardado"); await copyText(p); toast("Prompt copiado"); };
+$("hCopyPrompt").onclick = async () => { const p = History.item()?.meta?.prompt; if (!p) return toast(UiLanguage.text("Esta imagen no tiene prompt guardado")); await copyText(p); toast(UiLanguage.text("Prompt copiado")); };
 $("hPrompt").onclick = () => $("hCopyPrompt").click();
 $("hCopyImg").onclick = () => { const it = History.item(); if (it) History.copyImage(it); };
 $("hReveal").onclick = () => { const it = History.item(); if (it) invoke("gallery_reveal", { name: it.name }); };

@@ -23,6 +23,7 @@ pub struct ServerOpts {
     pub extra_args: Option<String>,
     /// Detector de ADetailer cargado en el motor: "face" | "hand" (uno a la vez).
     pub ad_model: Option<String>,
+    pub cpu_recovery: Option<bool>,
 }
 
 pub struct Server {
@@ -31,6 +32,40 @@ pub struct Server {
     pub log_path: PathBuf,
     #[cfg(windows)]
     _job: Job,
+    #[cfg(windows)]
+    _reservation: EngineReservation,
+}
+
+#[cfg(windows)]
+struct EngineReservation(windows_sys::Win32::Foundation::HANDLE);
+
+#[cfg(windows)]
+unsafe impl Send for EngineReservation {}
+
+#[cfg(windows)]
+impl EngineReservation {
+    fn acquire() -> Result<Self, String> {
+        use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+        use windows_sys::Win32::System::Threading::CreateMutexW;
+        let name: Vec<u16> = "Local\\HexAnimaPC.Engine".encode_utf16().chain(Some(0)).collect();
+        let handle = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+        let error = unsafe { GetLastError() };
+        if handle.is_null() {
+            return Err(format!("No se pudo reservar el motor de HexAnima: código {error}"));
+        }
+        let reservation = Self(handle);
+        if error == ERROR_ALREADY_EXISTS {
+            return Err("Otra instancia de HexAnima ya tiene reservado el motor.".into());
+        }
+        Ok(reservation)
+    }
+}
+
+#[cfg(windows)]
+impl Drop for EngineReservation {
+    fn drop(&mut self) {
+        unsafe { windows_sys::Win32::Foundation::CloseHandle(self.0); }
+    }
 }
 
 /// ¿Está instalado el motor? "torch" = motor PyTorch portátil (engine/torch); el resto = sd-server.exe.
@@ -54,6 +89,8 @@ impl Server {
         if !engine_installed(root, engine) {
             return Err(format!("Falta el motor: {}", exe.display()));
         }
+        #[cfg(windows)]
+        let reservation = EngineReservation::acquire()?;
         let port = TcpListener::bind("127.0.0.1:0")
             .and_then(|l| l.local_addr())
             .map(|a| a.port())
@@ -82,11 +119,17 @@ impl Server {
             // El TAE (taeqi2_1, taew2_1, taesdxl) solo para la vista previa: la imagen final sale con el VAE completo
             "--taesd-preview-only".into(),
         ];
+        let cpu_recovery = opts.cpu_recovery.unwrap_or(false);
         if let Some(d) = device {
             args.push("--backend".into());
             args.push(d.into());
         }
-        if opts.offload_to_cpu.unwrap_or(true) {
+        if cpu_recovery {
+            args.extend(["--mmap".into(), "--batched-cfg".into(), "off".into()]);
+            args.extend(["--vae-tiling".into(), "--vae-tile-size".into(), "256".into()]);
+            let threads = std::thread::available_parallelism().map_or(1, |n| (n.get() / 2).max(1));
+            args.extend(["--threads".into(), threads.to_string()]);
+        } else if opts.offload_to_cpu.unwrap_or(true) {
             args.push("--offload-to-cpu".into());
         }
         let wt = opts.weight_type.clone().unwrap_or_else(|| "q8_0".into());
@@ -99,7 +142,7 @@ impl Server {
             args.push("--ad-model".into());
             args.push(det.display().to_string());
         }
-        if let Some(extra) = &opts.extra_args {
+        if let Some(extra) = opts.extra_args.as_ref().filter(|_| !cpu_recovery) {
             args.extend(extra.split_whitespace().map(String::from));
         }
 
@@ -123,10 +166,13 @@ impl Server {
             .stderr(Stdio::from(log2));
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
-        let child = cmd.spawn().map_err(|e| format!("No se pudo iniciar el motor: {e}"))?;
+        let mut child = cmd.spawn().map_err(|e| format!("No se pudo iniciar el motor: {e}"))?;
 
         #[cfg(windows)]
-        let job = Job::new_kill_on_close(&child)?;
+        let job = Job::new_kill_on_close(&child, cpu_recovery).inspect_err(|_| {
+            let _ = child.kill();
+            let _ = child.wait();
+        })?;
 
         Ok(Server {
             child,
@@ -134,6 +180,8 @@ impl Server {
             log_path,
             #[cfg(windows)]
             _job: job,
+            #[cfg(windows)]
+            _reservation: reservation,
         })
     }
 
@@ -163,7 +211,7 @@ unsafe impl Send for Job {}
 
 #[cfg(windows)]
 impl Job {
-    fn new_kill_on_close(child: &Child) -> Result<Job, String> {
+    fn new_kill_on_close(child: &Child, limit_cpu: bool) -> Result<Job, String> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::System::JobObjects::*;
         unsafe {
@@ -171,16 +219,41 @@ impl Job {
             if h.is_null() {
                 return Err("CreateJobObject fallo".into());
             }
+            let job = Job(h);
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            SetInformationJobObject(
+            let (total_gib, free_gib) = crate::hw::ram();
+            let budget_gib = (free_gib - 2.5).min(total_gib * 0.70);
+            if budget_gib < 0.5 {
+                return Err(format!("RAM libre insuficiente para iniciar el motor: {free_gib:.1} GB. HexAnima reserva 2,5 GB para Windows."));
+            }
+            info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_MEMORY;
+            info.JobMemoryLimit = (budget_gib * 1_073_741_824.0) as usize;
+            if SetInformationJobObject(
                 h,
                 JobObjectExtendedLimitInformation,
                 &info as *const _ as *const _,
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-            );
-            AssignProcessToJobObject(h, child.as_raw_handle() as _);
-            Ok(Job(h))
+            ) == 0 {
+                return Err(format!("No se pudo configurar el cierre y el límite de RAM del motor: {}", std::io::Error::last_os_error()));
+            }
+            if limit_cpu {
+                let mut rate: JOBOBJECT_CPU_RATE_CONTROL_INFORMATION = std::mem::zeroed();
+                rate.ControlFlags = JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP;
+                // Windows expresa el porcentaje en centésimas.
+                rate.Anonymous.CpuRate = 2500;
+                if SetInformationJobObject(
+                    h,
+                    JobObjectCpuRateControlInformation,
+                    &rate as *const _ as *const _,
+                    std::mem::size_of_val(&rate) as u32,
+                ) == 0 {
+                    return Err(format!("No se pudo limitar la CPU: {}", std::io::Error::last_os_error()));
+                }
+            }
+            if AssignProcessToJobObject(h, child.as_raw_handle() as _) == 0 {
+                return Err(format!("No se pudo asociar el motor a HexAnima: {}", std::io::Error::last_os_error()));
+            }
+            Ok(job)
         }
     }
 }

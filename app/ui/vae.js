@@ -34,29 +34,29 @@ const Vae = {
     sel.innerHTML = "";
     if (!opt) { sel.disabled = true; return; }
     if (opt.family === "qwen" || opt.family === "moss") {
-      sel.add(new Option(opt.family === "qwen" ? "VAE de Qwen-Image 2.1 (necesario)" : "VAE de FLUX.2 (necesario para MOSS)", ""));
+      sel.add(new Option(opt.family === "qwen" ? "VAE de Qwen-Image 2.1 (necesario)" : UiLanguage.text("VAE de FLUX.2 (necesario para MOSS)"), ""));
       sel.disabled = true;
       return;
     }
     if (opt.family === "mage") {
-      sel.add(new Option("VAE de Mage (necesario para Mage)", ""));
+      sel.add(new Option(UiLanguage.text("VAE de Mage (necesario para Mage)"), ""));
       sel.disabled = true;
       return;
     }
     if (opt.family === "anima") {
-      sel.add(new Option(`Qwen Image (necesario para Anima)`, ""));
+      sel.add(new Option(UiLanguage.template`Qwen Image (necesario para Anima)`, ""));
       sel.disabled = true;
       return;
     }
     sel.disabled = false;
-    sel.add(new Option("Del modelo (el que trae incluido)", ""));
+    sel.add(new Option(UiLanguage.text("Del modelo (el que trae incluido)"), ""));
     for (const f of this.forFamily("sdxl")) sel.add(new Option(f.replace(/^vae\//, ""), f));
     const dl = this.assets.find((a) => a.kind === "sdxl_vae");
-    if (dl && !dl.installed) sel.add(new Option(`＋ Descargar SDXL VAE (fp16 fix, ${dl.mb} MB)…`, "@download"));
+    if (dl && !dl.installed) sel.add(new Option(UiLanguage.template`＋ Descargar SDXL VAE (fp16 fix, ${dl.mb} MB)…`, "@download"));
     sel.add(new Option("＋ Importar un VAE…", "@import"));
     const v = this.chosen(opt);
     sel.value = [...sel.options].some((o) => o.value === v) ? v : "";
-    sel.title = "El VAE convierte el resultado en imagen. «Del modelo» usa el que trae el checkpoint; uno externo (p. ej. sdxl_vae) puede mejorar colores y detalles.";
+    sel.title = UiLanguage.text("El VAE convierte el resultado en imagen. «Del modelo» usa el que trae el checkpoint; uno externo (p. ej. sdxl_vae) puede mejorar colores y detalles.");
   },
 
   async pick() {
@@ -67,10 +67,10 @@ const Vae = {
       sel.disabled = true;
       const off = await window.__TAURI__.event.listen("dl-progress", (ev) => {
         const p = ev.payload; if (p.id !== "asset-sdxl_vae") return;
-        setStatus(`Descargando el VAE de SDXL… ${p.total ? Math.round((100 * p.done) / p.total) + " %" : ""}`);
+        setStatus(UiLanguage.template`Descargando el VAE de SDXL… ${p.total ? Math.round((100 * p.done) / p.total) + " %" : ""}`);
       });
-      try { id = await invoke("asset_download", { kind: "sdxl_vae" }); toast("✓ VAE de SDXL descargado", 3000); }
-      catch (e) { toast("No se pudo descargar: " + (e.message || e), 5000); id = this.chosen(opt); }
+      try { id = await invoke("asset_download", { kind: "sdxl_vae" }); toast(UiLanguage.text("✓ VAE de SDXL descargado"), 3000); }
+      catch (e) { toast(UiLanguage.text("No se pudo descargar: ") + (e.message || e), 5000); id = this.chosen(opt); }
       finally { off(); sel.disabled = false; }
       await api("/sdcpp/v1/models/refresh", { method: "POST" }).catch(() => {});
     } else if (v === "@import") {
@@ -82,7 +82,7 @@ const Vae = {
     // el VAE se carga con el modelo: si ya estaba cargado, se recarga al generar
     if (state.loaded === opt.id) {
       state.loaded = null;
-      setStatus(id ? `VAE: ${id.replace(/^vae\//, "")} · se aplica al generar (recarga el modelo)` : "VAE del modelo · se aplica al generar (recarga el modelo)");
+      setStatus(id ? UiLanguage.template`VAE: ${id.replace(/^vae\//, "")} · se aplica al generar (recarga el modelo)` : UiLanguage.text("VAE del modelo · se aplica al generar (recarga el modelo)"));
     }
   },
 };
@@ -94,12 +94,12 @@ async function renderPreviewOpt() {
   const b = $("taesdBtn");
   if (!a) { b.classList.add("hidden"); return; }
   b.disabled = a.installed;
-  b.textContent = a.installed ? "✓ Vista previa de alta calidad instalada (TAESD)" : `Mejorar la vista previa (TAESD, ${a.mb} MB)`;
+  b.textContent = a.installed ? UiLanguage.text("✓ Vista previa de alta calidad instalada (TAESD)") : UiLanguage.template`Mejorar la vista previa (TAESD, ${a.mb} MB)`;
 }
 $("taesdBtn").onclick = async () => {
-  $("taesdBtn").disabled = true; $("taesdBtn").textContent = "Descargando…";
-  try { await invoke("asset_download", { kind: "taesdxl" }); toast("✓ Vista previa de alta calidad lista (motor PyTorch, SDXL)", 4000); }
-  catch (e) { toast("No se pudo descargar: " + (e.message || e), 5000); }
+  $("taesdBtn").disabled = true; $("taesdBtn").textContent = UiLanguage.text("Descargando…");
+  try { await invoke("asset_download", { kind: "taesdxl" }); toast(UiLanguage.text("✓ Vista previa de alta calidad lista (motor PyTorch, SDXL)"), 4000); }
+  catch (e) { toast(UiLanguage.text("No se pudo descargar: ") + (e.message || e), 5000); }
   renderPreviewOpt();
 };
 

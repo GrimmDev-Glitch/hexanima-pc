@@ -12,7 +12,7 @@ const Pose = {
   supported(opt) { return state.engine === "torch" && opt?.family === "sdxl"; },
   on() { return !!this.skel && $("poseOn").checked; },
 
-  img(src) { return new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error("imagen no válida")); i.src = src; }); },
+  img(src) { return new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error(UiLanguage.text("imagen no válida"))); i.src = src; }); },
 
   /** ¿Ya es un esqueleto? Fondo casi todo negro con trazos de color. */
   isSkeleton(im) {
@@ -40,13 +40,13 @@ const Pose = {
         if (state.engine !== "torch") {
           const has = (state.engines || []).includes("torch");
           return toast(has
-            ? "La pose usa el motor rápido, que se activa con modelos SDXL, Illustrious o Pony: elige uno de esos en Modelo y vuelve a elegir la foto. Con Qwen o Mage usa «🧍 Copiar pose» en Editar una foto."
-            : "Para sacar la pose de una foto hace falta el motor rápido (NVIDIA): descárgalo en Ajustes → Motor rápido (PyTorch). También puedes cargar un esqueleto ya hecho (OpenPose Editor, PoseMy.Art…).", 9000);
+            ? UiLanguage.text("La pose usa el motor rápido, que se activa con modelos SDXL, Illustrious o Pony: elige uno de esos en Modelo y vuelve a elegir la foto. Con Qwen o Mage usa «🧍 Copiar pose» en Editar una foto.")
+            : UiLanguage.text("Para sacar la pose de una foto hace falta el motor rápido (NVIDIA): descárgalo en Ajustes → Motor rápido (PyTorch). También puedes cargar un esqueleto ya hecho (OpenPose Editor, PoseMy.Art…)."), 9000);
         }
-        if (!(await downloadAssets(["pose"], "Detector de pose", "Saca el esqueleto (cabeza, hombros, brazos y piernas) de una foto con OpenPose. Los pesos son de CMU, de uso no comercial.", (t) => { $("poseInfo").textContent = t; }))) return this.render();
-        $("poseInfo").textContent = "Buscando la pose…";
+        if (!(await downloadAssets(["pose"], "Detector de pose", UiLanguage.text("Saca el esqueleto (cabeza, hombros, brazos y piernas) de una foto con OpenPose. Los pesos son de CMU, de uso no comercial."), (t) => { $("poseInfo").textContent = t; }))) return this.render();
+        $("poseInfo").textContent = UiLanguage.text("Buscando la pose…");
         const r = await api("/hexanima/v1/pose", { method: "POST", body: JSON.stringify({ image: src }) });
-        if (!r.people) { toast("No se encontró a nadie en la foto: prueba con otra en la que se vea el cuerpo entero o medio cuerpo.", 6000); return this.render(); }
+        if (!r.people) { toast(UiLanguage.text("No se encontró a nadie en la foto: prueba con otra en la que se vea el cuerpo entero o medio cuerpo."), 6000); return this.render(); }
         this.skel = { src: "data:image/png;base64," + r.image, w: r.width, h: r.height, people: r.people, from: "foto" };
       }
       $("poseOn").checked = true;
@@ -55,7 +55,7 @@ const Pose = {
     } catch (e) {
       // un motor rápido de antes de la 🧍 Pose no tiene /hexanima/v1/pose
       const msg = String(e.message || e);
-      toast(/no existe|404/i.test(msg) ? "Tu motor rápido es de una versión anterior: actualízalo en Ajustes → Motor rápido para usar la Pose." : "No se pudo leer la pose: " + msg, 7000);
+      toast(/no existe|404/i.test(msg) ? UiLanguage.text("Tu motor rápido es de una versión anterior: actualízalo en Ajustes → Motor rápido para usar la Pose.") : UiLanguage.text("No se pudo leer la pose: ") + msg, 7000);
     }
     this.render();
   },
@@ -63,7 +63,7 @@ const Pose = {
   /** El ControlNet (2,4 GB) se descarga la primera vez que se usa. */
   async ensure() {
     if (!this.on() || !this.supported(currentOption())) return true;
-    return downloadAssets(["openpose"], "ControlNet de pose", "Hace que la imagen siga el esqueleto: ControlNet OpenPose SDXL de xinsir (Apache-2.0). Funciona con SDXL, Illustrious y Pony.", (t) => { $("poseInfo").textContent = t; });
+    return downloadAssets(["openpose"], "ControlNet de pose", UiLanguage.text("Hace que la imagen siga el esqueleto: ControlNet OpenPose SDXL de xinsir (Apache-2.0). Funciona con SDXL, Illustrious y Pony."), (t) => { $("poseInfo").textContent = t; });
   },
 
   /** Añade el esqueleto a la petición si la pose está activa y el modelo la admite. */
@@ -80,7 +80,7 @@ const Pose = {
     const a = this.skel.w / this.skel.h, px = 1024 * 1024;
     $("customW").value = align64(Math.sqrt(px * a)); $("customH").value = align64(Math.sqrt(px / a));
     document.querySelector('#aspect button[data-a="c"]').click();
-    toast(`Tamaño: ${$("customW").value} × ${$("customH").value}`);
+    toast(UiLanguage.template`Tamaño: ${$("customW").value} × ${$("customH").value}`);
   },
 
   clear() { this.skel = null; $("poseOn").checked = false; this.render(); },
@@ -92,11 +92,11 @@ const Pose = {
     for (const id of ["poseClear", "poseFit", "poseOn", "poseStrength"]) $(id).disabled = !s;
     $("poseEmpty").classList.toggle("hidden", !!s);
     let info;
-    if (!s) info = "Elige una foto para copiar su postura, o un esqueleto hecho en OpenPose Editor o PoseMy.Art.";
-    else if (REF_FAMILIES.includes(opt?.family)) info = "Qwen y Mage no usan esta caja: pon la foto de la pose como imagen 2 y usa «🧍 Copiar pose».";
-    else if (opt?.family !== "sdxl") info = "La pose funciona con modelos SDXL, Illustrious y Pony.";
-    else if (state.engine !== "torch") info = "La pose funciona con el motor rápido (PyTorch, NVIDIA). Cámbialo en Ajustes → Motor.";
-    else info = (s.from === "foto" ? `Pose de la foto${s.people > 1 ? ` (${s.people} personas)` : ""}` : "Esqueleto cargado") + ` · ${s.w} × ${s.h}. Fuerza 0,6–1,0 suele ir bien; más alta la sigue al pie de la letra.`;
+    if (!s) info = UiLanguage.text("Elige una foto para copiar su postura, o un esqueleto hecho en OpenPose Editor o PoseMy.Art.");
+    else if (REF_FAMILIES.includes(opt?.family)) info = UiLanguage.text("Qwen y Mage no usan esta caja: pon la foto de la pose como imagen 2 y usa «🧍 Copiar pose».");
+    else if (opt?.family !== "sdxl") info = UiLanguage.text("La pose funciona con modelos SDXL, Illustrious y Pony.");
+    else if (state.engine !== "torch") info = UiLanguage.text("La pose funciona con el motor rápido (PyTorch, NVIDIA). Cámbialo en Ajustes → Motor.");
+    else info = (s.from === "foto" ? UiLanguage.template`Pose de la foto${s.people > 1 ? UiLanguage.template` (${s.people} personas)` : ""}` : UiLanguage.text("Esqueleto cargado")) + UiLanguage.template` · ${s.w} × ${s.h}. Fuerza 0,6–1,0 suele ir bien; más alta la sigue al pie de la letra.`;
     $("poseInfo").textContent = info;
   },
 };

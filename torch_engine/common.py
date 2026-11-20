@@ -21,7 +21,7 @@ ARGS, _ = ap.parse_known_args()
 
 STATUS = {"state": "empty", "recipe": None, "models": {}, "load_elapsed_seconds": None, "error": None, "revision": 0}
 JOBS = {}
-QUEUE = queue.Queue()
+QUEUE = queue.Queue(maxsize=1)
 LOCK = threading.Lock()
 RUN = threading.Lock()  # una sola carga o generación a la vez (el modelo es compartido)
 CATS = ["checkpoints", "diffusion_models", "text_encoders", "vae", "vae_approx", "upscalers", "detectors"]

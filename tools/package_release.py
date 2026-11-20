@@ -15,8 +15,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENGINES = ["vulkan", "cuda"]
 EMPTY = ["models/checkpoints", "models/diffusion_models", "models/text_encoders", "models/vae", "models/vae_approx",
          "models/upscalers", "models/detectors", "loras", "outputs", "logs", "cache", "config", "lang"]
-FILES = ["HexAnima.exe", "README.md", "LICENSE", "THIRD_PARTY.md", "engine/README.md"]
+FILES = ["HexAnima.exe", "README.md", "README.es.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY.md", "engine/README.md"]
 SKIP_ENGINE = (".bat", ".sh")  # lanzadores de ejemplo de sd.cpp
+# Model archives and media are already compressed. Native DLLs still benefit from
+# fast deflate, so they use level 1 instead of spending minutes at level 9.
+STORE = (".zip", ".png", ".jpg", ".pt", ".pth", ".safetensors")
 
 
 def main():
@@ -41,7 +44,9 @@ def main():
             for name in sorted(os.listdir(d)):
                 p = os.path.join(d, name)
                 if os.path.isfile(p) and not name.endswith(SKIP_ENGINE):
-                    z.write(p, f"{top}/engine/{e}/{name}"); n += 1
+                    method = zipfile.ZIP_STORED if name.lower().endswith(STORE) else zipfile.ZIP_DEFLATED
+                    z.write(p, f"{top}/engine/{e}/{name}", compress_type=method,
+                            compresslevel=1 if method == zipfile.ZIP_DEFLATED else None); n += 1
         for d in EMPTY:
             z.writestr(f"{top}/{d}/.gitkeep", ""); n += 1
     os.replace(zpath + ".tmp", zpath)
