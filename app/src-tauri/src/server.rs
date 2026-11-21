@@ -3,9 +3,14 @@
 
 use serde::Deserialize;
 use std::fs::{self, File};
+use std::io::Write;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+#[cfg(windows)]
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc};
+#[cfg(windows)]
+use std::thread::JoinHandle;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -31,7 +36,9 @@ pub struct Server {
     pub port: u16,
     pub log_path: PathBuf,
     #[cfg(windows)]
-    _job: Job,
+    _job: Arc<Job>,
+    #[cfg(windows)]
+    _resource_guard: ResourceGuard,
     #[cfg(windows)]
     _reservation: EngineReservation,
 }
@@ -78,6 +85,22 @@ pub fn engine_installed(root: &Path, engine: &str) -> bool {
     }
 }
 
+/// Resolve a requested backend without silently substituting a detected one.
+pub fn resolve_engine(root: &Path, requested: Option<&str>, detected: &str, detected_device: Option<&str>, gpu: Option<&crate::hw::Gpu>) -> Result<(String, Option<String>), String> {
+    if let Some(engine) = requested {
+        if !["torch", "vulkan", "cuda", "cpu"].contains(&engine) { return Err(format!("Motor no reconocido: {engine}")); }
+        if !engine_installed(root, engine) { return Err(format!("Falta el motor seleccionado: {engine}. Instálalo o selecciona Automático.")); }
+        let device = if engine == "torch" { None }
+            else if engine == detected { detected_device.map(str::to_owned) }
+            else { crate::hw::engine_device(root, engine, gpu) };
+        if !["torch", "cpu"].contains(&engine) && device.is_none() {
+            return Err(format!("No se pudo confirmar un dispositivo para el motor {engine}. Revisa que esté instalado y que detecte una GPU compatible."));
+        }
+        return Ok((engine.to_owned(), device));
+    }
+    Ok((detected.to_owned(), detected_device.map(str::to_owned)))
+}
+
 impl Server {
     pub fn start(root: &Path, engine: &str, device: Option<&str>, opts: &ServerOpts) -> Result<Server, String> {
         let torch = engine == "torch";
@@ -105,7 +128,8 @@ impl Server {
         let logs = root.join("logs");
         let _ = fs::create_dir_all(&logs);
         let log_path = logs.join("server.log");
-        let log = File::create(&log_path).map_err(|e| e.to_string())?;
+        let mut log = File::create(&log_path).map_err(|e| e.to_string())?;
+        writeln!(log, "[BACKEND] engine={engine} device={} cpu_limited={}", device.unwrap_or("auto"), opts.cpu_recovery.unwrap_or(false)).map_err(|e| e.to_string())?;
         let log2 = log.try_clone().map_err(|e| e.to_string())?;
 
         let mut args: Vec<String> = vec![
@@ -142,8 +166,12 @@ impl Server {
             args.push("--ad-model".into());
             args.push(det.display().to_string());
         }
-        if let Some(extra) = opts.extra_args.as_ref().filter(|_| !cpu_recovery) {
-            args.extend(extra.split_whitespace().map(String::from));
+        if let Some(extra) = opts.extra_args.as_ref().filter(|_| !cpu_recovery && !torch) {
+            let extra_args: Vec<String> = extra.split_whitespace().map(String::from).collect();
+            if extra_args.iter().any(|arg| arg == "--backend" || arg.starts_with("--backend=")) {
+                return Err("La opción --backend se controla desde Ajustes → Motor para mantener coherentes la selección y la seguridad.".into());
+            }
+            args.extend(extra_args);
         }
 
         if torch {
@@ -166,13 +194,19 @@ impl Server {
             .stderr(Stdio::from(log2));
         #[cfg(windows)]
         cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
+        // Check RAM/commit and configure the Job Object before the heavy engine starts.
+        #[cfg(windows)]
+        let job = Arc::new(Job::prepare(cpu_recovery)?);
         let mut child = cmd.spawn().map_err(|e| format!("No se pudo iniciar el motor: {e}"))?;
 
         #[cfg(windows)]
-        let job = Job::new_kill_on_close(&child, cpu_recovery).inspect_err(|_| {
+        if let Err(error) = job.assign(&child) {
             let _ = child.kill();
             let _ = child.wait();
-        })?;
+            return Err(error);
+        }
+        #[cfg(windows)]
+        let resource_guard = ResourceGuard::start(job.clone(), log_path.clone());
 
         Ok(Server {
             child,
@@ -180,6 +214,8 @@ impl Server {
             log_path,
             #[cfg(windows)]
             _job: job,
+            #[cfg(windows)]
+            _resource_guard: resource_guard,
             #[cfg(windows)]
             _reservation: reservation,
         })
@@ -208,11 +244,12 @@ struct Job(windows_sys::Win32::Foundation::HANDLE);
 
 #[cfg(windows)]
 unsafe impl Send for Job {}
+#[cfg(windows)]
+unsafe impl Sync for Job {}
 
 #[cfg(windows)]
 impl Job {
-    fn new_kill_on_close(child: &Child, limit_cpu: bool) -> Result<Job, String> {
-        use std::os::windows::io::AsRawHandle;
+    fn prepare(limit_cpu: bool) -> Result<Job, String> {
         use windows_sys::Win32::System::JobObjects::*;
         unsafe {
             let h = CreateJobObjectW(std::ptr::null(), std::ptr::null());
@@ -221,10 +258,18 @@ impl Job {
             }
             let job = Job(h);
             let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            let (total_gib, free_gib) = crate::hw::ram();
-            let budget_gib = (free_gib - 2.5).min(total_gib * 0.70);
+            let memory = crate::hw::memory();
+            let total_gib = memory.ram_total_gb;
+            let free_gib = memory.ram_free_gb;
+            let reserve_gib = crate::hw::system_reserve_gb(total_gib);
+            let mut budget_gib = (free_gib - reserve_gib).min(total_gib * 0.70);
+            if let Some(commit_free) = memory.commit_free_gb {
+                budget_gib = budget_gib.min(commit_free - reserve_gib);
+            } else {
+                return Err("Windows no pudo medir el margen de memoria comprometida; no es seguro iniciar el motor.".into());
+            }
             if budget_gib < 0.5 {
-                return Err(format!("RAM libre insuficiente para iniciar el motor: {free_gib:.1} GB. HexAnima reserva 2,5 GB para Windows."));
+                return Err(format!("RAM libre insuficiente para iniciar el motor: {free_gib:.1} GB. HexAnima reserva {reserve_gib:.1} GB para Windows."));
             }
             info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_MEMORY;
             info.JobMemoryLimit = (budget_gib * 1_073_741_824.0) as usize;
@@ -250,11 +295,64 @@ impl Job {
                     return Err(format!("No se pudo limitar la CPU: {}", std::io::Error::last_os_error()));
                 }
             }
-            if AssignProcessToJobObject(h, child.as_raw_handle() as _) == 0 {
-                return Err(format!("No se pudo asociar el motor a HexAnima: {}", std::io::Error::last_os_error()));
-            }
             Ok(job)
         }
+    }
+
+    fn assign(&self, child: &Child) -> Result<(), String> {
+        use std::os::windows::io::AsRawHandle;
+        let ok = unsafe { windows_sys::Win32::System::JobObjects::AssignProcessToJobObject(self.0, child.as_raw_handle() as _) };
+        if ok == 0 { return Err(format!("No se pudo asociar el motor a HexAnima: {}", std::io::Error::last_os_error())); }
+        Ok(())
+    }
+}
+
+/// Watches system-wide memory outside the inference worker, requests time for cooperative
+/// cancellation, then terminates only this Job Object if pressure persists.
+#[cfg(windows)]
+struct ResourceGuard {
+    stop: Arc<AtomicBool>,
+    thread: Option<JoinHandle<()>>,
+}
+
+#[cfg(windows)]
+impl ResourceGuard {
+    fn start(job: Arc<Job>, log_path: PathBuf) -> Self {
+        let stop = Arc::new(AtomicBool::new(false));
+        let thread_stop = stop.clone();
+        let thread = std::thread::Builder::new().name("hexanima-memory-guard".into()).spawn(move || {
+            while !thread_stop.load(Ordering::Relaxed) {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if thread_stop.load(Ordering::Relaxed) { break; }
+                let (total_gb, physical_free_gb, commit_free_gb) = crate::hw::system_memory();
+                if crate::hw::under_memory_pressure_values(total_gb, physical_free_gb, commit_free_gb) {
+                    let commit = commit_free_gb.map_or_else(|| "no disponible".into(), |v| format!("{v:.1} GB"));
+                    let line = format!("[SAFETY] Presión crítica; solicitud de parada cooperativa con 5 s para liberar recursos: RAM física disponible {:.1}/{:.1} GB; commit disponible {}.\n", physical_free_gb, total_gb, commit);
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(&log_path).and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+                    for _ in 0..50 {
+                        if thread_stop.load(Ordering::Relaxed) { break; }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    if thread_stop.load(Ordering::Relaxed) { break; }
+                    let (total_gb, physical_free_gb, commit_free_gb) = crate::hw::system_memory();
+                    if !crate::hw::under_memory_pressure_values(total_gb, physical_free_gb, commit_free_gb) { continue; }
+                    use windows_sys::Win32::System::JobObjects::TerminateJobObject;
+                    unsafe { TerminateJobObject(job.0, 0xE000_0001); }
+                    let line = "[SAFETY] La presión persistió; se terminó el proceso gestionado para liberar memoria.\n";
+                    let _ = std::fs::OpenOptions::new().create(true).append(true).open(log_path).and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+                    break;
+                }
+            }
+        }).ok();
+        Self { stop, thread }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for ResourceGuard {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(thread) = self.thread.take() { let _ = thread.join(); }
     }
 }
 
@@ -273,4 +371,43 @@ pub fn log_tail(path: &Path, lines: usize) -> String {
     let text = text.replace('\r', "\n");
     let v: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     v[v.len().saturating_sub(lines)..].join("\n")
+}
+
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::*;
+
+    fn fixture() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("hexanima-backend-test-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(root.join("engine/torch/python")).unwrap();
+        fs::create_dir_all(root.join("engine/torch/hexanima")).unwrap();
+        fs::write(root.join("engine/torch/python/python.exe"), b"fixture").unwrap();
+        fs::write(root.join("engine/torch/hexanima/server.py"), b"fixture").unwrap();
+        root
+    }
+
+    #[test]
+    fn manual_pytorch_is_not_replaced_by_detected_vulkan() {
+        let root = fixture();
+        let resolved = resolve_engine(&root, Some("torch"), "vulkan", Some("vulkan1"), None).unwrap();
+        assert_eq!(resolved.0, "torch");
+        assert_eq!(resolved.1, None);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn missing_manual_backend_returns_an_error_instead_of_falling_back() {
+        let root = fixture();
+        let error = resolve_engine(&root, Some("cuda"), "vulkan", Some("vulkan1"), None).unwrap_err();
+        assert!(error.contains("Falta el motor seleccionado: cuda"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn automatic_mode_keeps_the_detected_backend() {
+        let root = fixture();
+        let resolved = resolve_engine(&root, None, "vulkan", Some("vulkan1"), None).unwrap();
+        assert_eq!(resolved, ("vulkan".into(), Some("vulkan1".into())));
+        fs::remove_dir_all(root).unwrap();
+    }
 }

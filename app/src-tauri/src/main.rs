@@ -95,17 +95,9 @@ fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine
         }
         g.clone().unwrap()
     };
-    // Motor pedido (p. ej. CUDA para Anima: su VAE es mucho más rápido ahí) si está instalado;
-    // si no, el detectado para la gráfica.
-    let wanted = engine.filter(|e| server::engine_installed(&state.root, e));
-    let (eng, device) = match wanted {
-        Some(e) if e == "torch" => (e, None),
-        Some(e) if e != hw.engine => {
-            let d = hw::engine_device(&state.root, &e, hw.gpu.as_ref());
-            (e, d)
-        }
-        _ => (hw.engine.clone(), hw.backend_device.clone()),
-    };
+    // Una selección manual no instalada o inválida debe fallar con explicación; solo
+    // la ausencia de preferencia permite usar el motor detectado automáticamente.
+    let (eng, device) = server::resolve_engine(&state.root, engine.as_deref(), &hw.engine, hw.backend_device.as_deref(), hw.gpu.as_ref())?;
     let mut srv = state.server.lock().unwrap();
     if let Some(mut s) = srv.take() {
         s.stop();
@@ -115,7 +107,7 @@ fn start_server(state: State<AppState>, opts: Option<server::ServerOpts>, engine
     let s = server::Server::start(&state.root, &eng, device.as_deref(), &opts)?;
     let port = s.port;
     *srv = Some(s);
-    Ok(json!({ "port": port, "engine": eng, "device": device }))
+    Ok(json!({ "port": port, "engine": eng, "device": device, "configured_engine": engine }))
 }
 
 #[tauri::command]

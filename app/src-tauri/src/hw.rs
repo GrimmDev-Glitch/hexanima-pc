@@ -35,6 +35,9 @@ pub struct Hardware {
 pub struct Memory {
     pub ram_total_gb: f64,
     pub ram_free_gb: f64,
+    /// Windows system commit limit and remaining headroom (not physical RAM).
+    pub commit_limit_gb: Option<f64>,
+    pub commit_free_gb: Option<f64>,
     pub vram_total_gb: Option<f64>,
     pub vram_free_gb: Option<f64>,
     pub gpu_temp_c: Option<i64>,
@@ -67,6 +70,38 @@ pub fn ram() -> (f64, f64) {
         }
     }
     (0.0, 0.0)
+}
+
+#[cfg(windows)]
+fn commit_memory() -> Option<(f64, f64)> {
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+    let mut m: MEMORYSTATUSEX = unsafe { std::mem::zeroed() };
+    m.dwLength = std::mem::size_of::<MEMORYSTATUSEX>() as u32;
+    if unsafe { GlobalMemoryStatusEx(&mut m) } == 0 { return None; }
+    let gb = 1024f64.powi(3);
+    Some((round1(m.ullTotalPageFile as f64 / gb), round1(m.ullAvailPageFile as f64 / gb)))
+}
+
+#[cfg(not(windows))]
+fn commit_memory() -> Option<(f64, f64)> { None }
+
+/// Preserve the established 2.5 GiB Windows reserve, scaling up on large-memory systems.
+pub fn system_reserve_gb(total_gb: f64) -> f64 {
+    2.5_f64.max(total_gb.max(0.0) * 0.15)
+}
+
+/// A runtime process is stopped if either system-wide physical availability or commit
+/// headroom falls below the protected reserve. Missing commit telemetry is reported but
+/// does not disable the independent physical-memory guard.
+pub fn under_memory_pressure_values(total_gb: f64, physical_free_gb: f64, commit_free_gb: Option<f64>) -> bool {
+    total_gb > 0.0 && physical_free_gb < system_reserve_gb(total_gb)
+        || commit_free_gb.is_some_and(|free| free < system_reserve_gb(total_gb))
+}
+
+/// Lightweight system-only snapshot used by the watchdog; it deliberately avoids GPU polling.
+pub fn system_memory() -> (f64, f64, Option<f64>) {
+    let (total, physical_free) = ram();
+    (total, physical_free, commit_memory().map(|v| v.1))
 }
 
 fn round1(x: f64) -> f64 {
@@ -248,15 +283,37 @@ pub fn detect(root: &Path) -> Hardware {
 /// Memoria libre ahora (para la barra lateral y el modo adaptativo).
 pub fn memory() -> Memory {
     let (rt, rf) = ram();
+    let commit = commit_memory();
     let nv = nvidia_query("memory.total,memory.free,temperature.gpu");
     let mb = |s: &String| s.parse::<f64>().ok().map(|v| round1(v / 1024.0));
     Memory {
         ram_total_gb: rt,
         ram_free_gb: rf,
+        commit_limit_gb: commit.map(|v| v.0),
+        commit_free_gb: commit.map(|v| v.1),
         vram_total_gb: nv.as_ref().and_then(|v| v.first()).and_then(mb),
         vram_free_gb: nv.as_ref().and_then(|v| v.get(1)).and_then(mb),
         gpu_temp_c: nv.as_ref().and_then(|v| v.get(2)).and_then(|s| s.parse().ok()),
         on_battery: on_battery(),
+    }
+}
+
+#[cfg(test)]
+mod memory_tests {
+    use super::*;
+
+    #[test]
+    fn reserve_scales_with_large_systems_but_keeps_existing_floor() {
+        assert_eq!(system_reserve_gb(8.0), 2.5);
+        assert_eq!(system_reserve_gb(16.0), 2.5);
+        assert_eq!(system_reserve_gb(64.0), 9.6);
+    }
+
+    #[test]
+    fn detects_physical_and_commit_pressure_independently() {
+        assert!(!under_memory_pressure_values(16.0, 3.0, Some(3.0)));
+        assert!(under_memory_pressure_values(16.0, 2.0, Some(3.0)));
+        assert!(under_memory_pressure_values(16.0, 3.0, Some(2.0)));
     }
 }
 
