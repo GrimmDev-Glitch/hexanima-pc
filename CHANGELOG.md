@@ -1,5 +1,17 @@
 # HexAnima PC
 
+## 0.2.8 — laptop thermal telemetry handling
+
+### What's new
+
+- A readable current GPU temperature is enough to apply HexAnima's thermal profile. Missing driver target-temperature metadata no longer blocks PyTorch/CUDA on otherwise cool laptops.
+- When the driver reports a valid lower target temperature, HexAnima uses that stricter limit. Missing current-temperature telemetry still falls back to the protected CPU path in Automatic mode or reports why a manually selected GPU engine cannot start.
+
+### Validation and known limits
+
+- The profile thresholds remain 75 °C (Low), 78 °C (Medium), and 80 °C (High), capped further by a valid lower driver target.
+- A complete image generation on a GTX 1050 2 GB / 8 GB RAM PC remains unverified.
+
 ## 0.2.7 — PyTorch engine updates from Settings
 
 ### What's new
@@ -57,6 +69,18 @@ The exact Windows ZIP passed its integrity check, and both CUDA and Vulkan engin
 The PyTorch runtime is downloaded separately and is not included in this GitHub release. **Search for updates** replaces only `HexAnima.exe`; it does not update an existing PyTorch runtime. PyTorch worker-queue changes in the repository source are not active for existing installations until that separate runtime package is published.
 
 ## Español
+
+## 0.2.8 — lectura térmica en laptops
+
+### Novedades
+
+- Una lectura válida de la temperatura actual basta para aplicar el perfil térmico de HexAnima. Si el driver omite la temperatura objetivo, eso ya no bloquea PyTorch/CUDA en laptops que están dentro del límite.
+- Si el driver informa un límite objetivo válido más bajo, HexAnima aplica ese límite más estricto. Si falta la lectura de temperatura actual, el modo Automático sigue usando la ruta protegida por CPU o el motor GPU seleccionado manualmente explica por qué no puede iniciar.
+
+### Validación y límites conocidos
+
+- Se mantienen los umbrales de 75 °C (Bajo), 78 °C (Medio) y 80 °C (Alto), limitados por una temperatura objetivo válida más baja que indique el driver.
+- Sigue sin verificarse una generación completa en un PC con GTX 1050 de 2 GB y 8 GB de RAM.
 
 ## 0.2.7 — actualización del motor PyTorch desde Ajustes
 
