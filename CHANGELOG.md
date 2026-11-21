@@ -1,5 +1,19 @@
 # HexAnima PC
 
+## 0.2.6 — low-memory SDXL and backend selection
+
+### What's new
+
+- Automatic mode no longer silently routes NVIDIA SDXL jobs to Vulkan when PyTorch or CUDA is unavailable, or when GPU thermal telemetry is missing. It uses a capped CPU fallback when available.
+- When a checkpoint exceeds the safe RAM budget, native CUDA/CPU loading maps weights from disk instead of rejecting the model based on total checkpoint size. The Windows reserve and pressure watchdog remain active.
+- PyTorch remains the explicitly selected engine. If its private-memory loading path cannot fit the checkpoint, the app explains the constraint; automatic mode can use the disk-mapped native path.
+- Settings now shows the installed PyTorch package version and detected CUDA runtime.
+
+### Verification and known limits
+
+- The low-memory path relies on stable-diffusion.cpp memory mapping and still requires free disk space, an available page file, and enough memory for the selected resolution's working buffers.
+- A complete image generation on a GTX 1050 2 GB / 8 GB RAM system has not yet been verified. The engine remains subject to the Windows memory reserve and stop watchdog.
+
 ## 0.2.5 — backend, memory and cancellation safeguards
 
 ### What's new
@@ -30,6 +44,20 @@ The exact Windows ZIP passed its integrity check, and both CUDA and Vulkan engin
 The PyTorch runtime is downloaded separately and is not included in this GitHub release. **Search for updates** replaces only `HexAnima.exe`; it does not update an existing PyTorch runtime. PyTorch worker-queue changes in the repository source are not active for existing installations until that separate runtime package is published.
 
 ## Español
+
+## 0.2.6 — SDXL con poca RAM y selección del motor
+
+### Novedades
+
+- El modo Automático ya no envía silenciosamente trabajos SDXL de NVIDIA a Vulkan si PyTorch o CUDA no están disponibles, o si falta la telemetría térmica. Usa CPU limitada cuando está disponible.
+- Si un checkpoint supera el margen seguro de RAM, la carga nativa con CUDA/CPU mapea los pesos desde el disco en vez de rechazar el modelo por su tamaño total. Se mantienen la reserva de Windows y el monitor de presión.
+- PyTorch respeta la selección manual. Si la carga privada de memoria no cabe, la app explica el límite; el modo Automático puede usar la ruta nativa con pesos desde disco.
+- Ajustes ahora muestra la versión instalada del paquete PyTorch y la versión CUDA detectada.
+
+### Validación y límites conocidos
+
+- La ruta de poca RAM usa el mapeo de memoria de stable-diffusion.cpp y requiere espacio libre en disco, archivo de paginación disponible y memoria suficiente para los buffers de trabajo de la resolución.
+- Aún no se verificó una generación completa en un equipo con GTX 1050 de 2 GB y 8 GB de RAM. Siguen activos la reserva de Windows y el monitor de detención.
 
 ## 0.2.5 — protección de backend, memoria y cancelación
 
