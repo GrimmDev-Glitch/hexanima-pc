@@ -1,4 +1,19 @@
-# HexAnima PC 0.2.4
+# HexAnima PC
+
+## 0.2.5 — backend, memory and cancellation safeguards
+
+### What's new
+
+- Manual backend selection is now authoritative. If the selected engine, model, device, or required telemetry is unavailable, HexAnima reports the reason instead of silently switching engines.
+- Generation preflight checks both available physical RAM and Windows commit headroom. A system-wide watchdog requests cancellation under critical memory pressure and terminates only HexAnima's managed engine process if pressure persists.
+- Windows memory and process limits are configured before starting the inference engine. Stop sends cancellation immediately and closes the managed process after a bounded timeout if it stalls.
+- Backend logs identify the selected engine and device. The PyTorch engine reports whether it is actually using CUDA or CPU.
+
+### Verification and known limits
+
+Eight automated tests pass; seven network, installation, or real-model tests remain ignored. JavaScript and Python syntax checks and the production Rust build pass. A full generation and cancellation cycle on the GTX 1650 has not yet been verified. The PyTorch engine is distributed separately; after updating HexAnima PC, update it from Settings → PyTorch Engine to receive the runtime diagnostic endpoint.
+
+## 0.2.4 — previous release
 
 ## What's new
 
@@ -14,7 +29,22 @@ The exact Windows ZIP passed its integrity check, and both CUDA and Vulkan engin
 
 The PyTorch runtime is downloaded separately and is not included in this GitHub release. **Search for updates** replaces only `HexAnima.exe`; it does not update an existing PyTorch runtime. PyTorch worker-queue changes in the repository source are not active for existing installations until that separate runtime package is published.
 
-## Novedades (español)
+## Español
+
+## 0.2.5 — protección de backend, memoria y cancelación
+
+### Novedades
+
+- La selección manual del motor ahora se respeta. Si el motor, modelo, dispositivo o telemetría necesarios no están disponibles, HexAnima explica el motivo en vez de cambiar de motor sin avisar.
+- La comprobación previa revisa la RAM física disponible y el margen de memoria comprometida de Windows. Un monitor del sistema pide cancelar ante presión crítica y, si persiste, termina solo el proceso del motor administrado por HexAnima.
+- Los límites de memoria y procesos de Windows se configuran antes de iniciar el motor. Detener envía la cancelación de inmediato y cierra el proceso administrado si deja de responder.
+- Los registros identifican el motor y dispositivo seleccionados. El motor PyTorch informa si realmente usa CUDA o CPU.
+
+### Validación y límites
+
+Pasaron ocho pruebas automatizadas; siete pruebas de red, instalación o modelos reales siguen ignoradas. También pasaron la compilación Rust de producción y las comprobaciones de sintaxis de JavaScript y Python. Aún no se verificó una generación completa y su cancelación en la GTX 1650. El motor PyTorch se distribuye por separado; después de actualizar HexAnima PC, actualízalo desde Ajustes → Motor PyTorch para recibir el diagnóstico de dispositivo.
+
+## 0.2.4 — versión anterior (español)
 
 - **Protección según el hardware:** detecta la gráfica que realmente se usa, revisa RAM y VRAM libres antes de aceptar una generación, aplica límites térmicos por perfil y limita CPU y RAM del motor en el modo protegido de Windows.
 - **Protección del motor y los recursos:** reserva el motor para una sola instancia de HexAnima, maneja explícitamente su cierre y aplica límites de RAM y CPU de Windows en el modo protegido.
