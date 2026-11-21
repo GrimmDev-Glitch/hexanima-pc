@@ -139,7 +139,12 @@ async function requireResources(body = {}, modelBytes = 0) {
   // Si no caben sobre la reserva de Windows, sd.cpp puede mapear los pesos desde disco
   // en vez de bloquear el modelo por una estimación de RAM residente.
   const residentWeightsGb = Math.max(0, Number(modelBytes) / 1073741824) * 0.53;
-  return { diskOffload: residentWeightsGb > available };
+  // PyTorch loads checkpoint tensors into its own process before generation.
+  // The q8_0 mmap estimate above only applies to sd.cpp and underestimates
+  // PyTorch's peak private/temporary allocations. Keep a full checkpoint plus
+  // runtime headroom inside the same Windows reserve before choosing PyTorch.
+  const torchPeakGb = Math.max(0, Number(modelBytes) / 1073741824) + 1.25;
+  return { diskOffload: residentWeightsGb > available, torchFits: torchPeakGb <= available, availableGb: available, torchPeakGb };
 }
 
 async function submitImage(body) {
@@ -653,19 +658,19 @@ async function loadModel(plan, reserved = false) {
     const resourcePlan = await requireResources({}, modelBytes);
     let selectedEngine = engine;
     let selectedLimitedCpu = limitedCpu;
-    // PyTorch holds checkpoint tensors in private memory. If the checkpoint
-    // exceeds the safe RAM budget, automatic mode uses the disk-mapped native
-    // backend; an explicit PyTorch choice stays authoritative and explains why.
-    if (engine === "torch" && resourcePlan.diskOffload) {
+    // PyTorch loads checkpoint tensors into private memory. If the peak would
+    // cross the Windows reserve, automatic mode uses the capped CPU backend
+    // with disk-mapped weights. The 0.53 q8 estimate is only for sd.cpp.
+    if (engine === "torch" && !resourcePlan.torchFits) {
       if (store.get("enginePref", "auto") !== "auto") {
-        throw new Error(UiLanguage.text("Este checkpoint supera la RAM disponible para PyTorch. En Automático se usará el motor con pesos desde disco; también puedes liberar RAM o elegir otro motor."));
+        throw new Error(UiLanguage.template`PyTorch necesita un pico estimado de ${resourcePlan.torchPeakGb.toFixed(1)} GB y solo hay ${resourcePlan.availableGb.toFixed(1)} GB sobre la reserva de Windows. Cambia a Automático para usar CPU limitada con pesos desde disco, o libera RAM.`);
       }
       const engines = state.engines || [];
-      selectedEngine = engines.includes("cuda") ? "cuda" : engines.includes("cpu") ? "cpu" : null;
-      if (!selectedEngine) throw new Error(UiLanguage.text("Falta CUDA o CPU para cargar este checkpoint con pesos desde disco; Vulkan no se seleccionará automáticamente en NVIDIA."));
+      selectedEngine = engines.includes("cpu") ? "cpu" : null;
+      if (!selectedEngine) throw new Error(UiLanguage.text("Falta el motor CPU necesario para cargar este checkpoint dentro de la reserva de memoria; PyTorch no se iniciará con este margen."));
       selectedLimitedCpu = selectedEngine === "cpu";
     }
-    const diskOffload = selectedEngine !== "torch" && resourcePlan.diskOffload;
+    const diskOffload = selectedEngine !== "torch" && (resourcePlan.diskOffload || selectedLimitedCpu);
     if (selectedEngine !== state.engine || selectedLimitedCpu !== !!state.cpuRecovery || diskOffload !== !!state.diskOffload) {
       state.loaded = null;
       if (!(await startEngine(selectedEngine, selectedLimitedCpu, diskOffload))) return;
@@ -673,8 +678,10 @@ async function loadModel(plan, reserved = false) {
     }
     tick = setInterval(() => {
       const seconds = Math.round((Date.now() - t0) / 1000);
-      setStatus(diskOffload
-        ? UiLanguage.template`Cargando pesos desde disco: ${opt.label}… ${seconds} s`
+      setStatus(selectedLimitedCpu && diskOffload
+        ? UiLanguage.template`Cargando en CPU limitada con pesos desde disco: ${opt.label}… ${seconds} s`
+        : diskOffload
+          ? UiLanguage.template`Cargando pesos desde disco: ${opt.label}… ${seconds} s`
         : UiLanguage.template`Cargando ${opt.label}… ${seconds} s`);
     }, 500);
     // Vista previa nítida: el autoencoder diminuto de la familia (solo para ver la imagen mientras se genera)
