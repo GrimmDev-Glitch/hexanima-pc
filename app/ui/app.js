@@ -435,7 +435,14 @@ function engineFor(opt) {
 }
 
 function thermalThreshold() {
-  return { bajo: 75, medio: 78, alto: 80 }[state.hw?.profile] ?? 75;
+  const profileLimit = { bajo: 75, medio: 78, alto: 80 }[state.hw?.profile] ?? 75;
+  // Some laptop drivers omit the GPU target temperature even while reporting
+  // current temperature. Keep the profile limit in that case; when the driver
+  // reports a valid lower target, honor the stricter value.
+  const driverTarget = Number(state.hw?.gpu_target_temp_c);
+  return Number.isFinite(driverTarget) && driverTarget >= 40 && driverTarget <= 110
+    ? Math.min(profileLimit, driverTarget)
+    : profileLimit;
 }
 
 function profileLabel(profile) {
@@ -459,11 +466,9 @@ function generationEngine(opt, memory) {
   }
   if (preferred === "cpu") return { engine: preferred, limitedCpu: true };
   const threshold = thermalThreshold();
-  const target = state.hw?.gpu_target_temp_c;
   // nvidia-smi mide la primera NVIDIA. Vulkan tiene su propia enumeración.
   const knownDevice = preferred === "torch" || preferred === "cuda" && !/--backend\b/.test(store.get("extra", ""));
-  if (knownDevice && target != null && target <= threshold &&
-      memory?.gpu_temp_c != null && memory.gpu_temp_c < threshold) {
+  if (knownDevice && memory?.gpu_temp_c != null && memory.gpu_temp_c < threshold) {
     return { engine: preferred, limitedCpu: false };
   }
   if (manual) {
