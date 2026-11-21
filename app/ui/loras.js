@@ -10,6 +10,20 @@ const CAT_ORDER = ["character", "clothing", "poses", "style", "concept", "backgr
 const TAG_RE = /<lora:([^:>]+)(?::\s*(-?[\d.,]+))?\s*>/gi;
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+function loraMatchesFamily(base, family) {
+  const patterns = {
+    anima: /anima/i,
+    qwen: /qwen/i,
+    moss: /moss/i,
+    illustrious: /illustrious/i,
+    noobai: /noobai/i,
+    pony: /pony/i,
+    sdxl: /sdxl|illustrious|noobai|pony/i,
+  };
+  const pattern = patterns[family];
+  return !pattern || pattern.test(base);
+}
+
 // ---------- utilidades de interfaz compartidas ----------
 function toast(text, ms = 2600) {
   const t = $("toast");
@@ -231,7 +245,7 @@ const Loras = {
       r.querySelector(".lora-sub").textContent = l.words.length ? l.words.join(", ") : l.stem;
       const badge = r.querySelector(".badge");
       badge.textContent = l.base || "";
-      const mismatch = l.base && fam && ((fam === "anima") !== /anima/i.test(l.base));
+      const mismatch = l.base && fam && !loraMatchesFamily(l.base, fam);
       badge.classList.toggle("warn", !!mismatch);
       badge.title = mismatch ? UiLanguage.text("Este LoRA es para otro modelo: puede no funcionar con el modelo cargado") : "";
       if (!l.base) badge.remove();
@@ -339,6 +353,8 @@ $("prompt").addEventListener("input", () => Loras.renderPanel());
 // ---------- Civitai ----------
 const FAMILIES = [
   { key: "anima", label: "Anima", base: ["Anima"] },
+  { key: "qwen", label: "Qwen-Image", base: ["Qwen", "Qwen 2.1"] },
+  { key: "moss", label: "MOSS-Image", base: ["MOSS Image"] },
   { key: "illustrious", label: "Illustrious", base: ["Illustrious"] },
   { key: "noobai", label: "NoobAI", base: ["NoobAI"] },
   { key: "pony", label: "Pony", base: ["Pony"] },
@@ -357,7 +373,10 @@ const Civitai = {
   key() { return store.get("civitaiKey", "") || null; },
 
   async open() {
-    if (!this.family) this.family = currentOption()?.family === "anima" ? "anima" : "illustrious";
+    if (!this.family) {
+      const selected = currentOption()?.family;
+      this.family = FAMILIES.some((f) => f.key === selected) ? selected : "illustrious";
+    }
     $("civNsfw").checked = !!this.key() && store.get("civitaiNsfw", false);
     $("civSort").value = this.sort;
     this.renderChips();

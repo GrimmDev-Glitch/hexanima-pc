@@ -1,5 +1,18 @@
 # HexAnima PC
 
+## 0.3.2 — Qwen and MOSS LoRAs in Civitai
+
+### What's new
+
+- Added Civitai LoRA family filters for Qwen-Image (`Qwen`, `Qwen 2.1`) and MOSS-Image (`MOSS Image`).
+- Opening Civitai from the model picker now follows the selected Qwen or MOSS family.
+- The local LoRA library recognizes these bases when showing compatibility badges.
+
+### Validation and known limits
+
+- The user confirmed the local test executable shows the new Qwen and MOSS filters.
+- This release changes Civitai discovery and local LoRA labeling. It does not change model inference or guarantee every community LoRA works with every model version.
+
 ## 0.3.1 — Forge-style low-VRAM PyTorch
 
 ### What's new

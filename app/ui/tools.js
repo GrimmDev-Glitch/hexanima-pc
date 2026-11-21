@@ -99,6 +99,8 @@ $("mdCatalog").onclick = () => { closeModal("modelDlg"); Packs.open(); };
 $("mdCivitai").onclick = () => {
   closeModal("modelDlg");
   Civitai.type = "Checkpoint";
+  const family = currentOption()?.family;
+  if (FAMILIES.some((f) => f.key === family)) Civitai.family = family;
   document.querySelector('.nav[data-page="civitai"]').click();
 };
 // ＋ Importar: detecta la familia por los tensores del archivo y deja confirmarla o cambiarla.
