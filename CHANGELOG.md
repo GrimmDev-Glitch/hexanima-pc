@@ -1,5 +1,19 @@
 # HexAnima PC
 
+## 0.3.0 — safer CPU fallback and faster ×2 upscale
+
+### What's new
+
+- Automatic PyTorch fallback can use the CPU backend shipped with the CUDA/Vulkan engine package. CPU inference remains capped, RAM-limited, and uses disk-mapped weights when appropriate.
+- Fast ×2 Real-ESRGAN reduces the source before inference, cutting the tile count for a 768 × 768 image from 64 to about 16, with a small detail tradeoff.
+- Added an instant, no-AI resize option for cases where speed matters more than reconstructing detail.
+
+### Validation and known limits
+
+- The optimized Windows executable was built in Rust release mode. End-to-end generation and AI upscaling were not run for this release.
+- CPU fallback and AI upscaling can remain slow on low-end hardware. The no-AI resize enlarges the image but does not invent detail.
+- The Windows memory reserve, RAM/commit preflight, managed-process limits, and thermal checks remain active.
+
 ## 0.2.9 — PyTorch memory preflight
 
 ### What's new
@@ -83,6 +97,20 @@ The exact Windows ZIP passed its integrity check, and both CUDA and Vulkan engin
 The PyTorch runtime is downloaded separately and is not included in this GitHub release. **Search for updates** replaces only `HexAnima.exe`; it does not update an existing PyTorch runtime. PyTorch worker-queue changes in the repository source are not active for existing installations until that separate runtime package is published.
 
 ## Español
+
+## 0.3.0 — fallback seguro por CPU y ampliado ×2 más rápido
+
+### Novedades
+
+- El fallback automático de PyTorch puede usar el backend CPU que viene con el paquete CUDA/Vulkan. La inferencia CPU mantiene el límite de uso, los límites de RAM y el mapeo de pesos desde disco cuando corresponde.
+- Real-ESRGAN rápido ×2 reduce la imagen antes de inferir. En una imagen de 768 × 768 baja de 64 a unos 16 mosaicos, con una pequeña pérdida de detalle.
+- Se añadió una opción de redimensionado instantáneo sin IA para priorizar velocidad sobre reconstrucción de detalles.
+
+### Validación y límites conocidos
+
+- El ejecutable optimizado de Windows se compiló en modo Rust release. No se ejecutaron generaciones ni ampliados de IA completos para esta release.
+- El fallback CPU y el ampliado con IA aún pueden tardar mucho en equipos modestos. El redimensionado sin IA aumenta el tamaño, pero no inventa detalles.
+- Siguen activos la reserva de memoria para Windows, las comprobaciones de RAM y memoria comprometida, los límites del proceso administrado y las comprobaciones térmicas.
 
 ## 0.2.8 — lectura térmica en laptops
 

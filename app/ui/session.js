@@ -249,6 +249,7 @@ Session.render();
 
 // ---------- Ampliar: Rápido · Real-ESRGAN / Detallado · UltraSharp, ×2 / ×4 (como el teléfono) ----------
 const UP_INFO = {
+  resize: { label: UiLanguage.text("Instantáneo · Sin IA"), desc: UiLanguage.text("Redimensiona en segundos; no inventa detalles."), mb: 0 },
   fast: { label: UiLanguage.text("Rápido · Real-ESRGAN"), desc: UiLanguage.text("Para anime e ilustración; el más ligero."), mb: 18 },
   detail: { label: UiLanguage.text("Detallado · UltraSharp"), desc: UiLanguage.text("Conserva mejor texturas, ojos y líneas finas; más lento."), mb: 67 },
 };
@@ -275,8 +276,8 @@ const Upscale = {
 
   render() {
     const box = $("upOpts"); box.innerHTML = "";
-    for (const kind of ["fast", "detail"]) {
-      const info = UP_INFO[kind], ok = this.installed(kind);
+    for (const kind of ["resize", "fast", "detail"]) {
+      const info = UP_INFO[kind], ok = kind === "resize" || this.installed(kind);
       const row = document.createElement("label");
       row.className = "up-opt" + (this.kind === kind ? " on" : "");
       row.innerHTML = '<input type="radio" name="upk"><div><div class="t"></div><div class="d"></div></div>';
@@ -284,7 +285,7 @@ const Upscale = {
       row.querySelector(".d").textContent = ok ? info.desc : UiLanguage.template`${info.desc} Hay que descargarlo una vez (${info.mb} MB).`;
       const r = row.querySelector("input"); r.checked = this.kind === kind;
       r.onchange = () => { this.kind = kind; store.set("upKind", kind); this.render(); };
-      if (!ok) {
+      if (!ok && kind !== "resize") {
         const b = document.createElement("button");
         b.className = "ghost sm"; b.textContent = UiLanguage.template`Descargar ${info.mb} MB`;
         b.onclick = (e) => { e.preventDefault(); this.download(kind, b); };
@@ -292,7 +293,7 @@ const Upscale = {
       }
       box.appendChild(row);
     }
-    const ok = this.installed(this.kind);
+    const ok = this.kind === "resize" || this.installed(this.kind);
     const lim = 8192;
     for (const [id, f] of [["up2", 2], ["up4", 4]]) {
       const W = this.w * f, H = this.h * f, big = W > lim || H > lim || W * H > 24000000;
@@ -326,11 +327,15 @@ const Upscale = {
     if (this.busy || state.busy) return;
     this.busy = true; this.stop = false; this.render();
     $("upStop").classList.remove("hidden");
-    $("upMsg").textContent = UiLanguage.text("Ampliando… (por trozos; puede tardar en equipos modestos)");
+    $("upMsg").textContent = this.kind === "resize"
+      ? UiLanguage.text("Redimensionando sin IA…")
+      : UiLanguage.text("Ampliando… (por trozos; puede tardar en equipos modestos)");
     state.busy = true;
     try {
-      const r = await submitUpscale({ image: this.src, upscaler: this.stem(this.kind), output_format: "png" },
-        () => this.stop, f, (done, total) => { $("upMsg").textContent = UiLanguage.template`Ampliando en CPU · mosaico ${done}/${total}`; });
+      const r = this.kind === "resize"
+        ? await resizeUpscale({ image: this.src }, f, () => this.stop)
+        : await submitUpscale({ image: this.src, upscaler: this.stem(this.kind), output_format: "png" },
+          () => this.stop, f, (done, total) => { $("upMsg").textContent = UiLanguage.template`Ampliando en CPU · mosaico ${done}/${total}`; }, this.kind === "fast" && f === 2);
       if (this.stop) return;
       const b64 = r.images?.[0]?.b64_json;
       if (!b64) throw new Error(UiLanguage.text("El motor no devolvió una imagen"));

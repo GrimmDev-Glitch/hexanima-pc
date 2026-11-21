@@ -164,7 +164,30 @@ function upscaleTiles(length, size = 128, overlap = 24) {
   }));
 }
 
-async function submitUpscale(body, stopping = () => false, factor = 4, progress = () => {}) {
+async function resizeUpscale(body, factor = 2, stopping = () => false) {
+  const image = new Image(); image.src = body.image; await image.decode();
+  const width = image.naturalWidth * factor, height = image.naturalHeight * factor;
+  if (width * height > 24000000 || width > 8192 || height > 8192) {
+    throw new Error(UiLanguage.text("La imagen supera el límite de Ampliar. Usa ×2 o recorta la foto."));
+  }
+  const required = 2.5 + 0.75 + (image.naturalWidth * image.naturalHeight * 4 + width * height * 16) / 1073741824;
+  const memory = await refreshMemory();
+  if (stopping()) throw new Error("Detenido.");
+  if (memory?.ram_free_gb == null || memory.ram_free_gb < required || memory.commit_free_gb == null || memory.commit_free_gb < required) {
+    throw new Error(UiLanguage.template`Ampliar necesita unos ${required.toFixed(1)} GB de RAM y margen comprometido con la reserva de Windows.`);
+  }
+  const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error(UiLanguage.text("No se pudo crear la imagen ampliada."));
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(image, 0, 0, width, height);
+  if (stopping()) { canvas.width = 0; throw new Error("Detenido."); }
+  const b64_json = canvas.toDataURL("image/png").split(",")[1];
+  canvas.width = 0;
+  return { width, height, images: [{ b64_json }] };
+}
+
+async function submitUpscale(body, stopping = () => false, factor = 4, progress = () => {}, fastTwoX = false) {
   const image = new Image();
   image.src = body.image;
   await image.decode();
@@ -193,20 +216,30 @@ async function submitUpscale(body, stopping = () => false, factor = 4, progress 
     if (!(await startEngine(engine, true))) throw new Error(UiLanguage.text("No se pudo iniciar el motor de ampliación en CPU."));
   }
   await ensureMemory();
+  // Real-ESRGAN only provides a 4x model. For the fast ×2 option, halve the
+  // source first so 4x inference lands at the requested output dimensions.
+  // This cuts the neural input pixels to one quarter and sharply reduces tiles.
+  const work = document.createElement("canvas");
+  work.width = fastTwoX && factor === 2 ? Math.max(1, Math.round(w / 2)) : w;
+  work.height = fastTwoX && factor === 2 ? Math.max(1, Math.round(h / 2)) : h;
+  const workCtx = work.getContext("2d");
+  workCtx.imageSmoothingQuality = "high";
+  workCtx.drawImage(image, 0, 0, work.width, work.height);
+  const scaleX = width / work.width, scaleY = height / work.height;
   const out = document.createElement("canvas"), tile = document.createElement("canvas");
   out.width = width; out.height = height;
   const output = out.getContext("2d");
   output.imageSmoothingQuality = "high";
-  const xs = upscaleTiles(w), ys = upscaleTiles(h);
+  const xs = upscaleTiles(work.width), ys = upscaleTiles(work.height);
   const controller = new AbortController();
   const check = setInterval(() => { if (stopping()) controller.abort(); }, 250);
   try {
     let done = 0;
     for (const y of ys) for (const x of xs) {
       if (stopping()) throw new Error("Detenido.");
-      const tw = Math.min(128, w - x.start), th = Math.min(128, h - y.start);
+      const tw = Math.min(128, work.width - x.start), th = Math.min(128, work.height - y.start);
       tile.width = tw; tile.height = th;
-      tile.getContext("2d").drawImage(image, x.start, y.start, tw, th, 0, 0, tw, th);
+      tile.getContext("2d").drawImage(work, x.start, y.start, tw, th, 0, 0, tw, th);
       await ensureMemory();
       if (stopping()) throw new Error("Detenido.");
       const result = await engineRequest("/sdcpp/v1/upscale", {
@@ -223,14 +256,14 @@ async function submitUpscale(body, stopping = () => false, factor = 4, progress 
       }
       const keepW = x.to - x.from, keepH = y.to - y.from;
       output.drawImage(enlarged, (x.from - x.start) * 4, (y.from - y.start) * 4, keepW * 4, keepH * 4,
-        x.from * factor, y.from * factor, keepW * factor, keepH * factor);
+        x.from * scaleX, y.from * scaleY, keepW * scaleX, keepH * scaleY);
       progress(++done, xs.length * ys.length);
     }
     if (stopping()) throw new Error("Detenido.");
     return { width, height, images: [{ b64_json: out.toDataURL("image/png").split(",")[1] }] };
   } finally {
     clearInterval(check);
-    tile.width = 0; out.width = 0;
+    tile.width = 0; work.width = 0; out.width = 0;
   }
 }
 

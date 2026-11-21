@@ -82,9 +82,25 @@ pub fn engine_installed(root: &Path, engine: &str) -> bool {
     let d = root.join("engine").join(engine);
     if engine == "torch" {
         d.join("python").join("python.exe").is_file() && d.join("hexanima").join("server.py").is_file()
+    } else if engine == "cpu" {
+        // Release packages include CPU backend DLLs beside CUDA/Vulkan builds,
+        // but omit the separate CPU-only package to keep the download smaller.
+        // Those binaries can still run with `--backend cpu`.
+        [d.join("sd-server.exe"), root.join("engine/cuda/sd-server.exe"), root.join("engine/vulkan/sd-server.exe")]
+            .iter().any(|path| path.is_file())
     } else {
         d.join("sd-server.exe").is_file()
     }
+}
+
+fn engine_executable(root: &Path, engine: &str) -> PathBuf {
+    let direct = root.join("engine").join(engine).join("sd-server.exe");
+    if engine != "cpu" || direct.is_file() { return direct; }
+    for fallback in ["cuda", "vulkan"] {
+        let candidate = root.join("engine").join(fallback).join("sd-server.exe");
+        if candidate.is_file() { return candidate; }
+    }
+    direct
 }
 
 /// Resolve a requested backend without silently substituting a detected one.
@@ -109,7 +125,7 @@ impl Server {
         let exe = if torch {
             root.join("engine").join("torch").join("python").join("python.exe")
         } else {
-            root.join("engine").join(engine).join("sd-server.exe")
+            engine_executable(root, engine)
         };
         if !engine_installed(root, engine) {
             return Err(format!("Falta el motor: {}", exe.display()));
