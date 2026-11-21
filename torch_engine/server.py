@@ -85,6 +85,12 @@ class H(BaseHTTPRequestHandler):
         try:
             if p == "/sdcpp/v1/models/status":
                 with LOCK: return self.send(200, dict(STATUS))
+            if p == "/hexanima/v1/runtime":
+                c = need_core()
+                device = "cuda" if c.torch.cuda.is_available() else "cpu"
+                gpu = c.torch.cuda.get_device_name(0) if device == "cuda" else None
+                log(f"[BACKEND] active=PyTorch device={device} gpu={gpu or 'none'}")
+                return self.send(200, {"engine": "torch", "device": device, "gpu": gpu})
             if p == "/sdcpp/v1/model-files":
                 return self.send(200, model_files())
             if p.startswith("/sdcpp/v1/jobs/"):
