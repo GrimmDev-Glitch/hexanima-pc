@@ -1,5 +1,19 @@
 # HexAnima PC
 
+## 0.2.9 — PyTorch memory preflight
+
+### What's new
+
+- Automatic mode estimates PyTorch's checkpoint and runtime memory before loading. If the estimate would cross the Windows reserve, it switches to capped CPU with disk-mapped weights.
+- A manually selected PyTorch engine now reports the estimated peak and available safe memory before starting the load.
+- The load status identifies capped CPU and disk-mapped weights so users know why generation may take longer.
+
+### Validation and known limits
+
+- The Windows reserve and managed-engine memory watchdog remain active.
+- CPU generation remains slow and still requires enough free memory, commit headroom, and disk space for the selected model and resolution.
+- This fallback path has not yet been confirmed by a complete generation on the GTX 1050 2 GB system.
+
 ## 0.2.8 — laptop thermal telemetry handling
 
 ### What's new
