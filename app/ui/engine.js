@@ -36,7 +36,12 @@ const EngineDl = {
         ? UiLanguage.template`Descarga a medias: quedan ${this.gb(left)} GB de ${this.gb(r.bytes)} GB · ocupa ${this.gb(r.unpacked_bytes)} GB al instalarlo`
         : UiLanguage.template`Descarga de ${this.gb(r.bytes)} GB · ocupa ${this.gb(r.unpacked_bytes)} GB al instalarlo`;
       if (i.free_bytes != null) $("engSize").textContent += ` · libres: ${this.gb(i.free_bytes)} GB`;
-      $("engGo").textContent = i.partial_bytes ? UiLanguage.text("Continuar la descarga") : UiLanguage.template`Descargar (${this.gb(left)} GB)`;
+      const installed = (state.engines || []).includes("torch");
+      $("engGo").textContent = i.partial_bytes
+        ? UiLanguage.text(installed ? "Continuar la actualización" : "Continuar la descarga")
+        : installed
+          ? UiLanguage.template`Actualizar motor (${this.gb(left)} GB)`
+          : UiLanguage.template`Descargar (${this.gb(left)} GB)`;
       $("engGo").disabled = false;
       $("engErr").classList.add("hidden");
     } else {
@@ -123,13 +128,16 @@ const EngineDl = {
       b.textContent = i?.partial_bytes ? UiLanguage.text("Continuar la descarga") : UiLanguage.text("Descargar");
       b.classList.remove("hidden");
     } else if (inst) {
-      const up = i?.remote && i.installed != null && i.remote.version > i.installed;
-      const installed = Number(i?.installed) > 0 ? `v${i.installed}` : UiLanguage.text("versión desconocida");
+      const packageVersion = Number(i?.installed) > 0 ? UiLanguage.template`paquete v${i.installed}` : null;
+      const torchVersion = i?.torch_version ? UiLanguage.template`PyTorch ${i.torch_version}` : null;
+      const installed = [packageVersion, torchVersion].filter(Boolean).join(" · ") || UiLanguage.text("versión desconocida");
       const cuda = i?.installed_cuda ? `CUDA ${(Number(i.installed_cuda) / 10).toFixed(1)}` : UiLanguage.text("CUDA sin verificar");
+      const up = i?.remote && (!Number(i.installed) || i.remote.version > Number(i.installed));
       t.textContent = up
         ? UiLanguage.template`Instalado · ${installed} · ${cuda} · hay una versión nueva (${i.remote.version})`
         : UiLanguage.template`✓ Instalado · ${installed} · ${cuda}`;
-      b.textContent = UiLanguage.text("Actualizar"); b.classList.toggle("hidden", !up);
+      b.textContent = up ? UiLanguage.text("Actualizar") : UiLanguage.text("Buscar actualizaciones");
+      b.classList.remove("hidden");
     } else {
       t.textContent = i?.remote ? UiLanguage.template`No instalado · ${this.gb(i.remote.bytes)} GB · hasta 3 veces más rápido en SDXL` : UiLanguage.text("No instalado");
       b.textContent = i?.partial_bytes ? UiLanguage.text("Continuar la descarga") : UiLanguage.text("Descargar");
@@ -141,7 +149,16 @@ const EngineDl = {
 $("engGo").onclick = () => EngineDl.start();
 $("engLater").onclick = () => { if (!EngineDl.busy) store.set("engineWelcomeLater", true); EngineDl.close(); };
 $("engCancel").onclick = () => invoke("engine_dl_cancel");
-$("engSetBtn").onclick = async () => { if (!EngineDl.busy) await EngineDl.refresh(); EngineDl.open(); };
+$("engSetBtn").onclick = async () => {
+  if (EngineDl.busy) return;
+  const info = await EngineDl.refresh();
+  const installed = Number(info?.installed || 0);
+  if ((state.engines || []).includes("torch") && info?.remote && installed > 0 && info.remote.version <= installed) {
+    toast(UiLanguage.text("El motor PyTorch ya está actualizado"), 4000);
+    return;
+  }
+  EngineDl.open();
+};
 EngineDl.maybeWelcome();
 
 // ---------- Bienvenida, paso 2: modelo para empezar (Anima; Qwen y MOSS próximamente) ----------
