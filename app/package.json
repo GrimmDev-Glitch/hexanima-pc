@@ -1,7 +1,7 @@
 {
   "name": "hexanima-pc",
   "private": true,
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "HexAnima para Windows (Tauri + stable-diffusion.cpp)",
   "scripts": {
     "tauri": "tauri",
