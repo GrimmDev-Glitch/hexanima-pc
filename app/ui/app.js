@@ -18,6 +18,8 @@ const state = {
   stop: false,
   safetyStop: false,
   busy: false,
+  cpuRecovery: false,
+  diskOffload: false,
   batchTarget: 0,
   outputFiles: [],
   activeHistory: null,
@@ -110,16 +112,20 @@ async function engineRequest(path, opts = {}, timeout = 15000) {
 async function requireResources(body = {}, modelBytes = 0) {
   const memory = await refreshMemory();
   if (!(memory?.ram_total_gb > 0)) throw new Error(UiLanguage.text("No se pudo verificar la RAM disponible."));
+  const reserve = Math.max(2.5, memory.ram_total_gb * 0.15);
+  if (memory.ram_free_gb < reserve) {
+    throw new Error(UiLanguage.template`La RAM disponible (${memory.ram_free_gb.toFixed(1)} GB) ya está bajo la reserva de seguridad de Windows (${reserve.toFixed(1)} GB). Cierra otras aplicaciones y vuelve a generar.`);
+  }
+  if (memory.commit_free_gb == null) throw new Error(UiLanguage.text("Windows no pudo medir el margen de memoria comprometida; por seguridad no se iniciará esta carga."));
+  if (memory.commit_free_gb < reserve) {
+    throw new Error(UiLanguage.template`El margen de memoria comprometida (${memory.commit_free_gb.toFixed(1)} GB) ya está bajo la reserva de Windows (${reserve.toFixed(1)} GB).`);
+  }
   const pixels = Math.max(0, Number(body.width || 0) * Number(body.height || 0));
   const hiresPixels = Number(body.hires?.target_width || 0) * Number(body.hires?.target_height || 0);
   const workingGb = (pixels * (1 + Number(!!body.adetailer || !!body.extra_ad_args || !!body.control_image)) + hiresPixels) / 1048576 * 0.75;
-  const required = 2.5 + workingGb + modelBytes / 1073741824;
-  if (memory.ram_free_gb < required) {
-    throw new Error(UiLanguage.template`RAM insuficiente: ${memory.ram_free_gb.toFixed(1)} GB libres. Se estiman ${required.toFixed(1)} GB necesarios con la reserva del sistema. Reduce el tamaño, desactiva Hires o libera RAM.`);
-  }
-  if (memory.commit_free_gb == null) throw new Error(UiLanguage.text("Windows no pudo medir el margen de memoria comprometida; por seguridad no se iniciará esta carga."));
-  if (memory.commit_free_gb < required) {
-    throw new Error(UiLanguage.template`Margen de memoria comprometida insuficiente: ${memory.commit_free_gb.toFixed(1)} GB disponibles y ${required.toFixed(1)} GB estimados incluyendo la reserva de Windows.`);
+  const available = Math.max(0, Math.min(memory.ram_free_gb - reserve, memory.commit_free_gb - reserve));
+  if (workingGb > available) {
+    throw new Error(UiLanguage.template`Esta resolución necesita unos ${workingGb.toFixed(1)} GB de memoria de trabajo, pero solo quedan ${available.toFixed(1)} GB sobre la reserva de seguridad. Reduce la resolución o cierra otras aplicaciones.`);
   }
   if (body.width && state.device !== "cpu") {
     if (memory.gpu_temp_c == null || memory.gpu_temp_c >= thermalThreshold() || memory.vram_free_gb == null) {
@@ -129,6 +135,11 @@ async function requireResources(body = {}, modelBytes = 0) {
       throw new Error(UiLanguage.text("VRAM libre insuficiente para esta resolución o sus etapas adicionales. Reduce el tamaño o desactiva Hires."));
     }
   }
+  // Checkpoints safetensors se cargan en q8_0 por defecto (~53 % del tamaño f16).
+  // Si no caben sobre la reserva de Windows, sd.cpp puede mapear los pesos desde disco
+  // en vez de bloquear el modelo por una estimación de RAM residente.
+  const residentWeightsGb = Math.max(0, Number(modelBytes) / 1073741824) * 0.53;
+  return { diskOffload: residentWeightsGb > available };
 }
 
 async function submitImage(body) {
@@ -389,20 +400,24 @@ async function refreshMemory() {
  *  PyTorch 2.7.1 + CUDA 12.8 (motor-cu128.json). Sin él, esas gráficas usan CUDA de sd.cpp (runtime 12.8). */
 function needsCu128() {
   const g = state.hw?.gpu;
-  if (g?.vendor !== "nvidia") return false;
+  if (!isNvidiaGpu(g)) return false;
   if (g.compute_cap != null) return g.compute_cap >= 10;
   return /RTX\s*(PRO\s*)?50\d\d|blackwell/i.test(g.name || "");
 }
 
+function isNvidiaGpu(g = state.hw?.gpu) {
+  return String(g?.vendor || "").toLowerCase() === "nvidia" || /nvidia|geforce|quadro|\bgtx\b|\brtx\b/i.test(g?.name || "");
+}
+
 /** ¿El motor PyTorch instalado sirve para esta gráfica? */
 function torchSupportsGpu() {
-  if (state.hw?.gpu?.vendor !== "nvidia") return false;
+  if (!isNvidiaGpu()) return false;
   return !needsCu128() || Number(state.torchCuda || 0) >= 128;
 }
 
 function engineFor(opt) {
   const engines = state.engines || [];
-  const nvidia = state.hw?.gpu?.vendor === "nvidia";
+  const nvidia = isNvidiaGpu();
   // El motor PyTorch trae su propio ADetailer y detector (YOLOv8): SDXL siempre puede usarlo
   const torchOk = opt?.family === "sdxl" && engines.includes("torch") && torchSupportsGpu();
   const pref = store.get("enginePref", "auto");
@@ -413,6 +428,9 @@ function engineFor(opt) {
   // ~24 s/paso de sd.cpp CUDA en la GTX 1650. Anima y el resto: CUDA (estable) o el de la gráfica.
   if (nvidia && torchOk) return "torch";
   if (nvidia && engines.includes("cuda")) return "cuda";
+  // On NVIDIA, automatic SDXL must not silently fall back to Vulkan. Use the
+  // CPU backend when the fast engines are unavailable; its worker is capped.
+  if (nvidia && opt?.family === "sdxl" && engines.includes("cpu")) return "cpu";
   return state.hw?.engine;
 }
 
@@ -432,8 +450,12 @@ function generationEngine(opt, memory) {
   if (!preferred || !engines.includes(preferred)) {
     throw new Error(UiLanguage.template`El motor elegido (${preferred || "—"}) no está instalado. Instálalo o cambia la preferencia a Automático.`);
   }
-  if (preferred === "torch" && (opt?.family !== "sdxl" || !torchSupportsGpu())) {
-    throw new Error(UiLanguage.text("PyTorch seleccionado: este motor requiere una GPU NVIDIA compatible y admite modelos SDXL, Illustrious y Pony. Elige otro motor o Automático para este modelo."));
+  if (preferred === "torch" && opt?.family !== "sdxl") {
+    throw new Error(UiLanguage.template`PyTorch admite checkpoints SDXL, Illustrious y Pony. Este modelo se clasificó como ${opt?.family || "desconocido"}; el motor no cambiará a Vulkan automáticamente.`);
+  }
+  if (preferred === "torch" && !torchSupportsGpu()) {
+    const detected = state.hw?.gpu?.name || state.hw?.gpu?.vendor || UiLanguage.text("GPU no detectada");
+    throw new Error(UiLanguage.template`PyTorch necesita una GPU NVIDIA. HexAnima detectó ${detected}; revisa el diagnóstico de hardware. El motor no cambiará a Vulkan automáticamente.`);
   }
   if (preferred === "cpu") return { engine: preferred, limitedCpu: true };
   const threshold = thermalThreshold();
@@ -444,20 +466,22 @@ function generationEngine(opt, memory) {
       memory?.gpu_temp_c != null && memory.gpu_temp_c < threshold) {
     return { engine: preferred, limitedCpu: false };
   }
-  if (manual && preferred === "torch") {
-    throw new Error(UiLanguage.text("PyTorch está seleccionado, pero no se pudo confirmar un margen térmico seguro para la GPU. Espera a que se enfríe o cambia el motor a Automático."));
+  if (manual) {
+    throw new Error(UiLanguage.text("El motor seleccionado necesita telemetría térmica fiable, pero no se pudo confirmar. Espera a que la GPU se enfríe o cambia a Automático para usar CPU limitada."));
   }
-  const native = (state.engines || []).find((engine) => ["cpu", "cuda", "vulkan"].includes(engine));
-  return { engine: preferred === "torch" ? native : preferred, limitedCpu: true };
+  // Missing or unsafe GPU telemetry must never silently redirect a selected
+  // SDXL job to Vulkan. CPU fallback is slower and has a hard cap in Rust.
+  const native = (state.engines || []).includes("cpu") ? "cpu" : null;
+  return { engine: native, limitedCpu: true };
 }
 
-async function startEngine(engine, cpuRecovery = false) {
+async function startEngine(engine, cpuRecovery = false, diskOffload = false) {
   setStatus(UiLanguage.text("Iniciando motor…"));
   // ADetailer: el detector elegido se carga al arrancar el motor (uno a la vez).
   const ad = typeof Ad !== "undefined" ? Ad.wanted() : null;
-  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad, cpu_recovery: cpuRecovery };
+  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad, cpu_recovery: cpuRecovery, disk_offload: diskOffload };
   const r = await invoke("start_server", { opts, engine: engine || null });
-  state.cpuRecovery = cpuRecovery;
+  state.cpuRecovery = cpuRecovery; state.diskOffload = diskOffload;
   state.adLoaded = ad;
   state.api = `http://127.0.0.1:${r.port}`;
   state.engine = r.engine; state.device = r.device;
@@ -617,21 +641,42 @@ async function loadModel(plan, reserved = false) {
   const t0 = Date.now();
   let tick;
   try {
+    const models = typeof Vae !== "undefined" ? Vae.modelsFor(opt) : opt.models;
     const { engine, limitedCpu } = plan ?? generationEngine(opt, await refreshMemory());
     if (!engine) throw new Error(UiLanguage.text("hace falta un motor compatible con CPU para aplicar el perfil térmico"));
-    if (engine !== state.engine || limitedCpu !== !!state.cpuRecovery) {
+    const modelBytes = await invoke("model_bytes", { files: Object.values(models) });
+    const resourcePlan = await requireResources({}, modelBytes);
+    let selectedEngine = engine;
+    let selectedLimitedCpu = limitedCpu;
+    // PyTorch holds checkpoint tensors in private memory. If the checkpoint
+    // exceeds the safe RAM budget, automatic mode uses the disk-mapped native
+    // backend; an explicit PyTorch choice stays authoritative and explains why.
+    if (engine === "torch" && resourcePlan.diskOffload) {
+      if (store.get("enginePref", "auto") !== "auto") {
+        throw new Error(UiLanguage.text("Este checkpoint supera la RAM disponible para PyTorch. En Automático se usará el motor con pesos desde disco; también puedes liberar RAM o elegir otro motor."));
+      }
+      const engines = state.engines || [];
+      selectedEngine = engines.includes("cuda") ? "cuda" : engines.includes("cpu") ? "cpu" : null;
+      if (!selectedEngine) throw new Error(UiLanguage.text("Falta CUDA o CPU para cargar este checkpoint con pesos desde disco; Vulkan no se seleccionará automáticamente en NVIDIA."));
+      selectedLimitedCpu = selectedEngine === "cpu";
+    }
+    const diskOffload = selectedEngine !== "torch" && resourcePlan.diskOffload;
+    if (selectedEngine !== state.engine || selectedLimitedCpu !== !!state.cpuRecovery || diskOffload !== !!state.diskOffload) {
       state.loaded = null;
-      if (!(await startEngine(engine, limitedCpu))) return;
+      if (!(await startEngine(selectedEngine, selectedLimitedCpu, diskOffload))) return;
       await refreshEngineMenus();
     }
-    tick = setInterval(() => setStatus(UiLanguage.template`Cargando ${opt.label}… ${Math.round((Date.now() - t0) / 1000)} s`), 500);
-    const models = typeof Vae !== "undefined" ? Vae.modelsFor(opt) : opt.models;
+    tick = setInterval(() => {
+      const seconds = Math.round((Date.now() - t0) / 1000);
+      setStatus(diskOffload
+        ? UiLanguage.template`Cargando pesos desde disco: ${opt.label}… ${seconds} s`
+        : UiLanguage.template`Cargando ${opt.label}… ${seconds} s`);
+    }, 500);
     // Vista previa nítida: el autoencoder diminuto de la familia (solo para ver la imagen mientras se genera)
     const tae = await taeFor(opt);
     if (tae) models.tae = tae;
     state.previewMode = tae ? "tae" : "proj";
     const modelRequest = { recipe: opt.recipe, models };
-    await requireResources({}, await invoke("model_bytes", { files: Object.values(models) }));
     await engineRequest("/sdcpp/v1/models/load", { method: "POST", body: JSON.stringify(modelRequest) }, 180000);
     state.modelRequest = modelRequest;
     state.loaded = opt.id;
