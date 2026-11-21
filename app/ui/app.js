@@ -14,7 +14,9 @@ const state = {
   loras: [],          // disponibles: [{name, path}]
   active: [],         // activas: [{name, path, mult}]
   job: null,
+  cancelPromise: null,
   stop: false,
+  safetyStop: false,
   busy: false,
   batchTarget: 0,
   outputFiles: [],
@@ -115,6 +117,10 @@ async function requireResources(body = {}, modelBytes = 0) {
   if (memory.ram_free_gb < required) {
     throw new Error(UiLanguage.template`RAM insuficiente: ${memory.ram_free_gb.toFixed(1)} GB libres. Se estiman ${required.toFixed(1)} GB necesarios con la reserva del sistema. Reduce el tamaño, desactiva Hires o libera RAM.`);
   }
+  if (memory.commit_free_gb == null) throw new Error(UiLanguage.text("Windows no pudo medir el margen de memoria comprometida; por seguridad no se iniciará esta carga."));
+  if (memory.commit_free_gb < required) {
+    throw new Error(UiLanguage.template`Margen de memoria comprometida insuficiente: ${memory.commit_free_gb.toFixed(1)} GB disponibles y ${required.toFixed(1)} GB estimados incluyendo la reserva de Windows.`);
+  }
   if (body.width && state.device !== "cpu") {
     if (memory.gpu_temp_c == null || memory.gpu_temp_c >= thermalThreshold() || memory.vram_free_gb == null) {
       throw new Error(UiLanguage.text("No hay margen térmico o una lectura fiable de la GPU. Vuelve a Generar para que HexAnima evalúe el modo CPU."));
@@ -156,6 +162,9 @@ async function submitUpscale(body, stopping = () => false, factor = 4, progress 
     const memory = await refreshMemory();
     if (memory?.ram_free_gb == null || memory.ram_free_gb < required) {
       throw new Error(UiLanguage.template`Ampliar necesita unos ${required.toFixed(1)} GB de RAM libre con la reserva de Windows.`);
+    }
+    if (memory.commit_free_gb == null || memory.commit_free_gb < required) {
+      throw new Error(UiLanguage.template`Ampliar necesita unos ${required.toFixed(1)} GB de margen de memoria comprometida de Windows.`);
     }
   };
   if (stopping()) throw new Error("Detenido.");
@@ -215,17 +224,22 @@ async function waitForImage(id, stopping, onProgress) {
   for (;;) {
     if (stopping() && cancelAt == null) {
       cancelAt = Date.now();
-      await engineRequest(path + "/cancel", { method: "POST" }).catch((error) => {
-        if (!error.status) throw error;
-      });
+      state.cancelPromise ||= fetch(state.api + path + "/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(2500) }).catch(() => null);
     }
     await sleep(400);
-    const job = await engineRequest(path);
+    let job;
+    try { job = await engineRequest(path, {}, stopping() ? 3000 : 15000); }
+    catch (error) {
+      if (!stopping()) throw error;
+      await invoke("stop_server").catch(() => {});
+      state.loaded = null; state.engine = null; state.device = null; state.job = null;
+      throw new Error(UiLanguage.text("El motor no respondió al detenerlo; se cerró para liberar sus recursos y se reiniciará en el siguiente intento."));
+    }
     if (["completed", "cancelled", "failed"].includes(job.status)) {
       state.job = null;
       return job;
     }
-    if (cancelAt != null && Date.now() - cancelAt > 60000) {
+    if (cancelAt != null && Date.now() - cancelAt > 10000) {
       await invoke("stop_server");
       state.loaded = null;
       state.engine = null;
@@ -345,6 +359,20 @@ async function refreshMemory() {
     $("tempTxt").title = UiLanguage.template`Umbral de HexAnima antes de generar: ${thermalThreshold()} °C`;
     // portátil desenchufado: la gráfica va limitada (GTX 1650 a 20 W, ~3 veces más lento)
     $("battTxt").classList.toggle("hidden", !m.on_battery);
+    const reserve = Math.max(2.5, (m.ram_total_gb || 0) * 0.15);
+    const critical = (m.ram_total_gb > 0 && m.ram_free_gb < reserve) || (m.commit_free_gb != null && m.commit_free_gb < reserve);
+    if (state.busy && critical && !state.safetyStop) {
+      state.safetyStop = true;
+      state.stop = true;
+      setStatus(UiLanguage.text("Presión crítica de memoria: deteniendo el trabajo para proteger Windows…"), "warn");
+      if (state.job && state.api) {
+        const path = "/sdcpp/v1/jobs/" + state.job + "/cancel";
+        state.cancelPromise ||= fetch(state.api + path, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(2500) }).catch(() => null);
+      } else {
+        state.loaded = null; state.engine = null; state.device = null;
+        invoke("stop_server").catch(() => {});
+      }
+    }
     return m;
   } catch { return null; }
 }
@@ -378,8 +406,9 @@ function engineFor(opt) {
   // El motor PyTorch trae su propio ADetailer y detector (YOLOv8): SDXL siempre puede usarlo
   const torchOk = opt?.family === "sdxl" && engines.includes("torch") && torchSupportsGpu();
   const pref = store.get("enginePref", "auto");
-  if (pref === "torch") return torchOk ? "torch" : (nvidia && engines.includes("cuda") ? "cuda" : state.hw?.engine);
-  if (pref !== "auto" && engines.includes(pref)) return pref;
+  // A manual preference is authoritative. Compatibility checks must explain failure instead
+  // of quietly turning a PyTorch choice into Vulkan, CUDA, or CPU.
+  if (pref !== "auto") return pref;
   // Automático: PyTorch (backend de Forge) para SDXL/Illustrious/Pony en NVIDIA: ~8,5 s/paso frente a
   // ~24 s/paso de sd.cpp CUDA en la GTX 1650. Anima y el resto: CUDA (estable) o el de la gráfica.
   if (nvidia && torchOk) return "torch";
@@ -398,6 +427,14 @@ function profileLabel(profile) {
 
 function generationEngine(opt, memory) {
   const preferred = engineFor(opt);
+  const manual = store.get("enginePref", "auto") !== "auto";
+  const engines = state.engines || [];
+  if (!preferred || !engines.includes(preferred)) {
+    throw new Error(UiLanguage.template`El motor elegido (${preferred || "—"}) no está instalado. Instálalo o cambia la preferencia a Automático.`);
+  }
+  if (preferred === "torch" && (opt?.family !== "sdxl" || !torchSupportsGpu())) {
+    throw new Error(UiLanguage.text("PyTorch seleccionado: este motor requiere una GPU NVIDIA compatible y admite modelos SDXL, Illustrious y Pony. Elige otro motor o Automático para este modelo."));
+  }
   if (preferred === "cpu") return { engine: preferred, limitedCpu: true };
   const threshold = thermalThreshold();
   const target = state.hw?.gpu_target_temp_c;
@@ -406,6 +443,9 @@ function generationEngine(opt, memory) {
   if (knownDevice && target != null && target <= threshold &&
       memory?.gpu_temp_c != null && memory.gpu_temp_c < threshold) {
     return { engine: preferred, limitedCpu: false };
+  }
+  if (manual && preferred === "torch") {
+    throw new Error(UiLanguage.text("PyTorch está seleccionado, pero no se pudo confirmar un margen térmico seguro para la GPU. Espera a que se enfríe o cambia el motor a Automático."));
   }
   const native = (state.engines || []).find((engine) => ["cpu", "cuda", "vulkan"].includes(engine));
   return { engine: preferred === "torch" ? native : preferred, limitedCpu: true };
@@ -424,7 +464,17 @@ async function startEngine(engine, cpuRecovery = false) {
   if (state.hw) $("hwProfile").textContent = UiLanguage.template`Perfil: ${profileLabel(state.hw.profile)} · ${r.engine === "torch" ? "PYTORCH" : r.engine.toUpperCase()}${r.device ? " (" + r.device + ")" : ""}`;
   const t0 = Date.now();
   while (Date.now() - t0 < 120000) {
-    try { await api("/sdcpp/v1/models/status"); return true; } catch { /* aun arrancando */ }
+    try {
+      await api("/sdcpp/v1/models/status");
+      if (r.engine === "torch") {
+        const runtime = await api("/hexanima/v1/runtime").catch(() => null);
+        state.device = runtime?.device || "unknown";
+        state.backendDeviceName = runtime?.gpu || null;
+        const label = "PYTORCH (" + (runtime?.device || UiLanguage.text("dispositivo sin verificar")) + (runtime?.gpu ? ": " + runtime.gpu : "") + ")";
+        $("hwProfile").textContent = UiLanguage.template`Perfil: ${profileLabel(state.hw?.profile)} · ${label}`;
+      }
+      return true;
+    } catch { /* aun arrancando */ }
     const s = await invoke("server_status");
     if (!s.running) {
       $("serverLog").textContent = s.log || "";
@@ -904,7 +954,7 @@ async function generate(opts = {}) {
   const opt = currentOption();
   if (!opt || state.busy) return;
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
-  state.busy = true; state.stop = false;
+  state.busy = true; state.stop = false; state.safetyStop = false;
   $("genBtn").disabled = true; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
   let saved;
   try {
@@ -913,6 +963,7 @@ async function generate(opts = {}) {
     // Con la RAM casi llena el motor tiene que esperar al disco y cada paso tarda el doble o más.
     const memory = await refreshMemory();
     if (memory?.ram_free_gb != null && memory.ram_free_gb < 2.5) toast(UiLanguage.template`Queda poca RAM libre (${memory.ram_free_gb.toFixed(1)} GB): cierra programas como el navegador o Discord para que no vaya más lento.`, 7000);
+    if (state.stop) return;
     const plan = generationEngine(opt, memory);
     if (state.loaded !== opt.id || plan.engine !== state.engine || plan.limitedCpu !== !!state.cpuRecovery) {
       await loadModel(plan, true);
@@ -954,7 +1005,7 @@ async function generate(opts = {}) {
     if (saved) { state.mode = saved.mode; state.editImage = saved.img; state.editMask = saved.mask; $("editStrength").value = saved.str; }
     // Detenido o fallido: no dejar en pantalla la vista previa a medio hacer.
     if ($("canvas").classList.contains("previewing")) { const c = Session.cur(); if (c) showImage(c.src); else Session.clear(); }
-    state.busy = false; state.job = null;
+    state.busy = false; state.job = null; state.cancelPromise = null; state.safetyStop = false;
     $("progress").classList.remove("on");
     $("extendBatch").disabled = true;
     $("genBtn").disabled = !opt; $("loadBtn").disabled = false; $("stopBtn").disabled = true;
@@ -973,6 +1024,17 @@ $("extendBatch").onclick = () => {
 
 $("stopBtn").onclick = () => {
   state.stop = true;
+  // A job id enables cooperative cancellation. Before one exists (for example while
+  // loading weights), stop only the backend process tree owned by this app.
+  if (state.job && state.api) {
+    const path = "/sdcpp/v1/jobs/" + state.job + "/cancel";
+    state.cancelPromise ||= fetch(state.api + path, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(2500) }).catch(() => null);
+  } else {
+    state.loaded = null;
+    state.engine = null;
+    state.device = null;
+    invoke("stop_server").catch(() => {});
+  }
 };
 
 // ---------- controles ----------
@@ -1098,7 +1160,9 @@ $("restartBtn").onclick = async () => {
   store.set("offload", $("optOffload").checked);
   store.set("extra", $("optExtra").value.trim());
   state.loaded = null; $("genBtn").disabled = true;
-  if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); $("genBtn").disabled = !currentOption(); }
+  try {
+    if (await startEngine(engineFor(currentOption()))) { await refreshEngineMenus(); await scanModels(); await Loras.refresh(); $("genBtn").disabled = !currentOption(); }
+  } catch (error) { setStatus(UiLanguage.text("No se pudo iniciar el motor seleccionado: ") + error.message, "err"); }
 };
 
 // ---------- arranque: abrir el exe y que cargue todo solo ----------
@@ -1127,7 +1191,16 @@ $("restartBtn").onclick = async () => {
     setInterval(refreshMemory, 3000);
     // el motor del último modelo usado (Anima → CUDA) para no arrancarlo dos veces
     const lastFamily = String(store.get("model", "")).startsWith("anima:") ? "anima" : "sdxl";
-    if (!(await startEngine(engineFor({ family: lastFamily })))) return;
+    const bootEngine = engineFor({ family: lastFamily });
+    if (state.engines.includes(bootEngine)) {
+      try {
+        if (!(await startEngine(bootEngine))) return;
+      } catch (error) {
+        setStatus(UiLanguage.text("No se pudo iniciar el motor seleccionado: ") + error.message, "warn");
+      }
+    } else {
+      setStatus(UiLanguage.text("El motor seleccionado no está instalado. Instálalo en Ajustes o selecciona Automático."), "warn");
+    }
     await refreshEngineMenus();
     await scanModels();
     // sin modelos: la bienvenida ofrece descargar uno (después del paso del motor rápido)

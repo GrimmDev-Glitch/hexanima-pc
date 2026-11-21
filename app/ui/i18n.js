@@ -33,13 +33,21 @@ const UiLanguage = (() => {
     ["Sin conexión con GitHub: ", "Could not connect to GitHub: "],
     ["GitHub respondió ", "GitHub returned HTTP "],
     ["Falta el motor: ", "Engine not found: "],
+    ["Falta el motor seleccionado: ", "The selected engine is not installed: "],
+    ["No se pudo confirmar un dispositivo para el motor ", "Could not confirm a device for engine "],
+    ["La opción --backend se controla desde Ajustes → Motor", "The --backend option is controlled in Settings → Engine"],
+    ["Windows no pudo medir el margen de memoria comprometida: ", "Windows could not measure committed-memory headroom: "],
   ]);
 
   function error(source) {
     if (!english || typeof source !== "string") return source;
     if (messages.has(source.trim())) return text(source);
-    const ram = /^RAM libre insuficiente para iniciar el motor: (.+) GB\. HexAnima reserva 2,5 GB para Windows\.$/.exec(source);
-    if (ram) return `Not enough RAM to start the engine: ${ram[1]} GB available. HexAnima reserves 2.5 GB for Windows.`;
+    const ram = /^RAM libre insuficiente para iniciar el motor: (.+) GB\. HexAnima reserva ([0-9.,]+) GB para Windows\.$/.exec(source);
+    if (ram) return `Not enough RAM to start the engine: ${ram[1]} GB available. HexAnima reserves ${ram[2]} GB for Windows.`;
+    const missingEngine = /^Falta el motor seleccionado: ([^.]+)\. Instálalo o selecciona Automático\.$/.exec(source);
+    if (missingEngine) return `The selected engine (${missingEngine[1]}) is not installed. Install it or select Automatic.`;
+    const missingDevice = /^No se pudo confirmar un dispositivo para el motor ([^.]+)\. Revisa que esté instalado y que detecte una GPU compatible\.$/.exec(source);
+    if (missingDevice) return `Could not confirm a device for engine ${missingDevice[1]}. Check that it is installed and detects a compatible GPU.`;
     for (const [prefix, translation] of backendPrefixes) {
       if (source.startsWith(prefix)) return translation + source.slice(prefix.length);
     }
