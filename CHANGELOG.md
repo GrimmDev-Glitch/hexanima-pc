@@ -1,5 +1,18 @@
 # HexAnima PC
 
+## 0.2.7 — PyTorch engine updates from Settings
+
+### What's new
+
+- Settings always offers **Check for updates** for the PyTorch engine. If a newer package is available, open the built-in update dialog and install it from the app.
+- The installed status now reads the package manifest and PyTorch/CUDA runtime metadata. Older engine installs without `motor.json` still show their runtime version and can be updated.
+- The update download resumes if interrupted, verifies the SHA-256, and swaps the engine only after extraction succeeds.
+
+### Validation and known limits
+
+- The update package is downloaded separately from the HexAnima app release. The first version check and update need internet access and enough free disk space for the download and extracted engine.
+- A complete image generation on a GTX 1050 2 GB / 8 GB RAM PC remains unverified.
+
 ## 0.2.6 — low-memory SDXL and backend selection
 
 ### What's new
@@ -44,6 +57,19 @@ The exact Windows ZIP passed its integrity check, and both CUDA and Vulkan engin
 The PyTorch runtime is downloaded separately and is not included in this GitHub release. **Search for updates** replaces only `HexAnima.exe`; it does not update an existing PyTorch runtime. PyTorch worker-queue changes in the repository source are not active for existing installations until that separate runtime package is published.
 
 ## Español
+
+## 0.2.7 — actualización del motor PyTorch desde Ajustes
+
+### Novedades
+
+- Ajustes siempre ofrece **Buscar actualizaciones** para el motor PyTorch. Si hay una versión nueva, abre el diálogo de actualización integrado y permite instalarla desde la app.
+- El estado instalado ahora lee el manifiesto del paquete y los metadatos de PyTorch/CUDA. Las instalaciones antiguas sin `motor.json` muestran la versión del runtime y también se pueden actualizar.
+- La descarga se reanuda si se interrumpe, verifica el SHA-256 y reemplaza el motor solo después de extraerlo correctamente.
+
+### Validación y límites conocidos
+
+- El paquete del motor se descarga separado del release de HexAnima. La primera consulta y actualización necesitan internet y espacio libre suficiente para la descarga y la extracción.
+- Sigue pendiente verificar una generación completa en un PC con GTX 1050 de 2 GB y 8 GB de RAM.
 
 ## 0.2.6 — SDXL con poca RAM y selección del motor
 
