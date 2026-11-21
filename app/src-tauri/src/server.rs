@@ -29,6 +29,8 @@ pub struct ServerOpts {
     /// Detector de ADetailer cargado en el motor: "face" | "hand" (uno a la vez).
     pub ad_model: Option<String>,
     pub cpu_recovery: Option<bool>,
+    /// Mapea los pesos desde el disco cuando superan la RAM disponible sobre la reserva.
+    pub disk_offload: Option<bool>,
 }
 
 pub struct Server {
@@ -149,10 +151,12 @@ impl Server {
             args.push(d.into());
         }
         if cpu_recovery {
-            args.extend(["--mmap".into(), "--batched-cfg".into(), "off".into()]);
+            args.extend(["--mmap".into(), "--params-backend".into(), "disk".into(), "--batched-cfg".into(), "off".into()]);
             args.extend(["--vae-tiling".into(), "--vae-tile-size".into(), "256".into()]);
             let threads = std::thread::available_parallelism().map_or(1, |n| (n.get() / 2).max(1));
             args.extend(["--threads".into(), threads.to_string()]);
+        } else if opts.disk_offload.unwrap_or(false) && !torch {
+            args.extend(["--mmap".into(), "--params-backend".into(), "disk".into()]);
         } else if opts.offload_to_cpu.unwrap_or(true) {
             args.push("--offload-to-cpu".into());
         }

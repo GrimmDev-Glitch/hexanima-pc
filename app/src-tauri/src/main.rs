@@ -336,6 +336,7 @@ async fn engine_dl_info(app: tauri::AppHandle, cu128: Option<bool>) -> serde_jso
         let remote = engine_dl::remote(cu128.unwrap_or(false));
         json!({
             "installed": engine_dl::installed(&root),
+            "torch_version": engine_dl::installed_torch_version(&root),
             "installed_cuda": engine_dl::installed_cuda(&root),
             "remote": remote.as_ref().ok(),
             "error": remote.as_ref().err(),

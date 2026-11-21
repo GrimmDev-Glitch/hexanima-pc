@@ -77,6 +77,17 @@ pub fn installed(root: &Path) -> Option<u32> {
     Some(fs::read_to_string(p).ok().and_then(|s| serde_json::from_str::<Manifest>(&s).ok()).map_or(0, |m| m.version))
 }
 
+/// PyTorch runtime version, read from its installed dist-info directory. This
+/// still identifies older engine packages that predate motor.json.
+pub fn installed_torch_version(root: &Path) -> Option<String> {
+    let sp = root.join("engine").join("torch").join("python").join("Lib").join("site-packages");
+    fs::read_dir(sp).ok()?.flatten().find_map(|e| {
+        let n = e.file_name().to_string_lossy().to_string();
+        let version = n.strip_prefix("torch-")?.strip_suffix(".dist-info")?;
+        Some(version.split('+').next().unwrap_or(version).to_string())
+    })
+}
+
 /// CUDA del PyTorch instalado en engine/torch («121», «128»…), leído del nombre de torch-*.dist-info.
 pub fn installed_cuda(root: &Path) -> Option<String> {
     let sp = root.join("engine").join("torch").join("python").join("Lib").join("site-packages");
