@@ -12,7 +12,7 @@ import torch
 import numpy as np
 from PIL import Image
 
-ht.setup_memory(ARGS.inference_mb)
+ht.setup_memory(ARGS.inference_mb, low_vram=ARGS.low_vram)
 ENGINE = ht.Engine()
 
 

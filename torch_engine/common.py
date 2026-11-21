@@ -17,6 +17,7 @@ ap.add_argument("--model-dir", required=True)
 ap.add_argument("--lora-model-dir", required=True)
 ap.add_argument("--hires-upscalers-dir", default=None)
 ap.add_argument("--inference-mb", type=int, default=1024)
+ap.add_argument("--low-vram", action="store_true", help="mantiene pesos safetensors mapeados desde disco para usar menos RAM")
 ARGS, _ = ap.parse_known_args()
 
 STATUS = {"state": "empty", "recipe": None, "models": {}, "load_elapsed_seconds": None, "error": None, "revision": 0}

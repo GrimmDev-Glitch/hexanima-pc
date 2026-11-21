@@ -20,6 +20,10 @@ const state = {
   busy: false,
   cpuRecovery: false,
   diskOffload: false,
+  torchLowVram: false,
+  torchInferenceMb: 1024,
+  torchRamBudgetGb: null,
+  torchLowVramNotice: false,
   batchTarget: 0,
   outputFiles: [],
   activeHistory: null,
@@ -131,7 +135,8 @@ async function requireResources(body = {}, modelBytes = 0) {
     if (memory.gpu_temp_c == null || memory.gpu_temp_c >= thermalThreshold() || memory.vram_free_gb == null) {
       throw new Error(UiLanguage.text("No hay margen térmico o una lectura fiable de la GPU. Vuelve a Generar para que HexAnima evalúe el modo CPU."));
     }
-    if (memory.vram_free_gb < 0.5 + workingGb) {
+    const vramRequired = state.engine === "torch" && state.torchLowVram ? 0.25 : 0.5 + workingGb;
+    if (memory.vram_free_gb < vramRequired) {
       throw new Error(UiLanguage.text("VRAM libre insuficiente para esta resolución o sus etapas adicionales. Reduce el tamaño o desactiva Hires."));
     }
   }
@@ -139,12 +144,14 @@ async function requireResources(body = {}, modelBytes = 0) {
   // Si no caben sobre la reserva de Windows, sd.cpp puede mapear los pesos desde disco
   // en vez de bloquear el modelo por una estimación de RAM residente.
   const residentWeightsGb = Math.max(0, Number(modelBytes) / 1073741824) * 0.53;
-  // PyTorch loads checkpoint tensors into its own process before generation.
-  // The q8_0 mmap estimate above only applies to sd.cpp and underestimates
-  // PyTorch's peak private/temporary allocations. Keep a full checkpoint plus
-  // runtime headroom inside the same Windows reserve before choosing PyTorch.
+  // El motor PyTorch dispone de un modo de baja memoria que conserva pesos
+  // safetensors como mapeos de solo lectura en disco. Windows puede paginar sus
+  // páginas sin reservar una copia completa privada en RAM.
   const torchPeakGb = Math.max(0, Number(modelBytes) / 1073741824) + 1.25;
-  return { diskOffload: residentWeightsGb > available, torchFits: torchPeakGb <= available, availableGb: available, torchPeakGb };
+  const torchLowVramFloorGb = Math.max(1.75, workingGb + 0.75);
+  return { diskOffload: residentWeightsGb > available, torchFits: torchPeakGb <= available,
+    torchLowVramFits: available >= torchLowVramFloorGb, torchLowVramFloorGb,
+    availableGb: available, torchPeakGb };
 }
 
 async function submitImage(body) {
@@ -518,13 +525,16 @@ function generationEngine(opt, memory) {
   return { engine: native, limitedCpu: true };
 }
 
-async function startEngine(engine, cpuRecovery = false, diskOffload = false) {
+async function startEngine(engine, cpuRecovery = false, diskOffload = false, torchLowVram = false, torchInferenceMb = 1024) {
   setStatus(UiLanguage.text("Iniciando motor…"));
   // ADetailer: el detector elegido se carga al arrancar el motor (uno a la vez).
   const ad = typeof Ad !== "undefined" ? Ad.wanted() : null;
-  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad, cpu_recovery: cpuRecovery, disk_offload: diskOffload };
+  const opts = { offload_to_cpu: store.get("offload", true), extra_args: store.get("extra", "") || null, ad_model: ad,
+    cpu_recovery: cpuRecovery, disk_offload: diskOffload, torch_low_vram: torchLowVram, torch_inference_mb: torchInferenceMb };
   const r = await invoke("start_server", { opts, engine: engine || null });
   state.cpuRecovery = cpuRecovery; state.diskOffload = diskOffload;
+  state.torchLowVram = r.engine === "torch" && torchLowVram;
+  state.torchInferenceMb = torchInferenceMb;
   state.adLoaded = ad;
   state.api = `http://127.0.0.1:${r.port}`;
   state.engine = r.engine; state.device = r.device;
@@ -691,12 +701,16 @@ async function loadModel(plan, reserved = false) {
     const resourcePlan = await requireResources({}, modelBytes);
     let selectedEngine = engine;
     let selectedLimitedCpu = limitedCpu;
-    // PyTorch loads checkpoint tensors into private memory. If the peak would
-    // cross the Windows reserve, automatic mode uses the capped CPU backend
-    // with disk-mapped weights. The 0.53 q8 estimate is only for sd.cpp.
-    if (engine === "torch" && !resourcePlan.torchFits) {
+    const checkpoint = String(models.model || "");
+    const canMapTorchWeights = /\.safetensors$/i.test(checkpoint);
+    const vramTotal = Number(state.hw?.gpu?.vram_gb || 0);
+    const torchLowVram = engine === "torch" && canMapTorchWeights &&
+      (!resourcePlan.torchFits || (vramTotal > 0 && vramTotal <= 4));
+    const torchInferenceMb = vramTotal > 0 && vramTotal <= 2.5 ? 512
+      : vramTotal <= 4 ? 640 : vramTotal <= 6 ? 768 : 1024;
+    if (engine === "torch" && !resourcePlan.torchFits && !(torchLowVram && resourcePlan.torchLowVramFits)) {
       if (store.get("enginePref", "auto") !== "auto") {
-        throw new Error(UiLanguage.template`PyTorch necesita un pico estimado de ${resourcePlan.torchPeakGb.toFixed(1)} GB y solo hay ${resourcePlan.availableGb.toFixed(1)} GB sobre la reserva de Windows. Cambia a Automático para usar CPU limitada con pesos desde disco, o libera RAM.`);
+        throw new Error(UiLanguage.template`PyTorch necesita un pico estimado de ${resourcePlan.torchPeakGb.toFixed(1)} GB; quedan ${resourcePlan.availableGb.toFixed(1)} GB. El modo baja VRAM requiere al menos ${resourcePlan.torchLowVramFloorGb.toFixed(1)} GB y un checkpoint safetensors.`);
       }
       const engines = state.engines || [];
       selectedEngine = engines.includes("cpu") ? "cpu" : null;
@@ -704,15 +718,20 @@ async function loadModel(plan, reserved = false) {
       selectedLimitedCpu = selectedEngine === "cpu";
     }
     const diskOffload = selectedEngine !== "torch" && (resourcePlan.diskOffload || selectedLimitedCpu);
-    if (selectedEngine !== state.engine || selectedLimitedCpu !== !!state.cpuRecovery || diskOffload !== !!state.diskOffload) {
+    const lowVramActive = selectedEngine === "torch" && torchLowVram;
+    state.torchRamBudgetGb = resourcePlan.availableGb;
+    if (selectedEngine !== state.engine || selectedLimitedCpu !== !!state.cpuRecovery || diskOffload !== !!state.diskOffload ||
+        lowVramActive !== !!state.torchLowVram || lowVramActive && torchInferenceMb !== state.torchInferenceMb) {
       state.loaded = null;
-      if (!(await startEngine(selectedEngine, selectedLimitedCpu, diskOffload))) return;
+      if (!(await startEngine(selectedEngine, selectedLimitedCpu, diskOffload, lowVramActive, torchInferenceMb))) return;
       await refreshEngineMenus();
     }
     tick = setInterval(() => {
       const seconds = Math.round((Date.now() - t0) / 1000);
       setStatus(selectedLimitedCpu && diskOffload
         ? UiLanguage.template`Cargando en CPU limitada con pesos desde disco: ${opt.label}… ${seconds} s`
+        : lowVramActive
+          ? UiLanguage.text("Cargando PyTorch en modo baja VRAM:") + " " + opt.label + "… " + seconds + " s"
         : diskOffload
           ? UiLanguage.template`Cargando pesos desde disco: ${opt.label}… ${seconds} s`
         : UiLanguage.template`Cargando ${opt.label}… ${seconds} s`);
@@ -798,6 +817,21 @@ function showEstimate() {
   $("estimate").textContent = b ? UiLanguage.template`~${fmtS(b.fixed + b.step * +$("steps").value)} estimados con tu equipo` : "";
 }
 
+function lowVramSize(width, height) {
+  const totalVram = Number(state.hw?.gpu?.vram_gb || 2);
+  const ramBudget = Number(state.torchRamBudgetGb || 0);
+  const maxSide = ramBudget > 0 && ramBudget < 2 ? 640 : totalVram <= 2.5 ? 768 : totalVram <= 4 ? 896 : 1024;
+  const maxPixels = ramBudget > 0 && ramBudget < 2 ? 512 * 512
+    : ramBudget > 0 && ramBudget < 3.5 ? 512 * 768
+      : totalVram <= 2.5 ? 512 * 768 : totalVram <= 4 ? 768 * 768 : 1024 * 768;
+  const scale = Math.min(1, maxSide / Math.max(width, height), Math.sqrt(maxPixels / (width * height)));
+  if (scale >= 0.999) return [width, height];
+  return [
+    Math.max(256, Math.floor(width * scale / 64) * 64),
+    Math.max(256, Math.floor(height * scale / 64) * 64),
+  ];
+}
+
 async function waitIfHot() {
   if (state.device === "cpu") return;
   const threshold = thermalThreshold();
@@ -813,7 +847,9 @@ async function waitIfHot() {
 async function runOne(opt, seed, ov = {}) {
   const editing = state.mode === "edit" && state.editImage && !REF_FAMILIES.includes(opt.family);
   // Al editar, el tamaño es el de la foto (ya ajustado a múltiplos de 64 al elegirla).
-  const [w, h] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
+  const [requestedW, requestedH] = editing ? [state.editImage.w, state.editImage.h] : currentSize();
+  const lowVramMode = state.engine === "torch" && state.torchLowVram;
+  let [w, h] = lowVramMode ? lowVramSize(requestedW, requestedH) : [requestedW, requestedH];
   const steps = clampNum($("steps"), 20);
   const cfg = clampNum($("cfg"), 5);
   // Las etiquetas <lora:nombre:fuerza> del prompt se convierten en la lista que pide el motor
@@ -827,11 +863,11 @@ async function runOne(opt, seed, ov = {}) {
     ...(editing ? { init_image: state.editImage.src, strength: clampNum($("editStrength"), 45) / 100 } : {}),
     // «✎ Zona a cambiar»: blanco = se vuelve a generar, negro = se conserva.
     ...(editing && state.editMask ? { mask_image: state.editMask.src } : {}),
-    ...(Hires.body(w, h) ? { hires: Hires.body(w, h) } : {}),
+    ...(!lowVramMode && Hires.body(w, h) ? { hires: Hires.body(w, h) } : {}),
     // Con un detector cargado, ADetailer corre siempre: si está en "No" se le pide una confianza imposible.
     ...(state.adLoaded && state.engine !== "torch" ? { extra_ad_args: Ad.args() } : {}),
     // Motor PyTorch: ADetailer propio (detector YOLOv8 en PyTorch + redibujado por recorte)
-    ...(state.engine === "torch" && Ad.mode !== "off" ? { adetailer: { model: Ad.mode, strength: Ad.den() / 100, confidence: 0.3 } } : {}),
+    ...(state.engine === "torch" && !lowVramMode && Ad.mode !== "off" ? { adetailer: { model: Ad.mode, strength: Ad.den() / 100, confidence: 0.3 } } : {}),
     prompt: loraSpec.prompt,
     negative_prompt: negative,
     clip_skip: +$("clipskip").value,
@@ -848,8 +884,22 @@ async function runOne(opt, seed, ov = {}) {
   };
   const fast = typeof Fast !== "undefined" && Fast.apply(body, opt);
   const mageRefs = typeof MageRefs !== "undefined" ? MageRefs.apply(body, opt) : 0;
-  const usedRef = typeof Ref !== "undefined" && Ref.apply(body, opt);
-  const usedPose = typeof Pose !== "undefined" ? Pose.apply(body, opt) : null;
+  const usedRef = !lowVramMode && typeof Ref !== "undefined" && Ref.apply(body, opt);
+  const usedPose = !lowVramMode && typeof Pose !== "undefined" ? Pose.apply(body, opt) : null;
+  if (lowVramMode && !state.torchLowVramNotice) {
+    state.torchLowVramNotice = true;
+    body.control_image = null;
+    body.ip_adapter = null;
+    body.hires = null;
+    body.adetailer = null;
+    const hasSkippedExtras = $("poseOn")?.checked || Ref.on?.() || Ad.mode !== "off" || Hires.body(requestedW, requestedH);
+    if (w !== requestedW || h !== requestedH || hasSkippedExtras) {
+      toast(UiLanguage.text("PyTorch baja VRAM: resolución reducida automáticamente; se omiten Hires, pose, referencia y ADetailer para dejar memoria al modelo.") +
+        " (" + requestedW + " × " + requestedH + " → " + w + " × " + h + ")", 8000);
+    } else {
+      toast(UiLanguage.text("PyTorch baja VRAM: pesos cargados desde disco para que Windows pueda paginarlos si falta RAM."), 5000);
+    }
+  }
   // Qwen-Image 2.1 Turbo: sus 8 sigmas fijos (con otros pasos, el planificador normal)
   if (opt.preset === "qwen" && body.sample_params.sample_steps === 8 && ov.steps == null) body.sample_params.custom_sigmas = QWEN_TURBO_SIGMAS;
   // ⊞ Comparar 2×2: la imagen i cambia el CFG o los pasos (después del Modo rápido, que también los fija)
@@ -858,6 +908,7 @@ async function runOne(opt, seed, ov = {}) {
   const usedSteps = body.sample_params.sample_steps, usedCfg = body.sample_params.guidance.txt_cfg;
   const canRecover = ["cuda", "vulkan"].includes(state.engine) && !state.cpuRecovery;
   const previousLog = canRecover ? await invoke("server_status").then((s) => s.log).catch(() => null) : null;
+  let torchRetriedAtSmallerSize = false;
   if (state.stop) return null;
   let sub = await submitImage(body);
   let sampStart = null, sampMs = 0;
@@ -883,8 +934,9 @@ async function runOne(opt, seed, ov = {}) {
       const meta = {
         prompt: promptWithTags, negative: body.negative_prompt, prompt_es: EsEn.on() ? $("prompt").value.trim() : null, model: opt.id, model_label: opt.label, family: opt.family,
         steps: usedSteps, cfg: usedCfg, fast: fast || null, reference: usedRef ? { weight: body.ip_adapter.weight } : null, pose: usedPose, references: mageRefs || null, sampler: body.sample_params.sample_method, scheduler: body.sample_params.scheduler,
-        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: (state.engine === "torch" ? Ad.mode !== "off" : Ad.active()) ? { mode: Ad.mode, strength: Ad.den() } : null,
-        strength: editing ? body.strength : null, loras: loraSpec.lora.filter((l) => typeof Fast === "undefined" || !Fast.isOwn(l.path)).map((l) => ({ file: l.path, w: l.multiplier })),
+        seed, width: w, height: h, clip_skip: body.clip_skip, mode: editing ? (body.mask_image ? "inpaint" : "edit") : "gen", hires: body.hires || null, adetailer: body.adetailer ? { mode: Ad.mode, strength: Ad.den() } : null,
+        low_vram: lowVramMode, requested_width: requestedW !== w ? requestedW : undefined, requested_height: requestedH !== h ? requestedH : undefined,
+        strength: editing ? body.strength : null, loras: body.lora.filter((l) => typeof Fast === "undefined" || !Fast.isOwn(l.path)).map((l) => ({ file: l.path, w: l.multiplier })),
         seconds: Math.round(total), created: new Date().toISOString(),
       };
       const path = await invoke("save_image", { b64: img, prefix: editing ? "edit" : opt.family, meta });
@@ -896,7 +948,29 @@ async function runOne(opt, seed, ov = {}) {
       state.job = null;
       if (state.stop) return null;
       const error = UiLanguage.error(j.error?.message) || UiLanguage.text("falló la generación");
-      if (!canRecover || state.cpuRecovery) throw new Error(error);
+      if (!canRecover || state.cpuRecovery) {
+        const torchMemoryFailure = state.engine === "torch" && state.torchLowVram &&
+          /out of (?:device )?memory|cannot make enough memory available/i.test(error);
+        if (torchMemoryFailure && !torchRetriedAtSmallerSize && Math.max(w, h) > 256) {
+          torchRetriedAtSmallerSize = true;
+          const nextW = Math.max(256, Math.floor(w * 0.75 / 64) * 64);
+          const nextH = Math.max(256, Math.floor(h * 0.75 / 64) * 64);
+          if (nextW < w || nextH < h) {
+            w = nextW; h = nextH;
+            body.width = w; body.height = h;
+            body.hires = null; body.adetailer = null; body.control_image = null; body.ip_adapter = null;
+            body.preview = "proj";
+            const retryMessage = UiLanguage.text("PyTorch agotó VRAM; reintentando una vez con resolución menor…") + " " + w + " × " + h;
+            $("progStage").textContent = retryMessage;
+            $("progBar").style.width = "0%";
+            setStatus(retryMessage, "warn");
+            sub = await submitImage(body);
+            sampStart = null; sampMs = 0;
+            continue;
+          }
+        }
+        throw new Error(error);
+      }
       const log = await invoke("server_status").then((s) => s.log).catch(() => null);
       const memoryFailure = /out of (?:device )?memory|cannot make enough memory available/i;
       const previousLine = previousLog?.split("\n").at(-1);
@@ -1044,7 +1118,7 @@ async function generate(opts = {}) {
   const opt = currentOption();
   if (!opt || state.busy) return;
   if (!$("prompt").value.trim()) { $("prompt").focus(); return; }
-  state.busy = true; state.stop = false; state.safetyStop = false;
+  state.busy = true; state.stop = false; state.safetyStop = false; state.torchLowVramNotice = false;
   $("genBtn").disabled = true; $("loadBtn").disabled = true; $("stopBtn").disabled = false;
   let saved;
   try {

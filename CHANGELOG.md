@@ -1,5 +1,20 @@
 # HexAnima PC
 
+## 0.3.1 — Forge-style low-VRAM PyTorch
+
+### What's new
+
+- PyTorch can keep SDXL safetensors weights mapped from disk instead of cloning the UNet and VAE into private RAM.
+- Systems with 4 GB of VRAM or less automatically use Forge's low-VRAM model management with a smaller CUDA inference budget.
+- Low-VRAM generations reduce image dimensions when needed and skip Hires, pose, character reference, and ADetailer to leave room for the base image.
+- A CUDA out-of-memory error gets one retry at a lower resolution. The Windows RAM/commit reserve, process memory limit, CPU cap, and thermal threshold remain active.
+
+### Validation and known limits
+
+- Rust release and Python/JavaScript syntax checks completed. A full model generation on the GTX 1050 2 GB was not run.
+- Disk-mapped safetensors may become much slower when Windows has to page model weights. Checkpoints in other formats do not use this low-RAM loading path.
+- At 2 GB of VRAM, HexAnima may reduce the image below its requested dimensions or stop if the system reaches the protected memory or thermal limit.
+
 ## 0.3.0 — safer CPU fallback and faster ×2 upscale
 
 ### What's new

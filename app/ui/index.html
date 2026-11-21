@@ -488,7 +488,7 @@
         </select>
         <label class="lbl">Vista previa al generar</label>
         <div class="btnrow"><button id="taesdBtn" class="ghost">Mejorar la vista previa (TAESD, 5 MB)</button></div>
-        <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload): recomendado con 8 GB de VRAM o menos</label>
+        <label class="lbl" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optOffload" type="checkbox" checked> Pesos en RAM (offload) para CUDA/Vulkan; PyTorch usa su modo Forge de baja VRAM automáticamente</label>
         <label id="optConsoleRow" class="lbl hidden" style="display:flex;align-items:center;gap:8px;min-height:36px"><input id="optHideConsole" type="checkbox" checked> Ocultar la consola de desarrollo</label>
         <label class="lbl" for="optCivitaiKey">Clave API de Civitai (opcional: para +18 y archivos que piden iniciar sesión; solo se envía a civitai.red)</label>
         <div class="seed-controls"><input id="optCivitaiKey" class="field" type="password" autocomplete="off" placeholder="Pega aquí tu clave"><button id="openCivitaiAccount" class="ghost sm">Abrir civitai.red/user/account</button></div>

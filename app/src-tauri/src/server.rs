@@ -31,6 +31,10 @@ pub struct ServerOpts {
     pub cpu_recovery: Option<bool>,
     /// Mapea los pesos desde el disco cuando superan la RAM disponible sobre la reserva.
     pub disk_offload: Option<bool>,
+    /// Mantiene los pesos PyTorch safetensors mapeados desde disco para sistemas con poca RAM/VRAM.
+    pub torch_low_vram: Option<bool>,
+    /// Memoria que Forge reserva para cálculo antes de asignar el resto a pesos de GPU.
+    pub torch_inference_mb: Option<u16>,
 }
 
 pub struct Server {
@@ -205,6 +209,10 @@ impl Server {
                 "--lora-model-dir".into(), loras.display().to_string(),
                 "--hires-upscalers-dir".into(), upscalers.display().to_string(),
             ];
+            if opts.torch_low_vram.unwrap_or(false) {
+                args.push("--low-vram".into());
+            }
+            args.extend(["--inference-mb".into(), opts.torch_inference_mb.unwrap_or(1024).to_string()]);
         }
         let mut cmd = Command::new(&exe);
         cmd.args(&args)
@@ -216,7 +224,7 @@ impl Server {
         cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
         // Check RAM/commit and configure the Job Object before the heavy engine starts.
         #[cfg(windows)]
-        let job = Arc::new(Job::prepare(cpu_recovery)?);
+        let job = Arc::new(Job::prepare(cpu_recovery || (torch && opts.torch_low_vram.unwrap_or(false)))?);
         let mut child = cmd.spawn().map_err(|e| format!("No se pudo iniciar el motor: {e}"))?;
 
         #[cfg(windows)]

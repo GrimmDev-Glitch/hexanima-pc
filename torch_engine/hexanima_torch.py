@@ -42,11 +42,12 @@ from backend.sampling.condition import compile_conditions  # noqa: E402
 import k_diffusion.sampling as ks  # noqa: E402
 
 
-def setup_memory(inference_mb=1024, async_loading=False, pin_shared=False):
+def setup_memory(inference_mb=1024, async_loading=False, pin_shared=False, low_vram=False):
     """Como el «GPU Weights» de Forge: deja `inference_mb` para calcular y el resto para pesos."""
     stream.stream_activated = async_loading
     memory_management.current_inference_memory = inference_mb * 1024 * 1024
     memory_management.PIN_SHARED_MEMORY = pin_shared
+    _MMAP["low_vram"] = bool(low_vram)
 
 
 from backend import utils as _futils  # noqa: E402
@@ -118,7 +119,7 @@ for _n, _a in (("F8_E4M3", "float8_e4m3fn"), ("F8_E5M2", "float8_e5m2")):
         _ST_DTYPES[_n] = getattr(torch, _a)
 
 
-_MMAP = {"on": False, "ptrs": set()}  # solo durante Engine.load; ptrs = memoria de los tensores mapeados
+_MMAP = {"on": False, "ptrs": set(), "low_vram": False}  # mapa de pesos safetensors durante Engine.load
 
 
 def load_safetensors_mmap(path):
@@ -158,8 +159,10 @@ def _unalias(sd):
     fo = sd.forge_objects
     clip_root = fo.clip.cond_stage_model
     mapped = {}
-    for root in (fo.unet.model, clip_root, fo.vae.first_stage_model):
-        keep = root is clip_root and os.environ.get("HEXANIMA_CLIP_MAPPED", "1") != "0"
+    roots = (fo.unet.model, clip_root, fo.vae.first_stage_model)
+    for root in roots:
+        keep = (_MMAP["low_vram"] or root is clip_root and os.environ.get("HEXANIMA_CLIP_MAPPED", "1") != "0")
+        mapped = {}
         for mname, mod in root.named_modules():
             for name, p in list(mod._parameters.items()):
                 if p is not None and p.device.type == "cpu" and p.untyped_storage().data_ptr() in ptrs:
@@ -172,11 +175,13 @@ def _unalias(sd):
                 if b is not None and b.device.type == "cpu" and b.untyped_storage().data_ptr() in ptrs:
                     mod._buffers[name] = b.clone()
                     n += b.numel() * b.element_size()
-    clip_root._hx_mapped = mapped
+        if mapped:
+            root._hx_mapped = mapped
     ptrs.clear()
     import gc; gc.collect()
-    if mapped:
-        print(f"[hexanima] CLIP leído del archivo: {sum(t.numel() * t.element_size() for t in mapped.values()) / 2**30:.2f} GB sin copia en RAM", flush=True)
+    mapped_bytes = sum(sum(t.numel() * t.element_size() for t in getattr(root, "_hx_mapped", {}).values()) for root in roots)
+    if mapped_bytes:
+        print(f"[hexanima] pesos mapeados desde archivo: {mapped_bytes / 2**30:.2f} GB sin copia en RAM", flush=True)
     return n
 
 
